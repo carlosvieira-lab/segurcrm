@@ -127,13 +127,14 @@ iban,
                 onChange={(e) => setPhone(e.target.value)}
                 style={input}
               />
-
-              <input
-                placeholder="Email"
+<input
+  placeholder="Email"
   value={email}
   onChange={(e) => setEmail(e.target.value)}
   style={input}
 />
+            
+
   <input
   placeholder="NIF"
   value={nif}
