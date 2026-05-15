@@ -93,6 +93,34 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
   }}
 >
   + Nova Apólice
+    <button
+  style={{
+    ...button,
+    background: "#dc2626",
+    marginLeft: 10,
+  }}
+  onClick={() => {
+    const confirmar = confirm(
+      "Tens a certeza que queres eliminar este cliente? Esta ação também apaga as apólices associadas."
+    );
+
+    if (!confirmar) return;
+
+    fetch("/api/delete-client", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: client.id,
+      }),
+    }).then(() => {
+      window.location.href = "/clientes";
+    });
+  }}
+>
+  Eliminar cliente
+</button>
 </button>
         </div>
 
