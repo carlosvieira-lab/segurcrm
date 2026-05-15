@@ -44,7 +44,7 @@ export default function Home({ clients, policies, tasks }) {
     event.preventDefault();
     setSaving(true);
 
-    await supabase.from("clients").insert({
+    const { error } = await supabase.from("clients").insert({
       type: "particular",
       status: "ativo",
       name,
@@ -52,77 +52,268 @@ export default function Home({ clients, policies, tasks }) {
       email,
     });
 
+    if (error) {
+      alert("Erro ao guardar cliente: " + error.message);
+      setSaving(false);
+      return;
+    }
+
     window.location.reload();
   }
 
   return (
-    <main style={{ padding: 40, fontFamily: "Arial", background: "#f3f4f6", minHeight: "100vh" }}>
-      <h1>SegurCRM</h1>
-      <p>CRM para mediação de seguros.</p>
+    <div style={page}>
+      <aside style={sidebar}>
+        <h2 style={logo}>SegurCRM</h2>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginTop: 30 }}>
-        <Card title="Clientes" value={clients.length} />
-        <Card title="Apólices" value={policies} />
-        <Card title="Tarefas" value={tasks} />
-      </div>
+        <nav style={nav}>
+          <a style={activeLink}>Dashboard</a>
+          <a style={link}>Clientes</a>
+          <a style={link}>Apólices</a>
+          <a style={link}>Renovações</a>
+          <a style={link}>Tarefas</a>
+          <a style={link}>Sinistros</a>
+        </nav>
+      </aside>
 
-      <section style={{ marginTop: 40, background: "white", padding: 24, borderRadius: 12 }}>
-        <h2>Novo Cliente</h2>
+      <main style={main}>
+        <header style={header}>
+          <div>
+            <h1 style={title}>Dashboard</h1>
+            <p style={subtitle}>Visão geral da carteira de seguros.</p>
+          </div>
 
-        <form onSubmit={createClientRecord} style={{ display: "grid", gap: 12, maxWidth: 500 }}>
-          <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
-          <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
-          <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+          <button style={topButton}>+ Novo cliente</button>
+        </header>
 
-          <button disabled={saving} style={buttonStyle}>
-            {saving ? "A guardar..." : "Guardar cliente"}
-          </button>
-        </form>
-      </section>
+        <section style={cards}>
+          <Card title="Clientes" value={clients.length} />
+          <Card title="Apólices" value={policies} />
+          <Card title="Tarefas" value={tasks} />
+        </section>
 
-      <section style={{ marginTop: 30, background: "white", padding: 24, borderRadius: 12 }}>
-        <h2>Clientes</h2>
+        <section style={grid}>
+          <div style={panel}>
+            <h2>Novo Cliente</h2>
 
-        {clients.length === 0 ? (
-          <p>Ainda não existem clientes.</p>
-        ) : (
-          <ul>
-            {clients.map((client) => (
-              <li key={client.id}>
-                <strong>{client.name}</strong> — {client.phone || "sem telefone"} — {client.email || "sem email"}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </main>
+            <form onSubmit={createClientRecord} style={form}>
+              <input
+                placeholder="Nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                style={input}
+              />
+
+              <input
+                placeholder="Telefone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                style={input}
+              />
+
+              <input
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={input}
+              />
+
+              <button disabled={saving} style={button}>
+                {saving ? "A guardar..." : "Guardar cliente"}
+              </button>
+            </form>
+          </div>
+
+          <div style={panel}>
+            <h2>Clientes recentes</h2>
+
+            {clients.length === 0 ? (
+              <p>Ainda não existem clientes.</p>
+            ) : (
+              <div style={clientList}>
+                {clients.map((client) => (
+                  <div key={client.id} style={clientRow}>
+                    <div>
+                      <strong>{client.name}</strong>
+                      <p style={smallText}>
+                        {client.phone || "Sem telefone"} ·{" "}
+                        {client.email || "Sem email"}
+                      </p>
+                    </div>
+
+                    <span style={badge}>{client.status || "ativo"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
 
 function Card({ title, value }) {
   return (
-    <div style={{ background: "white", padding: 20, borderRadius: 12 }}>
-      <h2>{title}</h2>
-      <p>{value}</p>
+    <div style={card}>
+      <p style={cardLabel}>{title}</p>
+      <h2 style={cardValue}>{value}</h2>
     </div>
   );
 }
 
-const inputStyle = {
-  padding: 12,
-  borderRadius: 8,
-  border: "1px solid #ccc",
+const page = {
+  display: "flex",
+  minHeight: "100vh",
+  background: "#f3f4f6",
+  fontFamily: "Arial, sans-serif",
 };
 
-const buttonStyle = {
-  padding: 12,
-  borderRadius: 8,
-  border: "none",
+const sidebar = {
+  width: 240,
   background: "#111827",
   color: "white",
+  padding: 24,
+};
+
+const logo = {
+  marginBottom: 40,
+};
+
+const nav = {
+  display: "grid",
+  gap: 12,
+};
+
+const link = {
+  color: "#cbd5e1",
+  textDecoration: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
   cursor: "pointer",
 };
-    
+
+const activeLink = {
+  ...link,
+  background: "#2563eb",
+  color: "white",
+};
+
+const main = {
+  flex: 1,
+  padding: 40,
+};
+
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 30,
+};
+
+const title = {
+  fontSize: 34,
+  margin: 0,
+};
+
+const subtitle = {
+  color: "#6b7280",
+};
+
+const topButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+};
+
+const cards = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 20,
+  marginBottom: 30,
+};
+
+const card = {
+  background: "white",
+  padding: 24,
+  borderRadius: 16,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const cardLabel = {
+  color: "#6b7280",
+  margin: 0,
+};
+
+const cardValue = {
+  fontSize: 32,
+  margin: "10px 0 0",
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "420px 1fr",
+  gap: 24,
+};
+
+const panel = {
+  background: "white",
+  padding: 24,
+  borderRadius: 16,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const form = {
+  display: "grid",
+  gap: 12,
+};
+
+const input = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+};
+
+const button = {
+  padding: 13,
+  borderRadius: 10,
+  border: "none",
+  background: "#2563eb",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const clientList = {
+  display: "grid",
+  gap: 12,
+};
+
+const clientRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: 14,
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+};
+
+const smallText = {
+  color: "#6b7280",
+  margin: "6px 0 0",
+};
+
+const badge = {
+  background: "#dcfce7",
+  color: "#166534",
+  padding: "5px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+};
 
 
      
