@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
-import { useState } from "react";
 import Link from "next/link";
+import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   "https://accmdxprsetsqsrepflq.supabase.co";
@@ -39,10 +40,10 @@ export default function Home({ clients, policies, tasks }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [nif, setNif] = useState("");
-const [address, setAddress] = useState("");
-const [birthDate, setBirthDate] = useState("");
-const [licenseDate, setLicenseDate] = useState("");
-const [iban, setIban] = useState("");
+  const [address, setAddress] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [licenseDate, setLicenseDate] = useState("");
+  const [iban, setIban] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function createClientRecord(event) {
@@ -56,10 +57,10 @@ const [iban, setIban] = useState("");
       phone,
       email,
       nif,
-address,
-birth_date: birthDate,
-driving_license_start_date: licenseDate,
-iban,
+      address,
+      birth_date: birthDate || null,
+      driving_license_start_date: licenseDate || null,
+      iban,
     });
 
     if (error) {
@@ -77,16 +78,11 @@ iban,
         <h2 style={logo}>SegurCRM</h2>
 
         <nav style={nav}>
-          <a style={activeLink}>Dashboard</a>
-         <Link href="/clientes" style={link}>
-  Clientes
-</Link>
-    <Link href="/apolices" style={link}>
-  Apólices
-</Link>
-  <Link href="/renovacoes" style={link}>
-  Renovações
-</Link>                
+          <Link href="/" style={activeLink}>Dashboard</Link>
+          <Link href="/clientes" style={link}>Clientes</Link>
+          <Link href="/apolices" style={link}>Apólices</Link>
+          <Link href="/renovacoes" style={link}>Renovações</Link>
+          <Link href="/financeiro" style={link}>Financeiro</Link>
           <a style={link}>Tarefas</a>
           <a style={link}>Sinistros</a>
         </nav>
@@ -98,8 +94,6 @@ iban,
             <h1 style={title}>Dashboard</h1>
             <p style={subtitle}>Visão geral da carteira de seguros.</p>
           </div>
-
-          <button style={topButton}>+ Novo cliente</button>
         </header>
 
         <section style={cards}>
@@ -112,20 +106,20 @@ iban,
           <div style={panel}>
             <h2>Novo Cliente</h2>
 
-          <form onSubmit={createClientRecord} style={form}>
-  <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
-  <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
-  <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
-  <input placeholder="NIF" value={nif} onChange={(e) => setNif(e.target.value)} style={input} />
-  <input placeholder="Morada" value={address} onChange={(e) => setAddress(e.target.value)} style={input} />
-  <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={input} />
-  <input type="date" value={licenseDate} onChange={(e) => setLicenseDate(e.target.value)} style={input} />
-  <input placeholder="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} style={input} />
+            <form onSubmit={createClientRecord} style={form}>
+              <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
+              <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+              <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
+              <input placeholder="NIF" value={nif} onChange={(e) => setNif(e.target.value)} style={input} />
+              <input placeholder="Morada" value={address} onChange={(e) => setAddress(e.target.value)} style={input} />
+              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={input} />
+              <input type="date" value={licenseDate} onChange={(e) => setLicenseDate(e.target.value)} style={input} />
+              <input placeholder="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} style={input} />
 
-  <button disabled={saving} style={button}>
-    {saving ? "A guardar..." : "Guardar cliente"}
-  </button>
-</form>
+              <button disabled={saving} style={button}>
+                {saving ? "A guardar..." : "Guardar cliente"}
+              </button>
+            </form>
           </div>
 
           <div style={panel}>
@@ -135,13 +129,22 @@ iban,
               <p>Ainda não existem clientes.</p>
             ) : (
               <div style={clientList}>
-                {clients.map((client) => (
+                {clients.slice(0, 8).map((client) => (
                   <div key={client.id} style={clientRow}>
                     <div>
-                      <strong>{client.name}</strong>
+                      <Link
+                        href={`/clientes/${client.id}`}
+                        style={{
+                          color: "#2563eb",
+                          textDecoration: "none",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {client.name}
+                      </Link>
+
                       <p style={smallText}>
-                        {client.phone || "Sem telefone"} ·{" "}
-                        {client.email || "Sem email"}
+                        {client.nif || "Sem NIF"} · {client.phone || "Sem telefone"} · {client.email || "Sem email"}
                       </p>
                     </div>
 
@@ -222,15 +225,6 @@ const title = {
 
 const subtitle = {
   color: "#6b7280",
-};
-
-const topButton = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
 };
 
 const cards = {
@@ -317,8 +311,3 @@ const badge = {
   borderRadius: 999,
   fontSize: 12,
 };
-
-
-     
-     
-     
