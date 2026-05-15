@@ -229,9 +229,14 @@ export default function ClientePage({ client, policies }) {
                     {policy.insurers?.name || "-"}
                   </p>
 
-                  <p>
-                    <strong>Prémio:</strong> {policy.annual_premium || 0} €
-                  </p>
+                 <p>
+  <strong>Prémio:</strong> {policy.annual_premium || 0} €
+</p>
+
+<p>
+  <strong>Fracionamento:</strong>{" "}
+  {policy.payment_frequency || "anual"}
+</p>
 
                   <p>
                     <strong>Renovação:</strong> {policy.renewal_date || "-"}
