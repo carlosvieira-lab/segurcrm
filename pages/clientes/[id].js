@@ -91,35 +91,65 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
       window.location.reload();
     });
   }}
->
-  + Nova Apólice
-    <button
-  style={{
-    ...button,
-    background: "#dc2626",
-    marginLeft: 10,
-  }}
-  onClick={() => {
-    const confirmar = confirm(
-      "Tens a certeza que queres eliminar este cliente? Esta ação também apaga as apólices associadas."
-    );
+<div style={{ display: "flex", gap: 10 }}>
+  <button
+    style={button}
+    onClick={() => {
+      const numero = prompt("Número da Apólice");
+      const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
+      const seguradora = prompt("Seguradora");
+      const premio = prompt("Prémio anual");
+      const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
 
-    if (!confirmar) return;
+      fetch("/api/create-policy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          client_id: client.id,
+          policy_number: numero,
+          branch: ramo,
+          insurer_name: seguradora,
+          annual_premium: premio,
+          renewal_date: renovacao,
+        }),
+      }).then(() => {
+        window.location.reload();
+      });
+    }}
+  >
+    + Nova Apólice
+  </button>
 
-    fetch("/api/delete-client", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        client_id: client.id,
-      }),
-    }).then(() => {
-      window.location.href = "/clientes";
-    });
-  }}
->
-  Eliminar cliente
+  <button
+    style={{
+      ...button,
+      background: "#dc2626",
+    }}
+    onClick={() => {
+      const confirmar = confirm(
+        "Tens a certeza que queres eliminar este cliente?"
+      );
+
+      if (!confirmar) return;
+
+      fetch("/api/delete-client", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          client_id: client.id,
+        }),
+      }).then(() => {
+        window.location.href = "/clientes";
+      });
+    }}
+  >
+    Eliminar cliente
+  </button>
+</div>
 </button>
 </button>
         </div>
