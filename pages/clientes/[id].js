@@ -153,6 +153,51 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
                     <strong>Renovação:</strong>{" "}
                     {policy.renewal_date || "-"}
                   </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+  <button
+    style={{
+      ...button,
+      background: "#16a34a",
+      padding: "8px 12px",
+    }}
+    onClick={() => {
+      fetch("/api/update-policy-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          policy_id: policy.id,
+          status: "ativa",
+        }),
+      }).then(() => window.location.reload());
+    }}
+  >
+    Em vigor
+  </button>
+
+  <button
+    style={{
+      ...button,
+      background: "#dc2626",
+      padding: "8px 12px",
+    }}
+    onClick={() => {
+      fetch("/api/update-policy-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          policy_id: policy.id,
+          status: "anulada",
+        }),
+      }).then(() => window.location.reload());
+    }}
+  >
+    Anulada
+  </button>
+</div>
                 </div>
               ))}
             </div>
