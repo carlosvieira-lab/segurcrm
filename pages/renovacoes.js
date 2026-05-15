@@ -352,9 +352,3 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
 };
-
-Depois:
-
-Commit changes
-espera a Vercel ficar Ready
-abre /renovacoes
