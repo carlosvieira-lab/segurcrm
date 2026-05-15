@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl =
@@ -25,6 +26,18 @@ export async function getServerSideProps() {
 }
 
 export default function Clientes({ clients }) {
+  const [search, setSearch] = useState("");
+
+const filteredClients = clients.filter((client) => {
+  const term = search.toLowerCase();
+
+  return (
+    client.name?.toLowerCase().includes(term) ||
+    client.nif?.toLowerCase().includes(term) ||
+    client.phone?.toLowerCase().includes(term) ||
+    client.email?.toLowerCase().includes(term)
+  );
+});
   return (
     <div style={page}>
       <aside style={sidebar}>
@@ -57,7 +70,19 @@ export default function Clientes({ clients }) {
 
           <button style={button}>+ Novo cliente</button>
         </div>
-
+<input
+  placeholder="Pesquisar por nome, NIF, telefone ou email..."
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+  style={{
+    width: "100%",
+    padding: 14,
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    marginBottom: 20,
+    fontSize: 16,
+  }}
+/>
         <div style={tableCard}>
           <table style={table}>
             <thead>
