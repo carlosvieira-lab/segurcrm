@@ -65,14 +65,33 @@ export default function ClientePage({ client, policies }) {
             </p>
           </div>
 
-          <button
-            style={button}
-            onClick={() => {
-              alert("Em breve: criação automática de apólices");
-            }}
-          >
-            + Nova Apólice
-          </button>
+         <button
+  style={button}
+  onClick={() => {
+    const numero = prompt("Número da Apólice");
+    const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
+    const premio = prompt("Prémio anual");
+    const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+
+    fetch("/api/create-policy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: client.id,
+        policy_number: numero,
+        branch: ramo,
+        annual_premium: premio,
+        renewal_date: renovacao,
+      }),
+    }).then(() => {
+      window.location.reload();
+    });
+  }}
+>
+  + Nova Apólice
+</button>
         </div>
 
         <section style={card}>
