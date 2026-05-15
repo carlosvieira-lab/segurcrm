@@ -65,7 +65,12 @@ export default function ClientePage({ client, policies }) {
             </p>
           </div>
 
-          <button style={button}>
+          <button
+            style={button}
+            onClick={() => {
+              alert("Em breve: criação automática de apólices");
+            }}
+          >
             + Nova Apólice
           </button>
         </div>
