@@ -71,8 +71,10 @@ export default function ClientePage({ client, policies }) {
     const numero = prompt("Número da Apólice");
     const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
     const seguradora = prompt("Seguradora");
-    const premio = prompt("Prémio anual");
-    const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+   const premio = prompt("Prémio anual");
+const fracionamento = prompt("Fracionamento (mensal, trimestral, semestral, anual)");
+const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+const proximaCobranca = prompt("Próxima cobrança (AAAA-MM-DD)");
 
     fetch("/api/create-policy", {
       method: "POST",
@@ -85,6 +87,8 @@ export default function ClientePage({ client, policies }) {
         branch: ramo,
         insurer_name: seguradora,
         annual_premium: premio,
+        payment_frequency: fracionamento,
+next_due_date: proximaCobranca,
         renewal_date: renovacao,
       }),
     }).then(() => {
