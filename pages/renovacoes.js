@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -19,7 +19,7 @@ export async function getServerSideProps() {
       clients(name),
       insurers(name)
     `)
-    .order("renewal_date", { ascending: true });
+    .eq("status", "ativa");
 
   return {
     props: {
@@ -28,163 +28,208 @@ export async function getServerSideProps() {
   };
 }
 
-export default function Renovacoes({ policies }) {
+function calcularDias(data) {
+  if (!data) return null;
+
+  const hoje = new Date();
+  const renovacao = new Date(data);
+
+  const diff = renovacao - hoje;
+
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function calcularProximaCobranca(policy) {
+  if (!policy.renewal_date) return "-";
+
+  const data = new Date(policy.renewal_date);
+
+  const freq = policy.payment_frequency || "anual";
+
+  if (freq === "mensal") {
+    data.setMonth(data.getMonth() + 1);
+  }
+
+  if (freq === "trimestral") {
+    data.setMonth(data.getMonth() + 3);
+  }
+
+  if (freq === "semestral") {
+    data.setMonth(data.getMonth() + 6);
+  }
+
+  if (freq === "anual") {
+    data.setFullYear(data.getFullYear() + 1);
+  }
+
+  return data.toISOString().split("T")[0];
+}
+
+export default function RenovacoesPage({ policies }) {
   return (
-    <div style={page}>
+    <div style={layout}>
       <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
+        <h1 style={logo}>SegurCRM</h1>
 
         <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={activeLink}>Renovações</Link>
-          <a style={link}>Tarefas</a>
-          <a style={link}>Sinistros</a>
+          <Link href="/" style={navItem}>
+            Dashboard
+          </Link>
+
+          <Link href="/clientes" style={navItem}>
+            Clientes
+          </Link>
+
+          <Link href="/apolices" style={navItem}>
+            Apólices
+          </Link>
+
+          <Link href="/renovacoes" style={activeNav}>
+            Renovações
+          </Link>
+
+          <Link href="/financeiro" style={navItem}>
+            Financeiro
+          </Link>
         </nav>
       </aside>
 
       <main style={main}>
-        <header style={header}>
-          <div>
-            <h1 style={title}>Renovações</h1>
-            <p style={subtitle}>
-              Controlo das próximas renovações de apólices.
-            </p>
-          </div>
-        </header>
+        <h1 style={title}>Renovações Inteligentes</h1>
 
-        <section style={tableCard}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Apólice</th>
-                <th style={th}>Cliente</th>
-                <th style={th}>Seguradora</th>
-                <th style={th}>Renovação</th>
-                <th style={th}>Prémio</th>
-                <th style={th}>Estado</th>
-              </tr>
-            </thead>
+        <div style={grid}>
+          {policies.map((policy) => {
+            const dias = calcularDias(policy.renewal_date);
 
-            <tbody>
-              {policies.map((policy) => (
-                <tr key={policy.id}>
-                  <td style={td}>{policy.policy_number}</td>
-                  <td style={td}>
-                    {policy.clients?.name || "-"}
-                  </td>
-                  <td style={td}>
-                    {policy.insurers?.name || "-"}
-                  </td>
-                  <td style={td}>{policy.renewal_date}</td>
-                  <td style={td}>
-                    {policy.annual_premium} €
-                  </td>
-                  <td style={td}>
-                    <span style={badge}>
-                      próxima
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+            let cor = "#22c55e";
+
+            if (dias <= 30) cor = "#f59e0b";
+            if (dias <= 15) cor = "#ef4444";
+            if (dias < 0) cor = "#991b1b";
+
+            return (
+              <div key={policy.id} style={card}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <h2>{policy.branch}</h2>
+
+                  <span
+                    style={{
+                      background: cor,
+                      color: "white",
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {dias < 0
+                      ? "Vencida"
+                      : `${dias} dias`}
+                  </span>
+                </div>
+
+                <p>
+                  <strong>Cliente:</strong>{" "}
+                  {policy.clients?.name || "-"}
+                </p>
+
+                <p>
+                  <strong>Seguradora:</strong>{" "}
+                  {policy.insurers?.name || "-"}
+                </p>
+
+                <p>
+                  <strong>Apólice:</strong>{" "}
+                  {policy.policy_number}
+                </p>
+
+                <p>
+                  <strong>Prémio:</strong>{" "}
+                  {policy.annual_premium || 0} €
+                </p>
+
+                <p>
+                  <strong>Fracionamento:</strong>{" "}
+                  {policy.payment_frequency}
+                </p>
+
+                <p>
+                  <strong>Renovação:</strong>{" "}
+                  {policy.renewal_date}
+                </p>
+
+                <p>
+                  <strong>Próxima cobrança:</strong>{" "}
+                  {calcularProximaCobranca(policy)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
       </main>
     </div>
   );
 }
 
-const page = {
+const layout = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily: "Arial",
 };
 
 const sidebar = {
-  width: "260px",
+  width: 260,
   background: "#0f172a",
   color: "white",
-  padding: "32px 24px",
+  padding: 32,
 };
 
 const logo = {
-  fontSize: "44px",
-  marginBottom: "40px",
+  fontSize: 36,
+  fontWeight: 700,
+  marginBottom: 40,
 };
 
 const nav = {
   display: "flex",
   flexDirection: "column",
-  gap: "12px",
+  gap: 16,
 };
 
-const link = {
-  color: "#fff",
+const navItem = {
+  color: "white",
   textDecoration: "none",
-  padding: "14px 16px",
-  borderRadius: "12px",
+  padding: 14,
+  borderRadius: 10,
 };
 
-const activeLink = {
-  ...link,
+const activeNav = {
+  ...navItem,
   background: "#2563eb",
 };
 
 const main = {
   flex: 1,
-  padding: "48px",
-};
-
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: "32px",
+  padding: 40,
 };
 
 const title = {
-  fontSize: "56px",
-  margin: 0,
+  fontSize: 42,
+  marginBottom: 30,
 };
 
-const subtitle = {
-  color: "#555",
-  marginTop: "10px",
-  fontSize: "28px",
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+  gap: 20,
 };
 
-const tableCard = {
+const card = {
   background: "white",
-  borderRadius: "24px",
-  overflow: "hidden",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-};
-
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
-};
-
-const th = {
-  textAlign: "left",
-  padding: "24px",
-  background: "#fff",
-  fontSize: "24px",
-};
-
-const td = {
-  padding: "24px",
-  borderTop: "1px solid #eee",
-  fontSize: "22px",
-};
-
-const badge = {
-  background: "#dbeafe",
-  color: "#1d4ed8",
-  padding: "8px 14px",
-  borderRadius: "999px",
-  fontSize: "18px",
+  padding: 24,
+  borderRadius: 18,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
 };
