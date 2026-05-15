@@ -6,64 +6,80 @@ const supabaseUrl =
 
 const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
+  "A_TUA_CHAVE";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método não permitido" });
+    return res.status(405).json({
+      error: "Método não permitido",
+    });
   }
 
-  const {
-    client_id,
-    policy_number,
-    branch,
-    insurer_name,
-    annual_premium,
-    renewal_date,
-  } = req.body;
+  try {
+    const {
+      client_id,
+      policy_number,
+      branch,
+      insurer_name,
+      annual_premium,
+      payment_frequency,
+      renewal_date,
+    } = req.body;
 
-  let insurerId = null;
+    const renewal = new Date(renewal_date);
 
-  if (insurer_name) {
-    const { data: existingInsurer } = await supabase
-      .from("insurers")
-      .select("id")
-      .eq("name", insurer_name)
-      .maybeSingle();
+    let nextDueDate = renewal;
 
-    if (existingInsurer) {
-      insurerId = existingInsurer.id;
-    } else {
-      const { data: newInsurer, error: insurerError } = await supabase
-        .from("insurers")
-        .insert({ name: insurer_name })
-        .select("id")
-        .single();
-
-      if (insurerError) {
-        return res.status(500).json({ error: insurerError.message });
-      }
-
-      insurerId = newInsurer.id;
+    if (payment_frequency === "mensal") {
+      nextDueDate = new Date(renewal);
+      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
     }
+
+    if (payment_frequency === "trimestral") {
+      nextDueDate = new Date(renewal);
+      nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+    }
+
+    if (payment_frequency === "semestral") {
+      nextDueDate = new Date(renewal);
+      nextDueDate.setMonth(nextDueDate.getMonth() + 6);
+    }
+
+    if (payment_frequency === "anual") {
+      nextDueDate = new Date(renewal);
+      nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+    }
+
+    const { data, error } = await supabase
+      .from("policies")
+      .insert([
+        {
+          client_id,
+          policy_number,
+          branch,
+          insurer_name,
+          annual_premium,
+          payment_frequency,
+          renewal_date,
+          next_due_date: nextDueDate.toISOString().split("T")[0],
+          status: "ativa",
+        },
+      ])
+      .select();
+
+    if (error) {
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+
+    return res.status(200).json(data);
+  } catch (err) {
+    return res.status(500).json({
+      error: err.message,
+    });
   }
-
-  const { error } = await supabase.from("policies").insert({
-    client_id,
-    insurer_id: insurerId,
-    policy_number,
-    branch,
-    annual_premium: Number(annual_premium || 0),
-    renewal_date,
-    status: "ativa",
-  });
-
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-
-  return res.status(200).json({ success: true });
 }
 
