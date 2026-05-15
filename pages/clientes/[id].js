@@ -123,9 +123,15 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
                   <div style={policyTop}>
                     <h3>{policy.branch}</h3>
 
-                    <span style={badge}>
-                      {policy.status}
-                    </span>
+                    <span
+  style={{
+    ...badge,
+    background: policy.status === "anulada" ? "#fee2e2" : "#dcfce7",
+    color: policy.status === "anulada" ? "#991b1b" : "#166534",
+  }}
+>
+  {policy.status || "ativa"}
+</span>
                   </div>
 
                   <p>
