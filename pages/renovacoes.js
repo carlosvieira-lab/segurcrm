@@ -28,184 +28,218 @@ export async function getServerSideProps() {
   };
 }
 
-function calcularDias(data) {
-  if (!data) return null;
+function daysUntil(date) {
+  if (!date) return null;
 
-  const hoje = new Date();
-  const renovacao = new Date(data);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const diff = renovacao - hoje;
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
 
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
 }
 
-function calcularProximaCobranca(policy) {
-  if (!policy.renewal_date) return "-";
+function formatDate(date) {
+  if (!date) return "Sem data";
 
-  const data = new Date(policy.renewal_date);
-
-  const freq = policy.payment_frequency || "anual";
-
-  if (freq === "mensal") {
-    data.setMonth(data.getMonth() + 1);
-  }
-
-  if (freq === "trimestral") {
-    data.setMonth(data.getMonth() + 3);
-  }
-
-  if (freq === "semestral") {
-    data.setMonth(data.getMonth() + 6);
-  }
-
-  if (freq === "anual") {
-    data.setFullYear(data.getFullYear() + 1);
-  }
-
-  return data.toISOString().split("T")[0];
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-export default function RenovacoesPage({ policies }) {
+function getPriority(policy) {
+  const days = daysUntil(policy.renewal_date);
+
+  if (days === null) return "semData";
+  if (days < 0) return "urgentes";
+  if (days <= 15) return "urgentes";
+  if (days <= 30) return "proximos";
+  return "futuras";
+}
+
+function getNextPaymentText(policy) {
+  if (!policy.renewal_date) return "Sem data";
+
+  const frequency = policy.payment_frequency || "anual";
+  const base = new Date(policy.renewal_date);
+
+  if (frequency === "mensal") {
+    base.setMonth(base.getMonth() + 1);
+  } else if (frequency === "trimestral") {
+    base.setMonth(base.getMonth() + 3);
+  } else if (frequency === "semestral") {
+    base.setMonth(base.getMonth() + 6);
+  } else {
+    base.setFullYear(base.getFullYear() + 1);
+  }
+
+  return formatDate(base);
+}
+
+export default function Renovacoes({ policies }) {
+  const groups = {
+    urgentes: policies.filter((p) => getPriority(p) === "urgentes"),
+    proximos: policies.filter((p) => getPriority(p) === "proximos"),
+    futuras: policies.filter((p) => getPriority(p) === "futuras"),
+    semData: policies.filter((p) => getPriority(p) === "semData"),
+  };
+
   return (
-    <div style={layout}>
+    <div style={page}>
       <aside style={sidebar}>
-        <h1 style={logo}>SegurCRM</h1>
+        <h2 style={logo}>SegurCRM</h2>
 
         <nav style={nav}>
-          <Link href="/" style={navItem}>
-            Dashboard
-          </Link>
-
-          <Link href="/clientes" style={navItem}>
-            Clientes
-          </Link>
-
-          <Link href="/apolices" style={navItem}>
-            Apólices
-          </Link>
-
-          <Link href="/renovacoes" style={activeNav}>
-            Renovações
-          </Link>
-
-          <Link href="/financeiro" style={navItem}>
-            Financeiro
-          </Link>
+          <Link href="/" style={link}>Dashboard</Link>
+          <Link href="/clientes" style={link}>Clientes</Link>
+          <Link href="/apolices" style={link}>Apólices</Link>
+          <Link href="/renovacoes" style={activeLink}>Renovações</Link>
+          <Link href="/financeiro" style={link}>Financeiro</Link>
         </nav>
       </aside>
 
       <main style={main}>
-        <h1 style={title}>Renovações Inteligentes</h1>
+        <header style={header}>
+          <div>
+            <h1 style={title}>Renovações Inteligentes</h1>
+            <p style={subtitle}>
+              Prioridades comerciais, renovações e próximas cobranças.
+            </p>
+          </div>
+        </header>
 
-        <div style={grid}>
-          {policies.map((policy) => {
-            const dias = calcularDias(policy.renewal_date);
+        <section style={summaryGrid}>
+          <SummaryCard title="Urgentes" value={groups.urgentes.length} color="#dc2626" />
+          <SummaryCard title="Próximos 30 dias" value={groups.proximos.length} color="#f59e0b" />
+          <SummaryCard title="Futuras" value={groups.futuras.length} color="#16a34a" />
+          <SummaryCard title="Sem data" value={groups.semData.length} color="#6b7280" />
+        </section>
 
-            let cor = "#22c55e";
+        <RenewalSection
+          title="🔴 Urgentes"
+          description="Vencidas ou a renovar nos próximos 15 dias."
+          policies={groups.urgentes}
+          badgeColor="#dc2626"
+        />
 
-            if (dias <= 30) cor = "#f59e0b";
-            if (dias <= 15) cor = "#ef4444";
-            if (dias < 0) cor = "#991b1b";
+        <RenewalSection
+          title="🟠 Próximos 30 dias"
+          description="Renovações que exigem acompanhamento este mês."
+          policies={groups.proximos}
+          badgeColor="#f59e0b"
+        />
 
-            return (
-              <div key={policy.id} style={card}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <h2>{policy.branch}</h2>
+        <RenewalSection
+          title="🟢 Futuras"
+          description="Renovações com mais margem de acompanhamento."
+          policies={groups.futuras}
+          badgeColor="#16a34a"
+        />
 
-                  <span
-                    style={{
-                      background: cor,
-                      color: "white",
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  >
-                    {dias < 0
-                      ? "Vencida"
-                      : `${dias} dias`}
-                  </span>
-                </div>
-
-                <p>
-                  <strong>Cliente:</strong>{" "}
-                  {policy.clients?.name || "-"}
-                </p>
-
-                <p>
-                  <strong>Seguradora:</strong>{" "}
-                  {policy.insurers?.name || "-"}
-                </p>
-
-                <p>
-                  <strong>Apólice:</strong>{" "}
-                  {policy.policy_number}
-                </p>
-
-                <p>
-                  <strong>Prémio:</strong>{" "}
-                  {policy.annual_premium || 0} €
-                </p>
-
-                <p>
-                  <strong>Fracionamento:</strong>{" "}
-                  {policy.payment_frequency}
-                </p>
-
-                <p>
-                  <strong>Renovação:</strong>{" "}
-                  {policy.renewal_date}
-                </p>
-
-                <p>
-                  <strong>Próxima cobrança:</strong>{" "}
-                  {calcularProximaCobranca(policy)}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+        <RenewalSection
+          title="⚪ Sem data"
+          description="Apólices que precisam de completar informação."
+          policies={groups.semData}
+          badgeColor="#6b7280"
+        />
       </main>
     </div>
   );
 }
 
-const layout = {
+function SummaryCard({ title, value, color }) {
+  return (
+    <div style={summaryCard}>
+      <p style={summaryLabel}>{title}</p>
+      <h2 style={{ ...summaryValue, color }}>{value}</h2>
+    </div>
+  );
+}
+
+function RenewalSection({ title, description, policies, badgeColor }) {
+  return (
+    <section style={section}>
+      <div style={sectionHeader}>
+        <div>
+          <h2 style={sectionTitle}>{title}</h2>
+          <p style={sectionDescription}>{description}</p>
+        </div>
+
+        <span style={{ ...countBadge, background: badgeColor }}>
+          {policies.length}
+        </span>
+      </div>
+
+      {policies.length === 0 ? (
+        <p style={emptyText}>Sem apólices nesta categoria.</p>
+      ) : (
+        <div style={cardsGrid}>
+          {policies.map((policy) => {
+            const days = daysUntil(policy.renewal_date);
+
+            return (
+              <div key={policy.id} style={policyCard}>
+                <div style={policyHeader}>
+                  <h3 style={policyTitle}>{policy.branch || "Sem ramo"}</h3>
+
+                  <span style={{ ...statusBadge, background: badgeColor }}>
+                    {days === null
+                      ? "Sem data"
+                      : days < 0
+                      ? "Vencida"
+                      : `${days} dias`}
+                  </span>
+                </div>
+
+                <p><strong>Cliente:</strong> {policy.clients?.name || "-"}</p>
+                <p><strong>Seguradora:</strong> {policy.insurers?.name || "-"}</p>
+                <p><strong>Apólice:</strong> {policy.policy_number || "-"}</p>
+                <p><strong>Prémio anual:</strong> {Number(policy.annual_premium || 0).toFixed(2)} €</p>
+                <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
+                <p><strong>Renovação:</strong> {formatDate(policy.renewal_date)}</p>
+                <p><strong>Próxima cobrança estimada:</strong> {getNextPaymentText(policy)}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
+  fontFamily: "Arial, sans-serif",
 };
 
 const sidebar = {
-  width: 260,
-  background: "#0f172a",
+  width: 240,
+  background: "#111827",
   color: "white",
-  padding: 32,
+  padding: 24,
 };
 
 const logo = {
-  fontSize: 36,
-  fontWeight: 700,
   marginBottom: 40,
 };
 
 const nav = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 16,
+  display: "grid",
+  gap: 12,
 };
 
-const navItem = {
-  color: "white",
+const link = {
+  color: "#cbd5e1",
   textDecoration: "none",
-  padding: 14,
+  padding: "12px 14px",
   borderRadius: 10,
 };
 
-const activeNav = {
-  ...navItem,
+const activeLink = {
+  ...link,
   background: "#2563eb",
+  color: "white",
 };
 
 const main = {
@@ -213,23 +247,114 @@ const main = {
   padding: 40,
 };
 
-const title = {
-  fontSize: 42,
+const header = {
   marginBottom: 30,
 };
 
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-  gap: 20,
+const title = {
+  fontSize: 40,
+  margin: 0,
 };
 
-const card = {
-  background: "white",
-  padding: 24,
-  borderRadius: 18,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-  display: "flex",
-  flexDirection: "column",
-  gap: 10,
+const subtitle = {
+  color: "#6b7280",
+  marginTop: 10,
 };
+
+const summaryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 16,
+  marginBottom: 30,
+};
+
+const summaryCard = {
+  background: "white",
+  borderRadius: 16,
+  padding: 20,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const summaryLabel = {
+  margin: 0,
+  color: "#6b7280",
+};
+
+const summaryValue = {
+  margin: "10px 0 0",
+  fontSize: 34,
+};
+
+const section = {
+  background: "white",
+  borderRadius: 16,
+  padding: 24,
+  marginBottom: 24,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const sectionHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 20,
+};
+
+const sectionTitle = {
+  margin: 0,
+  fontSize: 24,
+};
+
+const sectionDescription = {
+  margin: "8px 0 0",
+  color: "#6b7280",
+};
+
+const countBadge = {
+  color: "white",
+  padding: "8px 14px",
+  borderRadius: 999,
+  fontWeight: "bold",
+};
+
+const emptyText = {
+  color: "#6b7280",
+};
+
+const cardsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+  gap: 16,
+};
+
+const policyCard = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 18,
+  background: "#ffffff",
+};
+
+const policyHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 12,
+};
+
+const policyTitle = {
+  margin: 0,
+};
+
+const statusBadge = {
+  color: "white",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+Depois:
+
+Commit changes
+espera a Vercel ficar Ready
+abre /renovacoes
