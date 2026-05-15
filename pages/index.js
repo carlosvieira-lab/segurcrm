@@ -120,6 +120,42 @@ export default function Home({ clients, policies, tasks }) {
 
               <input
                 placeholder="Email"
+  <input
+  placeholder="NIF"
+  value={nif}
+  onChange={(e) => setNif(e.target.value)}
+  style={input}
+/>
+
+<input
+  placeholder="Morada"
+  value={address}
+  onChange={(e) => setAddress(e.target.value)}
+  style={input}
+/>
+
+<input
+  type="date"
+  placeholder="Data Nascimento"
+  value={birthDate}
+  onChange={(e) => setBirthDate(e.target.value)}
+  style={input}
+/>
+
+<input
+  type="date"
+  placeholder="Início Carta Condução"
+  value={licenseDate}
+  onChange={(e) => setLicenseDate(e.target.value)}
+  style={input}
+/>
+
+<input
+  placeholder="IBAN"
+  value={iban}
+  onChange={(e) => setIban(e.target.value)}
+  style={input}
+/>
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={input}
