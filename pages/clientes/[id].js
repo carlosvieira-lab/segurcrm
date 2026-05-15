@@ -221,8 +221,7 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
     Eliminar cliente
   </button>
 </div>
-</button>
-</button>
+
         </div>
 
         <section style={card}>
