@@ -71,8 +71,10 @@ export default function Home({ clients, policies, tasks }) {
          <Link href="/clientes" style={link}>
   Clientes
 </Link>
-          <a style={link}>Apólices</a>
-          <a style={link}>Renovações</a>
+    <Link href="/apolices" style={link}>
+  Apólices
+</Link>
+                   <a style={link}>Renovações</a>
           <a style={link}>Tarefas</a>
           <a style={link}>Sinistros</a>
         </nav>
