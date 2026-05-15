@@ -38,6 +38,11 @@ export default function Home({ clients, policies, tasks }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [nif, setNif] = useState("");
+const [address, setAddress] = useState("");
+const [birthDate, setBirthDate] = useState("");
+const [licenseDate, setLicenseDate] = useState("");
+const [iban, setIban] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function createClientRecord(event) {
@@ -50,6 +55,11 @@ export default function Home({ clients, policies, tasks }) {
       name,
       phone,
       email,
+      nif,
+address,
+birth_date: birthDate,
+driving_license_start_date: licenseDate,
+iban,
     });
 
     if (error) {
