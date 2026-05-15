@@ -150,6 +150,36 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
     }}
   >
     Total: {policies.length}
+<div
+  style={{
+    marginTop: 20,
+    padding: "16px 20px",
+    borderRadius: 14,
+    background:
+      policies.filter((p) => p.status === "ativa").length >= 5
+        ? "#fde68a"
+        : "#e0e7ff",
+    color:
+      policies.filter((p) => p.status === "ativa").length >= 5
+        ? "#92400e"
+        : "#1e3a8a",
+    fontWeight: "bold",
+    fontSize: 18,
+  }}
+>
+  Classificação Cliente:{" "}
+  {(() => {
+    const ativas = policies.filter(
+      (p) => p.status === "ativa"
+    ).length;
+
+    if (ativas >= 5) return "TOP";
+    if (ativas === 4) return "MUITO BOM";
+    if (ativas === 3) return "BOM";
+    if (ativas === 2) return "MÉDIO";
+    return "FRACO";
+  })()}
+</div>
   </div>
 </div>
 
