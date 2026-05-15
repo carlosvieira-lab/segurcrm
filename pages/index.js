@@ -112,74 +112,20 @@ iban,
           <div style={panel}>
             <h2>Novo Cliente</h2>
 
-            <form onSubmit={createClientRecord} style={form}>
-              <input
-                placeholder="Nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                style={input}
-              />
+          <form onSubmit={createClientRecord} style={form}>
+  <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
+  <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+  <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
+  <input placeholder="NIF" value={nif} onChange={(e) => setNif(e.target.value)} style={input} />
+  <input placeholder="Morada" value={address} onChange={(e) => setAddress(e.target.value)} style={input} />
+  <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={input} />
+  <input type="date" value={licenseDate} onChange={(e) => setLicenseDate(e.target.value)} style={input} />
+  <input placeholder="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} style={input} />
 
-              <input
-                placeholder="Telefone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                style={input}
-              />
-<input
-  placeholder="Email"
-  value={email}
-  onChange={(e) => setEmail(e.target.value)}
-  style={input}
-/>
-            
-
-  <input
-  placeholder="NIF"
-  value={nif}
-  onChange={(e) => setNif(e.target.value)}
-  style={input}
-/>
-
-<input
-  placeholder="Morada"
-  value={address}
-  onChange={(e) => setAddress(e.target.value)}
-  style={input}
-/>
-
-<input
-  type="date"
-  placeholder="Data Nascimento"
-  value={birthDate}
-  onChange={(e) => setBirthDate(e.target.value)}
-  style={input}
-/>
-
-<input
-  type="date"
-  placeholder="Início Carta Condução"
-  value={licenseDate}
-  onChange={(e) => setLicenseDate(e.target.value)}
-  style={input}
-/>
-
-<input
-  placeholder="IBAN"
-  value={iban}
-  onChange={(e) => setIban(e.target.value)}
-  style={input}
-/>
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={input}
-              />
-
-              <button disabled={saving} style={button}>
-                {saving ? "A guardar..." : "Guardar cliente"}
-              </button>
-            </form>
+  <button disabled={saving} style={button}>
+    {saving ? "A guardar..." : "Guardar cliente"}
+  </button>
+</form>
           </div>
 
           <div style={panel}>
