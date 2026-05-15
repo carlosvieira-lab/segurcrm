@@ -125,10 +125,10 @@ export default function ClientePage({ client, policies }) {
     </button>
   </div>
 </div> 
-  </div>
-</div>
+ 
 
-Depois faz Commit changes.
+
+
             <h1 style={title}>{client.name}</h1>
 
             <p style={subtitle}>
