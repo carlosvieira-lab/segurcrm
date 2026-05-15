@@ -130,7 +130,7 @@ iban,
 
               <input
                 placeholder="Email"
-                  value={email}
+  value={email}
   onChange={(e) => setEmail(e.target.value)}
   style={input}
 />
