@@ -70,8 +70,9 @@ export default function ClientePage({ client, policies }) {
   onClick={() => {
     const numero = prompt("Número da Apólice");
     const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
-    const premio = prompt("Prémio anual");
-    const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+    const seguradora = prompt("Seguradora (Generali, Zurich, Real Vida, Ageas, Allianz...)");
+const premio = prompt("Prémio anual");
+const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
 
     fetch("/api/create-policy", {
       method: "POST",
@@ -82,6 +83,7 @@ export default function ClientePage({ client, policies }) {
         client_id: client.id,
         policy_number: numero,
         branch: ramo,
+         insurer_name: seguradora,
         annual_premium: premio,
         renewal_date: renovacao,
       }),
