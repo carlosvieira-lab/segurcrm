@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
-
+import Link from "next/link";
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   "https://accmdxprsetsqsrepflq.supabase.co";
@@ -68,7 +68,9 @@ export default function Home({ clients, policies, tasks }) {
 
         <nav style={nav}>
           <a style={activeLink}>Dashboard</a>
-          <a style={link}>Clientes</a>
+         <Link href="/clientes" style={link}>
+  Clientes
+</Link>
           <a style={link}>Apólices</a>
           <a style={link}>Renovações</a>
           <a style={link}>Tarefas</a>
