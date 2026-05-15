@@ -98,6 +98,60 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
 
         <section style={card}>
           <h2>Dados do Cliente</h2>
+    <div
+  style={{
+    display: "flex",
+    gap: 16,
+    marginTop: 20,
+    marginBottom: 20,
+  }}
+>
+  <div
+    style={{
+      background: "#dcfce7",
+      color: "#166534",
+      padding: "12px 18px",
+      borderRadius: 12,
+      fontWeight: "bold",
+    }}
+  >
+    Em vigor:{" "}
+    {
+      policies.filter(
+        (p) => p.status === "ativa"
+      ).length
+    }
+  </div>
+
+  <div
+    style={{
+      background: "#fee2e2",
+      color: "#991b1b",
+      padding: "12px 18px",
+      borderRadius: 12,
+      fontWeight: "bold",
+    }}
+  >
+    Anuladas:{" "}
+    {
+      policies.filter(
+        (p) => p.status === "anulada"
+      ).length
+    }
+  </div>
+
+  <div
+    style={{
+      background: "#dbeafe",
+      color: "#1d4ed8",
+      padding: "12px 18px",
+      borderRadius: 12,
+      fontWeight: "bold",
+    }}
+  >
+    Total: {policies.length}
+  </div>
+</div>
 
           <div style={infoGrid}>
             <Info label="Nome" value={client.name} />
