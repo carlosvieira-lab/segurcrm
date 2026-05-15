@@ -56,9 +56,10 @@ export default function ClientePage({ client, policies }) {
       </aside>
 
       <main style={main}>
-       <div style={header}>
+     <div style={header}>
   <div>
     <h1 style={title}>{client.name}</h1>
+
     <p style={subtitle}>
       {client.nif || "Sem NIF"} · {client.phone || "Sem telefone"}
     </p>
@@ -76,7 +77,9 @@ export default function ClientePage({ client, policies }) {
 
         fetch("/api/create-policy", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             client_id: client.id,
             policy_number: numero,
@@ -85,21 +88,34 @@ export default function ClientePage({ client, policies }) {
             annual_premium: premio,
             renewal_date: renovacao,
           }),
-        }).then(() => window.location.reload());
+        }).then(() => {
+          window.location.reload();
+        });
       }}
     >
       + Nova Apólice
     </button>
 
     <button
-      style={{ ...button, background: "#dc2626" }}
+      style={{
+        ...button,
+        background: "#dc2626",
+      }}
       onClick={() => {
-        if (!confirm("Tens a certeza que queres eliminar este cliente?")) return;
+        const confirmar = confirm(
+          "Tens a certeza que queres eliminar este cliente?"
+        );
+
+        if (!confirmar) return;
 
         fetch("/api/delete-client", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ client_id: client.id }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            client_id: client.id,
+          }),
         }).then(() => {
           window.location.href = "/clientes";
         });
@@ -107,6 +123,8 @@ export default function ClientePage({ client, policies }) {
     >
       Eliminar cliente
     </button>
+  </div>
+</div> 
   </div>
 </div>
 
