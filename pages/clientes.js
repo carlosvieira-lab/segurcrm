@@ -95,7 +95,7 @@ const filteredClients = clients.filter((client) => {
             </thead>
 
             <tbody>
-              {clients.map((client) => (
+             {filteredClients.map((client) => (
                 <tr key={client.id}>
                  <td style={td}>
   <Link
