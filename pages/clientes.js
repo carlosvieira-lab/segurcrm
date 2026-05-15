@@ -72,9 +72,18 @@ export default function Clientes({ clients }) {
             <tbody>
               {clients.map((client) => (
                 <tr key={client.id}>
-                  <td style={td}>
-                    <strong>{client.name}</strong>
-                  </td>
+                 <td style={td}>
+  <Link
+    href={`/clientes/${client.id}`}
+    style={{
+      color: "#2563eb",
+      textDecoration: "none",
+      fontWeight: "bold",
+    }}
+  >
+    {client.name}
+  </Link>
+</td>
 
                   <td style={td}>{client.phone || "-"}</td>
 
