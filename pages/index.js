@@ -1,48 +1,86 @@
-export default function Home() {
-  return (
-    <main style={{
-      fontFamily: "Arial",
-      padding: "40px",
-      background: "#f5f7fb",
-      minHeight: "100vh"
-    }}>
-      <h1 style={{ fontSize: "32px" }}>SegurCRM</h1>
+import { createClient } from "@supabase/supabase-js";
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
+export async function getServerSideProps() {
+  const { count: clients } = await supabase
+    .from("clients")
+    .select("*", { count: "exact", head: true });
+
+  const { count: policies } = await supabase
+    .from("policies")
+    .select("*", { count: "exact", head: true });
+
+  const { count: tasks } = await supabase
+    .from("tasks")
+    .select("*", { count: "exact", head: true });
+
+  return {
+    props: {
+      clients: clients || 0,
+      policies: policies || 0,
+      tasks: tasks || 0,
+    },
+  };
+}
+
+export default function Home({ clients, policies, tasks }) {
+  return (
+    <div
+      style={{
+        padding: 40,
+        fontFamily: "Arial",
+        background: "#f3f4f6",
+        minHeight: "100vh",
+      }}
+    >
+      <h1>SegurCRM</h1>
       <p>CRM para mediação de seguros.</p>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
-        gap: "20px",
-        marginTop: "40px"
-      }}>
-        <div style={{
-          background: "white",
-          padding: "20px",
-          borderRadius: "12px"
-        }}>
-          <h3>Clientes</h3>
-          <p>124</p>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 20,
+          marginTop: 40,
+        }}
+      >
+        <div
+          style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 10,
+          }}
+        >
+          <h2>Clientes</h2>
+          <p>{clients}</p>
         </div>
 
-        <div style={{
-          background: "white",
-          padding: "20px",
-          borderRadius: "12px"
-        }}>
-          <h3>Apólices</h3>
-          <p>89</p>
+        <div
+          style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 10,
+          }}
+        >
+          <h2>Apólices</h2>
+          <p>{policies}</p>
         </div>
 
-        <div style={{
-          background: "white",
-          padding: "20px",
-          borderRadius: "12px"
-        }}>
-          <h3>Tarefas</h3>
-          <p>12</p>
+        <div
+          style={{
+            background: "white",
+            padding: 20,
+            borderRadius: 10,
+          }}
+        >
+          <h2>Tarefas</h2>
+          <p>{tasks}</p>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
