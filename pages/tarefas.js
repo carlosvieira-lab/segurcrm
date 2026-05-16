@@ -62,6 +62,7 @@ export default function Tarefas({ tasks }) {
 
   async function createTask(e) {
     e.preventDefault();
+
     setSaving(true);
 
     const initialProcedure = procedureNotes
@@ -88,9 +89,29 @@ export default function Tarefas({ tasks }) {
     window.location.reload();
   }
 
-  async function updateStatus(id, status) {
+  async function updateStatus(task, status) {
+    const previous = task.procedure_notes || "";
+
+    let actionText = "";
+
+    if (status === "em tratamento") {
+      actionText = "Tarefa passou para EM TRATAMENTO";
+    }
+
+    if (status === "concluida") {
+      actionText = "Tarefa ENCERRADA";
+    }
+
+    const updatedNotes =
+      previous +
+      "\n\n" +
+      formatNow() +
+      " - " +
+      actionText;
+
     const updateData = {
       status,
+      procedure_notes: updatedNotes,
       updated_at: new Date().toISOString(),
     };
 
@@ -98,7 +119,10 @@ export default function Tarefas({ tasks }) {
       updateData.closed_at = new Date().toISOString();
     }
 
-    await supabase.from("tasks").update(updateData).eq("id", id);
+    await supabase
+      .from("tasks")
+      .update(updateData)
+      .eq("id", task.id);
 
     window.location.reload();
   }
@@ -194,8 +218,9 @@ export default function Tarefas({ tasks }) {
         <header style={header}>
           <div>
             <h1 style={titlePage}>Tarefas Operacionais</h1>
+
             <p style={subtitle}>
-              Gestão comercial e administrativa com histórico de procedimentos.
+              Gestão comercial e administrativa com histórico operacional.
             </p>
           </div>
         </header>
@@ -205,7 +230,9 @@ export default function Tarefas({ tasks }) {
           <StatCard title="Concluídas" value={concluidas.length} />
           <StatCard
             title="Muito urgentes"
-            value={abertas.filter((t) => t.priority === "MUITO URGENTE").length}
+            value={
+              abertas.filter((t) => t.priority === "MUITO URGENTE").length
+            }
           />
         </section>
 
@@ -287,7 +314,10 @@ export default function Tarefas({ tasks }) {
                     <div style={taskTop}>
                       <div>
                         <h3 style={{ margin: 0 }}>{task.title}</h3>
-                        <p style={smallText}>{task.category}</p>
+
+                        <p style={smallText}>
+                          {task.category}
+                        </p>
                       </div>
 
                       <div style={{ display: "flex", gap: 8 }}>
@@ -313,15 +343,19 @@ export default function Tarefas({ tasks }) {
 
                     <p>
                       <strong>Cliente/Prospect:</strong>{" "}
-                      {task.clients?.name || task.prospect_name || "-"}
+                      {task.clients?.name ||
+                        task.prospect_name ||
+                        "-"}
                     </p>
 
                     <p>
-                      <strong>Telefone:</strong> {task.prospect_phone || "-"}
+                      <strong>Telefone:</strong>{" "}
+                      {task.prospect_phone || "-"}
                     </p>
 
                     <p>
-                      <strong>Descrição:</strong> {task.description || "-"}
+                      <strong>Descrição:</strong>{" "}
+                      {task.description || "-"}
                     </p>
 
                     <div style={procedureBox}>
@@ -333,7 +367,8 @@ export default function Tarefas({ tasks }) {
                     </div>
 
                     <p>
-                      <strong>Entrada:</strong> {formatDate(task.created_at)}
+                      <strong>Entrada:</strong>{" "}
+                      {formatDate(task.created_at)}
                     </p>
 
                     <p>
@@ -343,22 +378,35 @@ export default function Tarefas({ tasks }) {
 
                     <div style={buttons}>
                       <button
-                        style={{ ...smallButton, background: "#2563eb" }}
-                        onClick={() => updateStatus(task.id, "em tratamento")}
+                        style={{
+                          ...smallButton,
+                          background: "#2563eb",
+                        }}
+                        onClick={() =>
+                          updateStatus(task, "em tratamento")
+                        }
                       >
                         Em tratamento
                       </button>
 
                       <button
-                        style={{ ...smallButton, background: "#7c3aed" }}
+                        style={{
+                          ...smallButton,
+                          background: "#7c3aed",
+                        }}
                         onClick={() => addProcedure(task)}
                       >
                         Adicionar procedimento
                       </button>
 
                       <button
-                        style={{ ...smallButton, background: "#16a34a" }}
-                        onClick={() => updateStatus(task.id, "concluida")}
+                        style={{
+                          ...smallButton,
+                          background: "#16a34a",
+                        }}
+                        onClick={() =>
+                          updateStatus(task, "concluida")
+                        }
                       >
                         Encerrar
                       </button>
@@ -374,7 +422,9 @@ export default function Tarefas({ tasks }) {
           <h2>Histórico encerrado</h2>
 
           {concluidas.length === 0 ? (
-            <p style={muted}>Ainda não existem tarefas concluídas.</p>
+            <p style={muted}>
+              Ainda não existem tarefas concluídas.
+            </p>
           ) : (
             <div style={list}>
               {concluidas.map((task) => (
@@ -382,12 +432,17 @@ export default function Tarefas({ tasks }) {
                   <div style={taskTop}>
                     <div>
                       <strong>{task.title}</strong>
+
                       <p style={smallText}>
-                        {task.prospect_name || task.clients?.name || "-"}
+                        {task.prospect_name ||
+                          task.clients?.name ||
+                          "-"}
                       </p>
                     </div>
 
-                    <span style={closedBadge}>concluída</span>
+                    <span style={closedBadge}>
+                      concluída
+                    </span>
                   </div>
 
                   <p style={smallText}>
@@ -400,6 +455,7 @@ export default function Tarefas({ tasks }) {
 
                   <div style={procedureBox}>
                     <strong>Procedimento adotado</strong>
+
                     <pre style={procedureText}>
                       {task.procedure_notes || "-"}
                     </pre>
@@ -619,4 +675,8 @@ const closedBadge = {
   borderRadius: 999,
   fontSize: 12,
 };
-  
+
+
+ 
+
+    
