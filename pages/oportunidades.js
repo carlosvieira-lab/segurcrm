@@ -178,13 +178,17 @@ export default function Oportunidades({
                 onChange={(e) => setPolicyType(e.target.value)}
                 style={input}
               >
-                <option>automóvel</option>
                 <option>casa</option>
-                <option>saúde</option>
-                <option>vida</option>
-                <option>acidentes de trabalho</option>
-                <option>multirriscos</option>
-                <option>responsabilidade civil</option>
+<option>saúde</option>
+<option>vida</option>
+<option>acidentes pessoais</option>
+<option>acidentes de trabalho</option>
+<option>PPR</option>
+<option>financeiros</option>
+<option>viagem</option>
+<option>casa</option>
+<option>responsabilidade civil</option>
+<option>MREmpresarial</option>
               </select>
 
               <input
