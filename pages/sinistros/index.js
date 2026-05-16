@@ -91,24 +91,22 @@ export default function Sinistros({ claims, clients }) {
   const abertos = claims.filter((c) => c.status === "ABERTO");
   const pendentes = claims.filter((c) => c.status === "PENDENTE");
   const encerrados = claims.filter((c) => c.status === "ENCERRADO");
-const insurerStats = {};
-const branchStats = {};
 
-claims.forEach((claim) => {
-  const insurer = claim.insurer_name || "Sem seguradora";
-  const branch = claim.claim_branch || "Sem ramo";
+  const insurerStats = {};
+  const branchStats = {};
 
-  insurerStats[insurer] =
-    (insurerStats[insurer] || 0) + 1;
+  claims.forEach((claim) => {
+    const insurer = claim.insurer_name || "Sem seguradora";
+    const branch = claim.claim_branch || "Sem ramo";
 
-  branchStats[branch] =
-    (branchStats[branch] || 0) + 1;
-});
+    insurerStats[insurer] = (insurerStats[insurer] || 0) + 1;
+    branchStats[branch] = (branchStats[branch] || 0) + 1;
+  });
+
   const alertas = claims.filter((claim) => {
     if (claim.status === "ENCERRADO") return false;
 
-    const semEnvio =
-      claim.status === "ABERTO" && !claim.submitted_date;
+    const semEnvio = claim.status === "ABERTO" && !claim.submitted_date;
 
     const pendenteHaMuito =
       claim.status === "PENDENTE" &&
@@ -229,7 +227,7 @@ claims.forEach((claim) => {
           <div>
             <h1 style={title}>Sinistros</h1>
             <p style={subtitle}>
-              Gestão de participações, fases, alertas e procedimentos.
+              Gestão de participações, fases, alertas, estatísticas e procedimentos.
             </p>
           </div>
         </header>
@@ -239,6 +237,46 @@ claims.forEach((claim) => {
           <StatCard title="Pendentes" value={pendentes.length} color="#f59e0b" />
           <StatCard title="Encerrados" value={encerrados.length} color="#16a34a" />
           <StatCard title="Alertas" value={alertas.length} color="#dc2626" />
+        </section>
+
+        <section style={statsGrid}>
+          <div style={panel}>
+            <h2>Sinistros por seguradora</h2>
+
+            {Object.keys(insurerStats).length === 0 ? (
+              <p style={muted}>Sem dados ainda.</p>
+            ) : (
+              <div style={list}>
+                {Object.entries(insurerStats)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, total]) => (
+                    <div key={name} style={statLine}>
+                      <span>{name}</span>
+                      <strong>{total}</strong>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          <div style={panel}>
+            <h2>Sinistros por ramo</h2>
+
+            {Object.keys(branchStats).length === 0 ? (
+              <p style={muted}>Sem dados ainda.</p>
+            ) : (
+              <div style={list}>
+                {Object.entries(branchStats)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, total]) => (
+                    <div key={name} style={statLine}>
+                      <span>{name}</span>
+                      <strong>{total}</strong>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {alertas.length > 0 && (
@@ -516,9 +554,7 @@ function Timeline({ status }) {
   return (
     <div style={timeline}>
       {steps.map((step, index) => {
-        const active =
-          step === status ||
-          steps.indexOf(status) > index;
+        const active = step === status || steps.indexOf(status) > index;
 
         return (
           <div key={step} style={timelineStep}>
@@ -610,6 +646,20 @@ const cardLabel = { color: "#6b7280", margin: 0 };
 const cardValue = {
   fontSize: 30,
   margin: "10px 0 0",
+};
+
+const statsGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 24,
+  marginBottom: 24,
+};
+
+const statLine = {
+  display: "flex",
+  justifyContent: "space-between",
+  padding: "10px 0",
+  borderBottom: "1px solid #e5e7eb",
 };
 
 const alertPanel = {
@@ -806,5 +856,9 @@ const detailButton = {
   display: "inline-block",
   marginTop: 10,
 };
+
+
+
+
               
 
