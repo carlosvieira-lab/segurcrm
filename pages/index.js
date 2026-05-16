@@ -60,6 +60,30 @@ export async function getServerSideProps() {
   const safePolicies = policies || [];
 
   const activePolicies = safePolicies.filter((p) => p.status === "ativa");
+  const { data: tasks } = await supabase
+  .from("tasks")
+  .select("*");
+
+const normalTasks =
+  tasks?.filter(
+    (t) =>
+      t.priority === "NORMAL" &&
+      t.status !== "concluida"
+  ).length || 0;
+
+const urgentTasks =
+  tasks?.filter(
+    (t) =>
+      t.priority === "URGENTE" &&
+      t.status !== "concluida"
+  ).length || 0;
+
+const veryUrgentTasks =
+  tasks?.filter(
+    (t) =>
+      t.priority === "MUITO URGENTE" &&
+      t.status !== "concluida"
+  ).length || 0;
   const cancelledPolicies = safePolicies.filter((p) => p.status === "anulada");
 
   const overdue = activePolicies.filter((p) => {
