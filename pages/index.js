@@ -56,34 +56,15 @@ export async function getServerSideProps() {
     `)
     .order("created_at", { ascending: false });
 
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*");
+
   const safeClients = clients || [];
   const safePolicies = policies || [];
+  const safeTasks = tasks || [];
 
   const activePolicies = safePolicies.filter((p) => p.status === "ativa");
-  const { data: tasks } = await supabase
-  .from("tasks")
-  .select("*");
-
-const normalTasks =
-  tasks?.filter(
-    (t) =>
-      t.priority === "NORMAL" &&
-      t.status !== "concluida"
-  ).length || 0;
-
-const urgentTasks =
-  tasks?.filter(
-    (t) =>
-      t.priority === "URGENTE" &&
-      t.status !== "concluida"
-  ).length || 0;
-
-const veryUrgentTasks =
-  tasks?.filter(
-    (t) =>
-      t.priority === "MUITO URGENTE" &&
-      t.status !== "concluida"
-  ).length || 0;
   const cancelledPolicies = safePolicies.filter((p) => p.status === "anulada");
 
   const overdue = activePolicies.filter((p) => {
@@ -116,10 +97,21 @@ const veryUrgentTasks =
     0
   );
 
+  const normalTasks = safeTasks.filter(
+    (t) => t.priority === "NORMAL" && t.status !== "concluida"
+  ).length;
+
+  const urgentTasks = safeTasks.filter(
+    (t) => t.priority === "URGENTE" && t.status !== "concluida"
+  ).length;
+
+  const veryUrgentTasks = safeTasks.filter(
+    (t) => t.priority === "MUITO URGENTE" && t.status !== "concluida"
+  ).length;
+
   return {
     props: {
       clients: safeClients,
-      policies: safePolicies,
       activePoliciesCount: activePolicies.length,
       cancelledPoliciesCount: cancelledPolicies.length,
       overdueCount: overdue.length,
@@ -129,13 +121,15 @@ const veryUrgentTasks =
       totalPremium,
       estimatedMonthlyRevenue,
       alerts: [...overdue, ...dueToday, ...next7Days].slice(0, 6),
+      normalTasks,
+      urgentTasks,
+      veryUrgentTasks,
     },
   };
 }
 
 export default function Home({
   clients,
-  policies,
   activePoliciesCount,
   cancelledPoliciesCount,
   overdueCount,
@@ -145,6 +139,9 @@ export default function Home({
   totalPremium,
   estimatedMonthlyRevenue,
   alerts,
+  normalTasks,
+  urgentTasks,
+  veryUrgentTasks,
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -193,7 +190,7 @@ export default function Home({
           <Link href="/apolices" style={link}>Apólices</Link>
           <Link href="/renovacoes" style={link}>Renovações</Link>
           <Link href="/financeiro" style={link}>Financeiro</Link>
-    <Link href="/tarefas" style={link}>Tarefas</Link>
+          <Link href="/tarefas" style={link}>Tarefas</Link>
         </nav>
       </aside>
 
@@ -202,12 +199,12 @@ export default function Home({
           <div>
             <h1 style={title}>Dashboard Inteligente</h1>
             <p style={subtitle}>
-              Visão operacional da carteira, cobranças e atividade comercial.
+              Visão operacional da carteira, cobranças, tarefas e atividade comercial.
             </p>
           </div>
 
-          <Link href="/renovacoes" style={headerButton}>
-            Ver renovações
+          <Link href="/tarefas" style={headerButton}>
+            Ver tarefas
           </Link>
         </header>
 
@@ -216,6 +213,12 @@ export default function Home({
           <AlertCard title="Hoje" value={dueTodayCount} color="#dc2626" />
           <AlertCard title="7 dias" value={next7DaysCount} color="#f59e0b" />
           <AlertCard title="30 dias" value={next30DaysCount} color="#2563eb" />
+        </section>
+
+        <section style={taskGrid}>
+          <AlertCard title="Tarefas normais" value={normalTasks} color="#6b7280" />
+          <AlertCard title="Tarefas urgentes" value={urgentTasks} color="#f59e0b" />
+          <AlertCard title="Muito urgentes" value={veryUrgentTasks} color="#dc2626" />
         </section>
 
         <section style={cards}>
@@ -396,6 +399,13 @@ const headerButton = {
 const alertGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 16,
+  marginBottom: 20,
+};
+
+const taskGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
   gap: 16,
   marginBottom: 20,
 };
