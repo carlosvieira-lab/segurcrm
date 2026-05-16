@@ -12,30 +12,116 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+function daysUntil(date) {
+  if (!date) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
+}
+
+function monthlyValue(policy) {
+  const premium = Number(policy.annual_premium || 0);
+  const frequency = policy.payment_frequency || "anual";
+
+  if (frequency === "mensal") return premium / 12;
+  if (frequency === "trimestral") return premium / 4;
+  if (frequency === "semestral") return premium / 2;
+  return premium / 12;
+}
+
 export async function getServerSideProps() {
   const { data: clients } = await supabase
     .from("clients")
     .select("*")
     .order("created_at", { ascending: false });
 
-  const { count: policies } = await supabase
+  const { data: policies } = await supabase
     .from("policies")
-    .select("*", { count: "exact", head: true });
+    .select(`
+      *,
+      clients(name),
+      insurers(name)
+    `)
+    .order("created_at", { ascending: false });
 
-  const { count: tasks } = await supabase
-    .from("tasks")
-    .select("*", { count: "exact", head: true });
+  const safeClients = clients || [];
+  const safePolicies = policies || [];
+
+  const activePolicies = safePolicies.filter((p) => p.status === "ativa");
+  const cancelledPolicies = safePolicies.filter((p) => p.status === "anulada");
+
+  const overdue = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days !== null && days < 0;
+  });
+
+  const dueToday = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days === 0;
+  });
+
+  const next7Days = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days !== null && days > 0 && days <= 7;
+  });
+
+  const next30Days = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days !== null && days > 7 && days <= 30;
+  });
+
+  const totalPremium = activePolicies.reduce(
+    (sum, policy) => sum + Number(policy.annual_premium || 0),
+    0
+  );
+
+  const estimatedMonthlyRevenue = activePolicies.reduce(
+    (sum, policy) => sum + monthlyValue(policy),
+    0
+  );
 
   return {
     props: {
-      clients: clients || [],
-      policies: policies || 0,
-      tasks: tasks || 0,
+      clients: safeClients,
+      policies: safePolicies,
+      activePoliciesCount: activePolicies.length,
+      cancelledPoliciesCount: cancelledPolicies.length,
+      overdueCount: overdue.length,
+      dueTodayCount: dueToday.length,
+      next7DaysCount: next7Days.length,
+      next30DaysCount: next30Days.length,
+      totalPremium,
+      estimatedMonthlyRevenue,
+      alerts: [...overdue, ...dueToday, ...next7Days].slice(0, 6),
     },
   };
 }
 
-export default function Home({ clients, policies, tasks }) {
+export default function Home({
+  clients,
+  policies,
+  activePoliciesCount,
+  cancelledPoliciesCount,
+  overdueCount,
+  dueTodayCount,
+  next7DaysCount,
+  next30DaysCount,
+  totalPremium,
+  estimatedMonthlyRevenue,
+  alerts,
+}) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -83,23 +169,36 @@ export default function Home({ clients, policies, tasks }) {
           <Link href="/apolices" style={link}>Apólices</Link>
           <Link href="/renovacoes" style={link}>Renovações</Link>
           <Link href="/financeiro" style={link}>Financeiro</Link>
-          <a style={link}>Tarefas</a>
-          <a style={link}>Sinistros</a>
         </nav>
       </aside>
 
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Dashboard</h1>
-            <p style={subtitle}>Visão geral da carteira de seguros.</p>
+            <h1 style={title}>Dashboard Inteligente</h1>
+            <p style={subtitle}>
+              Visão operacional da carteira, cobranças e atividade comercial.
+            </p>
           </div>
+
+          <Link href="/renovacoes" style={headerButton}>
+            Ver renovações
+          </Link>
         </header>
+
+        <section style={alertGrid}>
+          <AlertCard title="Vencidas" value={overdueCount} color="#991b1b" />
+          <AlertCard title="Hoje" value={dueTodayCount} color="#dc2626" />
+          <AlertCard title="7 dias" value={next7DaysCount} color="#f59e0b" />
+          <AlertCard title="30 dias" value={next30DaysCount} color="#2563eb" />
+        </section>
 
         <section style={cards}>
           <Card title="Clientes" value={clients.length} />
-          <Card title="Apólices" value={policies} />
-          <Card title="Tarefas" value={tasks} />
+          <Card title="Apólices ativas" value={activePoliciesCount} />
+          <Card title="Apólices anuladas" value={cancelledPoliciesCount} />
+          <Card title="Prémio em vigor" value={formatEuro(totalPremium)} />
+          <Card title="Receita mensal estimada" value={formatEuro(estimatedMonthlyRevenue)} />
         </section>
 
         <section style={grid}>
@@ -123,37 +222,62 @@ export default function Home({ clients, policies, tasks }) {
           </div>
 
           <div style={panel}>
-            <h2>Clientes recentes</h2>
+            <h2>Alertas rápidos</h2>
 
-            {clients.length === 0 ? (
-              <p>Ainda não existem clientes.</p>
+            {alerts.length === 0 ? (
+              <p style={muted}>Sem cobranças urgentes neste momento.</p>
             ) : (
-              <div style={clientList}>
-                {clients.slice(0, 8).map((client) => (
-                  <div key={client.id} style={clientRow}>
-                    <div>
-                      <Link
-                        href={`/clientes/${client.id}`}
-                        style={{
-                          color: "#2563eb",
-                          textDecoration: "none",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {client.name}
-                      </Link>
+              <div style={list}>
+                {alerts.map((policy) => {
+                  const days = daysUntil(policy.next_payment_date);
 
-                      <p style={smallText}>
-                        {client.nif || "Sem NIF"} · {client.phone || "Sem telefone"} · {client.email || "Sem email"}
-                      </p>
+                  return (
+                    <div key={policy.id} style={alertRow}>
+                      <div>
+                        <strong>{policy.clients?.name || "Cliente"}</strong>
+                        <p style={smallText}>
+                          {policy.branch || "Sem ramo"} · {policy.insurers?.name || "Sem seguradora"}
+                        </p>
+                        <p style={smallText}>
+                          Próxima cobrança: {policy.next_payment_date || "-"}
+                        </p>
+                      </div>
+
+                      <span style={badge}>
+                        {days < 0 ? "Vencida" : days === 0 ? "Hoje" : `${days} dias`}
+                      </span>
                     </div>
-
-                    <span style={badge}>{client.status || "ativo"}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
+        </section>
+
+        <section style={panel}>
+          <h2>Clientes recentes</h2>
+
+          {clients.length === 0 ? (
+            <p style={muted}>Ainda não existem clientes.</p>
+          ) : (
+            <div style={clientList}>
+              {clients.slice(0, 8).map((client) => (
+                <div key={client.id} style={clientRow}>
+                  <div>
+                    <Link href={`/clientes/${client.id}`} style={clientLink}>
+                      {client.name}
+                    </Link>
+
+                    <p style={smallText}>
+                      {client.nif || "Sem NIF"} · {client.phone || "Sem telefone"} · {client.email || "Sem email"}
+                    </p>
+                  </div>
+
+                  <span style={statusBadge}>{client.status || "ativo"}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -165,6 +289,15 @@ function Card({ title, value }) {
     <div style={card}>
       <p style={cardLabel}>{title}</p>
       <h2 style={cardValue}>{value}</h2>
+    </div>
+  );
+}
+
+function AlertCard({ title, value, color }) {
+  return (
+    <div style={alertCard}>
+      <p style={cardLabel}>{title}</p>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
 }
@@ -197,7 +330,6 @@ const link = {
   textDecoration: "none",
   padding: "12px 14px",
   borderRadius: 10,
-  cursor: "pointer",
 };
 
 const activeLink = {
@@ -219,26 +351,47 @@ const header = {
 };
 
 const title = {
-  fontSize: 34,
+  fontSize: 40,
   margin: 0,
 };
 
 const subtitle = {
   color: "#6b7280",
+  marginTop: 10,
+};
+
+const headerButton = {
+  background: "#111827",
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+};
+
+const alertGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 16,
+  marginBottom: 20,
 };
 
 const cards = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: 20,
+  gridTemplateColumns: "repeat(5, 1fr)",
+  gap: 16,
   marginBottom: 30,
 };
 
 const card = {
   background: "white",
-  padding: 24,
+  padding: 20,
   borderRadius: 16,
   boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const alertCard = {
+  ...card,
+  borderLeft: "6px solid #e5e7eb",
 };
 
 const cardLabel = {
@@ -247,7 +400,7 @@ const cardLabel = {
 };
 
 const cardValue = {
-  fontSize: 32,
+  fontSize: 28,
   margin: "10px 0 0",
 };
 
@@ -255,6 +408,7 @@ const grid = {
   display: "grid",
   gridTemplateColumns: "420px 1fr",
   gap: 24,
+  marginBottom: 24,
 };
 
 const panel = {
@@ -285,6 +439,29 @@ const button = {
   cursor: "pointer",
 };
 
+const list = {
+  display: "grid",
+  gap: 12,
+};
+
+const alertRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: 14,
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+};
+
+const badge = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
 const clientList = {
   display: "grid",
   gap: 12,
@@ -299,15 +476,26 @@ const clientRow = {
   borderRadius: 12,
 };
 
+const clientLink = {
+  color: "#2563eb",
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
 const smallText = {
   color: "#6b7280",
   margin: "6px 0 0",
 };
 
-const badge = {
+const muted = {
+  color: "#6b7280",
+};
+
+const statusBadge = {
   background: "#dcfce7",
   color: "#166534",
   padding: "5px 10px",
   borderRadius: 999,
   fontSize: 12,
 };
+  
