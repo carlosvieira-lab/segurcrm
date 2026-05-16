@@ -44,6 +44,15 @@ const filteredClients = clients.filter((client) => {
         <h2 style={logo}>SegurCRM</h2>
 
         <nav style={nav}>
+  <Link href="/" style={link}>Dashboard</Link>
+  <Link href="/clientes" style={link}>Clientes</Link>
+  <Link href="/apolices" style={link}>Apólices</Link>
+  <Link href="/renovacoes" style={link}>Renovações</Link>
+  <Link href="/financeiro" style={link}>Financeiro</Link>
+  <Link href="/tarefas" style={link}>Tarefas</Link>
+  <Link href="/oportunidades" style={link}>Oportunidades</Link>
+  <Link href="/sinistros" style={link}>Sinistros</Link>
+</nav>
           <Link href="/" style={link}>
             Dashboard
           </Link>
