@@ -11,6 +11,40 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+function daysUntil(date) {
+  if (!date) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+
+  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+}
+
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
+}
+
+function formatDate(date) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function receiptValue(policy) {
+  const premium = Number(policy.annual_premium || 0);
+  const frequency = policy.payment_frequency || "anual";
+
+  if (frequency === "mensal") return premium / 12;
+  if (frequency === "trimestral") return premium / 4;
+  if (frequency === "semestral") return premium / 2;
+  return premium;
+}
+
 export async function getServerSideProps() {
   const { data: policies } = await supabase
     .from("policies")
@@ -18,46 +52,85 @@ export async function getServerSideProps() {
       *,
       clients(name),
       insurers(name)
-    `);
+    `)
+    .order("next_payment_date", { ascending: true });
 
-  const activePolicies = (policies || []).filter((p) => p.status === "ativa");
-  const cancelledPolicies = (policies || []).filter((p) => p.status === "anulada");
+  const safePolicies = policies || [];
+  const activePolicies = safePolicies.filter((p) => p.status === "ativa");
 
-  const totalPremium = activePolicies.reduce(
-    (sum, policy) => sum + Number(policy.annual_premium || 0),
+  const totalAnnualPremium = activePolicies.reduce(
+    (sum, p) => sum + Number(p.annual_premium || 0),
     0
   );
 
-  const insurerTotals = {};
+  const expectedReceipts = activePolicies.reduce(
+    (sum, p) => sum + receiptValue(p),
+    0
+  );
 
-  activePolicies.forEach((policy) => {
-    const insurerName = policy.insurers?.name || "Sem seguradora";
-    insurerTotals[insurerName] =
-      (insurerTotals[insurerName] || 0) + Number(policy.annual_premium || 0);
+  const overdue = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days !== null && days < 0;
   });
 
-  const insurerRows = Object.entries(insurerTotals)
-    .map(([name, total]) => ({ name, total }))
-    .sort((a, b) => b.total - a.total);
+  const dueThisMonth = activePolicies.filter((p) => {
+    const days = daysUntil(p.next_payment_date);
+    return days !== null && days >= 0 && days <= 30;
+  });
+
+  const overdueValue = overdue.reduce((sum, p) => sum + receiptValue(p), 0);
+  const monthValue = dueThisMonth.reduce((sum, p) => sum + receiptValue(p), 0);
+
+  const insurerTotals = {};
+
+  activePolicies.forEach((p) => {
+    const insurer = p.insurers?.name || "Sem seguradora";
+
+    if (!insurerTotals[insurer]) {
+      insurerTotals[insurer] = {
+        name: insurer,
+        annual: 0,
+        receipts: 0,
+        policies: 0,
+      };
+    }
+
+    insurerTotals[insurer].annual += Number(p.annual_premium || 0);
+    insurerTotals[insurer].receipts += receiptValue(p);
+    insurerTotals[insurer].policies += 1;
+  });
+
+  const insurerRows = Object.values(insurerTotals).sort(
+    (a, b) => b.annual - a.annual
+  );
 
   return {
     props: {
-      totalPremium,
-      activeCount: activePolicies.length,
-      cancelledCount: cancelledPolicies.length,
-      averagePremium:
-        activePolicies.length > 0 ? totalPremium / activePolicies.length : 0,
+      policies: activePolicies,
+      totalAnnualPremium,
+      expectedReceipts,
+      overdueCount: overdue.length,
+      overdueValue,
+      monthCount: dueThisMonth.length,
+      monthValue,
       insurerRows,
+      overdue,
+      dueThisMonth,
     },
   };
 }
 
 export default function Financeiro({
-  totalPremium,
-  activeCount,
-  cancelledCount,
-  averagePremium,
+  policies,
+  totalAnnualPremium,
+  expectedReceipts,
+  overdueCount,
+  overdueValue,
+  monthCount,
+  monthValue,
   insurerRows,
+  overdue,
+  dueThisMonth,
 }) {
   return (
     <div style={page}>
@@ -76,29 +149,55 @@ export default function Financeiro({
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Dashboard Financeiro</h1>
-            <p style={subtitle}>Visão financeira da carteira em vigor.</p>
+            <h1 style={title}>Financeiro PRO</h1>
+            <p style={subtitle}>
+              Produção, recibos previstos, cobranças vencidas e carteira ativa.
+            </p>
           </div>
         </header>
 
         <section style={cards}>
-          <Card title="Prémio total em vigor" value={formatEuro(totalPremium)} />
-          <Card title="Apólices ativas" value={activeCount} />
-          <Card title="Apólices anuladas" value={cancelledCount} />
-          <Card title="Prémio médio" value={formatEuro(averagePremium)} />
+          <Card title="Prémio anual em vigor" value={formatEuro(totalAnnualPremium)} />
+          <Card title="Receita prevista por ciclo" value={formatEuro(expectedReceipts)} />
+          <Card title="Cobranças vencidas" value={overdueCount} />
+          <Card title="Valor vencido" value={formatEuro(overdueValue)} />
+          <Card title="Cobranças 30 dias" value={monthCount} />
+          <Card title="Valor 30 dias" value={formatEuro(monthValue)} />
+        </section>
+
+        <section style={panel}>
+          <h2>Cobranças vencidas</h2>
+
+          {overdue.length === 0 ? (
+            <p style={muted}>Não existem cobranças vencidas.</p>
+          ) : (
+            <FinancialTable rows={overdue} />
+          )}
+        </section>
+
+        <section style={panel}>
+          <h2>Cobranças dos próximos 30 dias</h2>
+
+          {dueThisMonth.length === 0 ? (
+            <p style={muted}>Não existem cobranças previstas nos próximos 30 dias.</p>
+          ) : (
+            <FinancialTable rows={dueThisMonth} />
+          )}
         </section>
 
         <section style={panel}>
           <h2>Produção por seguradora</h2>
 
           {insurerRows.length === 0 ? (
-            <p>Sem dados financeiros ainda.</p>
+            <p style={muted}>Sem dados financeiros ainda.</p>
           ) : (
             <table style={table}>
               <thead>
                 <tr>
                   <th style={th}>Seguradora</th>
-                  <th style={th}>Prémio em vigor</th>
+                  <th style={th}>Apólices</th>
+                  <th style={th}>Prémio anual</th>
+                  <th style={th}>Receita por ciclo</th>
                 </tr>
               </thead>
 
@@ -106,7 +205,9 @@ export default function Financeiro({
                 {insurerRows.map((row) => (
                   <tr key={row.name}>
                     <td style={td}>{row.name}</td>
-                    <td style={td}>{formatEuro(row.total)}</td>
+                    <td style={td}>{row.policies}</td>
+                    <td style={td}>{formatEuro(row.annual)}</td>
+                    <td style={td}>{formatEuro(row.receipts)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -115,6 +216,36 @@ export default function Financeiro({
         </section>
       </main>
     </div>
+  );
+}
+
+function FinancialTable({ rows }) {
+  return (
+    <table style={table}>
+      <thead>
+        <tr>
+          <th style={th}>Cliente</th>
+          <th style={th}>Ramo</th>
+          <th style={th}>Seguradora</th>
+          <th style={th}>Fracionamento</th>
+          <th style={th}>Próxima cobrança</th>
+          <th style={th}>Valor recibo</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {rows.map((policy) => (
+          <tr key={policy.id}>
+            <td style={td}>{policy.clients?.name || "-"}</td>
+            <td style={td}>{policy.branch || "-"}</td>
+            <td style={td}>{policy.insurers?.name || "-"}</td>
+            <td style={td}>{policy.payment_frequency || "anual"}</td>
+            <td style={td}>{formatDate(policy.next_payment_date)}</td>
+            <td style={td}>{formatEuro(receiptValue(policy))}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -127,18 +258,11 @@ function Card({ title, value }) {
   );
 }
 
-function formatEuro(value) {
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(Number(value || 0));
-}
-
 const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily: "Arial",
+  fontFamily: "Arial, sans-serif",
 };
 
 const sidebar = {
@@ -191,14 +315,14 @@ const subtitle = {
 
 const cards = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
-  gap: 20,
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 16,
   marginBottom: 30,
 };
 
 const card = {
   background: "white",
-  padding: 24,
+  padding: 22,
   borderRadius: 16,
   boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
 };
@@ -217,7 +341,12 @@ const panel = {
   background: "white",
   borderRadius: 16,
   padding: 24,
+  marginBottom: 24,
   boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+};
+
+const muted = {
+  color: "#6b7280",
 };
 
 const table = {
@@ -228,12 +357,12 @@ const table = {
 
 const th = {
   textAlign: "left",
-  padding: 16,
+  padding: 14,
   background: "#f9fafb",
   borderBottom: "1px solid #e5e7eb",
 };
 
 const td = {
-  padding: 16,
+  padding: 14,
   borderBottom: "1px solid #e5e7eb",
 };
