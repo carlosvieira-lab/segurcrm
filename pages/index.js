@@ -203,6 +203,7 @@ export default function Home({
           <Link href="/financeiro" style={link}>Financeiro</Link>
           <Link href="/tarefas" style={link}>Tarefas</Link>
           <Link href="/oportunidades" style={link}>Oportunidades</Link>
+    <Link href="/sinistros" style={link}>Sinistros</Link>
         </nav>
       </aside>
 
