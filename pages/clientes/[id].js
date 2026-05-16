@@ -37,6 +37,51 @@ export async function getServerSideProps({ params }) {
   };
 }
 
+function addMonths(dateString, months) {
+  if (!dateString) return null;
+
+  const date = new Date(dateString);
+  date.setMonth(date.getMonth() + months);
+
+  return date.toISOString().split("T")[0];
+}
+
+function calculateNextPayment(lastPaymentDate, frequency) {
+  if (!lastPaymentDate) return null;
+
+  if (frequency === "mensal") return addMonths(lastPaymentDate, 1);
+  if (frequency === "trimestral") return addMonths(lastPaymentDate, 3);
+  if (frequency === "semestral") return addMonths(lastPaymentDate, 6);
+  if (frequency === "anual") return addMonths(lastPaymentDate, 12);
+
+  return addMonths(lastPaymentDate, 12);
+}
+
+function formatDate(date) {
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function calculateAge(date) {
+  if (!date) return "-";
+
+  const birth = new Date(date);
+  const today = new Date();
+
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && today.getDate() < birth.getDate())
+  ) {
+    age--;
+  }
+
+  return `${age} anos`;
+}
+
 export default function ClientePage({ client, policies }) {
   if (!client) {
     return <div>Cliente não encontrado.</div>;
@@ -53,28 +98,21 @@ export default function ClientePage({ client, policies }) {
     return "FRACO";
   }
 
-  function calculateAge(date) {
-    if (!date) return "-";
-    const birth = new Date(date);
-    const today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    const m = today.getMonth() - birth.getMonth();
-
-    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-
-    return `${age} anos`;
-  }
-
   function createPolicy() {
     const numero = prompt("Número da Apólice");
     const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
     const seguradora = prompt("Seguradora");
-   const premio = prompt("Prémio anual");
-const fracionamento = prompt("Fracionamento (mensal, trimestral, semestral, anual)");
-const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+    const premio = prompt("Prémio anual");
+    const fracionamento = prompt(
+      "Fracionamento (mensal, trimestral, semestral, anual)"
+    );
+    const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+    const ultimoPagamento = prompt("Último pagamento (AAAA-MM-DD)");
 
+    const proximaCobranca = calculateNextPayment(
+      ultimoPagamento,
+      fracionamento
+    );
 
     fetch("/api/create-policy", {
       method: "POST",
@@ -88,8 +126,9 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
         insurer_name: seguradora,
         annual_premium: premio,
         payment_frequency: fracionamento,
-
         renewal_date: renovacao,
+        last_payment_date: ultimoPagamento,
+        next_payment_date: proximaCobranca,
       }),
     }).then(() => {
       window.location.reload();
@@ -141,6 +180,7 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
           <Link href="/clientes" style={activeLink}>Clientes</Link>
           <Link href="/apolices" style={link}>Apólices</Link>
           <Link href="/renovacoes" style={link}>Renovações</Link>
+          <Link href="/financeiro" style={link}>Financeiro</Link>
         </nav>
       </aside>
 
@@ -188,11 +228,11 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
             <Info label="Email" value={client.email} />
             <Info label="Morada" value={client.address} />
             <Info label="Cidade" value={client.city} />
-            <Info label="Data nascimento" value={client.birth_date} />
+            <Info label="Data nascimento" value={formatDate(client.birth_date)} />
             <Info label="Idade" value={calculateAge(client.birth_date)} />
             <Info
               label="Início carta condução"
-              value={client.driving_license_start_date}
+              value={formatDate(client.driving_license_start_date)}
             />
             <Info label="IBAN" value={client.iban} />
             <Info label="Estado" value={client.status} />
@@ -233,17 +273,28 @@ const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
                     {policy.insurers?.name || "-"}
                   </p>
 
-                 <p>
-  <strong>Prémio:</strong> {policy.annual_premium || 0} €
-</p>
-
-<p>
-  <strong>Fracionamento:</strong>{" "}
-  {policy.payment_frequency || "anual"}
-</p>
+                  <p>
+                    <strong>Prémio:</strong> {policy.annual_premium || 0} €
+                  </p>
 
                   <p>
-                    <strong>Renovação:</strong> {policy.renewal_date || "-"}
+                    <strong>Fracionamento:</strong>{" "}
+                    {policy.payment_frequency || "anual"}
+                  </p>
+
+                  <p>
+                    <strong>Renovação:</strong>{" "}
+                    {formatDate(policy.renewal_date)}
+                  </p>
+
+                  <p>
+                    <strong>Último pagamento:</strong>{" "}
+                    {formatDate(policy.last_payment_date)}
+                  </p>
+
+                  <p>
+                    <strong>Próxima cobrança:</strong>{" "}
+                    {formatDate(policy.next_payment_date)}
                   </p>
 
                   <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
