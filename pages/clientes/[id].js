@@ -59,7 +59,6 @@ function calculateNextPayment(lastPaymentDate, frequency) {
 
 function formatDate(date) {
   if (!date) return "-";
-
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
@@ -170,6 +169,20 @@ export default function ClientePage({ client, policies }) {
     });
   }
 
+  function markPolicyPaid(policyId) {
+    fetch("/api/mark-policy-paid", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy_id: policyId,
+      }),
+    }).then(() => {
+      window.location.reload();
+    });
+  }
+
   return (
     <div style={page}>
       <aside style={sidebar}>
@@ -264,58 +277,34 @@ export default function ClientePage({ client, policies }) {
                     </span>
                   </div>
 
-                  <p>
-                    <strong>Apólice:</strong> {policy.policy_number || "-"}
-                  </p>
+                  <p><strong>Apólice:</strong> {policy.policy_number || "-"}</p>
+                  <p><strong>Seguradora:</strong> {policy.insurers?.name || "-"}</p>
+                  <p><strong>Prémio:</strong> {policy.annual_premium || 0} €</p>
+                  <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
+                  <p><strong>Renovação:</strong> {formatDate(policy.renewal_date)}</p>
+                  <p><strong>Último pagamento:</strong> {formatDate(policy.last_payment_date)}</p>
+                  <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
 
-                  <p>
-                    <strong>Seguradora:</strong>{" "}
-                    {policy.insurers?.name || "-"}
-                  </p>
-
-                  <p>
-                    <strong>Prémio:</strong> {policy.annual_premium || 0} €
-                  </p>
-
-                  <p>
-                    <strong>Fracionamento:</strong>{" "}
-                    {policy.payment_frequency || "anual"}
-                  </p>
-
-                  <p>
-                    <strong>Renovação:</strong>{" "}
-                    {formatDate(policy.renewal_date)}
-                  </p>
-
-                  <p>
-                    <strong>Último pagamento:</strong>{" "}
-                    {formatDate(policy.last_payment_date)}
-                  </p>
-
-                  <p>
-                    <strong>Próxima cobrança:</strong>{" "}
-                    {formatDate(policy.next_payment_date)}
-                  </p>
-
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                     <button
-                      style={{
-                        ...smallButton,
-                        background: "#16a34a",
-                      }}
+                      style={{ ...smallButton, background: "#16a34a" }}
                       onClick={() => updatePolicyStatus(policy.id, "ativa")}
                     >
                       Em vigor
                     </button>
 
                     <button
-                      style={{
-                        ...smallButton,
-                        background: "#dc2626",
-                      }}
+                      style={{ ...smallButton, background: "#dc2626" }}
                       onClick={() => updatePolicyStatus(policy.id, "anulada")}
                     >
                       Anulada
+                    </button>
+
+                    <button
+                      style={{ ...smallButton, background: "#2563eb" }}
+                      onClick={() => markPolicyPaid(policy.id)}
+                    >
+                      Marcar pago
                     </button>
                   </div>
                 </div>
