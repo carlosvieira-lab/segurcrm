@@ -47,38 +47,22 @@ function formatDate(date) {
 }
 
 function getPriority(policy) {
-  const days = daysUntil(policy.renewal_date);
+  const days = daysUntil(policy.next_payment_date);
 
   if (days === null) return "semData";
-  if (days < 0) return "urgentes";
-  if (days <= 15) return "urgentes";
-  if (days <= 30) return "proximos";
+  if (days < 0) return "vencidas";
+  if (days === 0) return "hoje";
+  if (days <= 7) return "seteDias";
+  if (days <= 30) return "trintaDias";
   return "futuras";
-}
-
-function getNextPaymentText(policy) {
-  if (!policy.renewal_date) return "Sem data";
-
-  const frequency = policy.payment_frequency || "anual";
-  const base = new Date(policy.renewal_date);
-
-  if (frequency === "mensal") {
-    base.setMonth(base.getMonth() + 1);
-  } else if (frequency === "trimestral") {
-    base.setMonth(base.getMonth() + 3);
-  } else if (frequency === "semestral") {
-    base.setMonth(base.getMonth() + 6);
-  } else {
-    base.setFullYear(base.getFullYear() + 1);
-  }
-
-  return formatDate(base);
 }
 
 export default function Renovacoes({ policies }) {
   const groups = {
-    urgentes: policies.filter((p) => getPriority(p) === "urgentes"),
-    proximos: policies.filter((p) => getPriority(p) === "proximos"),
+    vencidas: policies.filter((p) => getPriority(p) === "vencidas"),
+    hoje: policies.filter((p) => getPriority(p) === "hoje"),
+    seteDias: policies.filter((p) => getPriority(p) === "seteDias"),
+    trintaDias: policies.filter((p) => getPriority(p) === "trintaDias"),
     futuras: policies.filter((p) => getPriority(p) === "futuras"),
     semData: policies.filter((p) => getPriority(p) === "semData"),
   };
@@ -100,44 +84,60 @@ export default function Renovacoes({ policies }) {
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Renovações Inteligentes</h1>
+            <h1 style={title}>Cobranças e Renovações</h1>
             <p style={subtitle}>
-              Prioridades comerciais, renovações e próximas cobranças.
+              Controlo por próxima cobrança, fracionamento e estado da apólice.
             </p>
           </div>
         </header>
 
         <section style={summaryGrid}>
-          <SummaryCard title="Urgentes" value={groups.urgentes.length} color="#dc2626" />
-          <SummaryCard title="Próximos 30 dias" value={groups.proximos.length} color="#f59e0b" />
+          <SummaryCard title="Vencidas" value={groups.vencidas.length} color="#991b1b" />
+          <SummaryCard title="Hoje" value={groups.hoje.length} color="#dc2626" />
+          <SummaryCard title="7 dias" value={groups.seteDias.length} color="#f59e0b" />
+          <SummaryCard title="30 dias" value={groups.trintaDias.length} color="#2563eb" />
           <SummaryCard title="Futuras" value={groups.futuras.length} color="#16a34a" />
           <SummaryCard title="Sem data" value={groups.semData.length} color="#6b7280" />
         </section>
 
         <RenewalSection
-          title="🔴 Urgentes"
-          description="Vencidas ou a renovar nos próximos 15 dias."
-          policies={groups.urgentes}
+          title="🔴 Vencidas"
+          description="Cobranças que já passaram da data prevista."
+          policies={groups.vencidas}
+          badgeColor="#991b1b"
+        />
+
+        <RenewalSection
+          title="🟥 Hoje"
+          description="Cobranças previstas para hoje."
+          policies={groups.hoje}
           badgeColor="#dc2626"
         />
 
         <RenewalSection
-          title="🟠 Próximos 30 dias"
-          description="Renovações que exigem acompanhamento este mês."
-          policies={groups.proximos}
+          title="🟠 Próximos 7 dias"
+          description="Cobranças que exigem acompanhamento imediato."
+          policies={groups.seteDias}
           badgeColor="#f59e0b"
         />
 
         <RenewalSection
+          title="🔵 Próximos 30 dias"
+          description="Cobranças previstas para este mês."
+          policies={groups.trintaDias}
+          badgeColor="#2563eb"
+        />
+
+        <RenewalSection
           title="🟢 Futuras"
-          description="Renovações com mais margem de acompanhamento."
+          description="Cobranças futuras sem urgência imediata."
           policies={groups.futuras}
           badgeColor="#16a34a"
         />
 
         <RenewalSection
           title="⚪ Sem data"
-          description="Apólices que precisam de completar informação."
+          description="Apólices que precisam de completar último pagamento ou próxima cobrança."
           policies={groups.semData}
           badgeColor="#6b7280"
         />
@@ -174,7 +174,7 @@ function RenewalSection({ title, description, policies, badgeColor }) {
       ) : (
         <div style={cardsGrid}>
           {policies.map((policy) => {
-            const days = daysUntil(policy.renewal_date);
+            const days = daysUntil(policy.next_payment_date);
 
             return (
               <div key={policy.id} style={policyCard}>
@@ -186,6 +186,8 @@ function RenewalSection({ title, description, policies, badgeColor }) {
                       ? "Sem data"
                       : days < 0
                       ? "Vencida"
+                      : days === 0
+                      ? "Hoje"
                       : `${days} dias`}
                   </span>
                 </div>
@@ -195,8 +197,9 @@ function RenewalSection({ title, description, policies, badgeColor }) {
                 <p><strong>Apólice:</strong> {policy.policy_number || "-"}</p>
                 <p><strong>Prémio anual:</strong> {Number(policy.annual_premium || 0).toFixed(2)} €</p>
                 <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
-                <p><strong>Renovação:</strong> {formatDate(policy.renewal_date)}</p>
-                <p><strong>Próxima cobrança estimada:</strong> {getNextPaymentText(policy)}</p>
+                <p><strong>Último pagamento:</strong> {formatDate(policy.last_payment_date)}</p>
+                <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
+                <p><strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}</p>
               </div>
             );
           })}
@@ -263,7 +266,7 @@ const subtitle = {
 
 const summaryGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
+  gridTemplateColumns: "repeat(6, 1fr)",
   gap: 16,
   marginBottom: 30,
 };
@@ -352,3 +355,14 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
 };
+ 
+
+ 
+ 
+
+
+     
+
+     
+
+
