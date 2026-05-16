@@ -14,7 +14,6 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 function formatDate(date) {
   if (!date) return "-";
-
   return new Date(date).toLocaleDateString("pt-PT");
 }
 
@@ -35,9 +34,36 @@ export async function getServerSideProps() {
     .from("external_policies")
     .select(`
       *,
-      clients(name)
+      clients(name, nif)
     `)
     .order("renewal_date", { ascending: true });
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name, nif, phone, email");
+
+  const { data: policies } = await supabase
+    .from("policies")
+    .select("id, client_id, status");
+
+  const safeClients = clients || [];
+  const safePolicies = policies || [];
+
+  const clientSummaries = safeClients.map((client) => {
+    const activePolicies = safePolicies.filter(
+      (p) => p.client_id === client.id && p.status === "ativa"
+    ).length;
+
+    const totalPolicies = safePolicies.filter(
+      (p) => p.client_id === client.id
+    ).length;
+
+    return {
+      ...client,
+      activePolicies,
+      totalPolicies,
+    };
+  });
 
   const safeOpportunities = opportunities || [];
 
@@ -50,16 +76,15 @@ export async function getServerSideProps() {
     props: {
       opportunities: safeOpportunities,
       urgentCount: urgent.length,
+      clients: clientSummaries,
     },
   };
 }
 
-export default function Oportunidades({
-  opportunities,
-  urgentCount,
-}) {
+export default function Oportunidades({ opportunities, urgentCount, clients }) {
   const [saving, setSaving] = useState(false);
 
+  const [nif, setNif] = useState("");
   const [prospectName, setProspectName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -69,30 +94,38 @@ export default function Oportunidades({
   const [renewalDate, setRenewalDate] = useState("");
   const [notes, setNotes] = useState("");
 
+  const cleanNif = nif.replace(/\s/g, "");
+
+  const matchedClient = clients.find(
+    (client) =>
+      client.nif &&
+      client.nif.replace(/\s/g, "") === cleanNif &&
+      cleanNif.length > 0
+  );
+
   async function createOpportunity(e) {
     e.preventDefault();
 
     setSaving(true);
 
     const renewal = new Date(renewalDate);
-
     const alertDate = new Date(renewal);
     alertDate.setMonth(alertDate.getMonth() - 1);
 
-    const { error } = await supabase
-      .from("external_policies")
-      .insert({
-        prospect_name: prospectName,
-        prospect_phone: phone,
-        prospect_email: email,
-        policy_type: policyType,
-        current_insurer: insurer,
-        current_premium: premium || null,
-        renewal_date: renewalDate,
-        alert_date: alertDate.toISOString(),
-        notes,
-        status: "por contactar",
-      });
+    const { error } = await supabase.from("external_policies").insert({
+      client_id: matchedClient?.id || null,
+      prospect_nif: nif,
+      prospect_name: matchedClient?.name || prospectName,
+      prospect_phone: matchedClient?.phone || phone,
+      prospect_email: matchedClient?.email || email,
+      policy_type: policyType,
+      current_insurer: insurer,
+      current_premium: premium || null,
+      renewal_date: renewalDate,
+      alert_date: alertDate.toISOString().split("T")[0],
+      notes,
+      status: "por contactar",
+    });
 
     if (error) {
       alert(error.message);
@@ -135,15 +168,10 @@ export default function Oportunidades({
         <header style={header}>
           <div>
             <h1 style={title}>Oportunidades Comerciais</h1>
-
-            <p style={subtitle}>
-              Captação de apólices fora da mediação.
-            </p>
+            <p style={subtitle}>Captação de apólices fora da mediação.</p>
           </div>
 
-          <div style={urgentBadge}>
-            {urgentCount} para contactar
-          </div>
+          <div style={urgentBadge}>{urgentCount} para contactar</div>
         </header>
 
         <section style={grid}>
@@ -152,24 +180,55 @@ export default function Oportunidades({
 
             <form onSubmit={createOpportunity} style={form}>
               <input
+                placeholder="NIF"
+                value={nif}
+                onChange={(e) => setNif(e.target.value)}
+                style={input}
+              />
+
+              {cleanNif.length > 0 && (
+                <div style={matchedClient ? existingClientBox : newClientBox}>
+                  {matchedClient ? (
+                    <>
+                      <strong>Cliente já existe no CRM</strong>
+                      <p style={boxText}>{matchedClient.name}</p>
+                      <p style={boxText}>
+                        {matchedClient.activePolicies} apólices ativas ·{" "}
+                        {matchedClient.totalPolicies} apólices no total
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Novo potencial cliente</strong>
+                      <p style={boxText}>
+                        Este NIF ainda não existe no CRM.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <input
                 placeholder="Nome do prospect / cliente"
-                value={prospectName}
+                value={matchedClient?.name || prospectName}
                 onChange={(e) => setProspectName(e.target.value)}
-                required
+                disabled={!!matchedClient}
                 style={input}
               />
 
               <input
                 placeholder="Telefone"
-                value={phone}
+                value={matchedClient?.phone || phone}
                 onChange={(e) => setPhone(e.target.value)}
+                disabled={!!matchedClient}
                 style={input}
               />
 
               <input
                 placeholder="Email"
-                value={email}
+                value={matchedClient?.email || email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={!!matchedClient}
                 style={input}
               />
 
@@ -178,17 +237,17 @@ export default function Oportunidades({
                 onChange={(e) => setPolicyType(e.target.value)}
                 style={input}
               >
+                <option>automóvel</option>
                 <option>casa</option>
-<option>saúde</option>
-<option>vida</option>
-<option>acidentes pessoais</option>
-<option>acidentes de trabalho</option>
-<option>PPR</option>
-<option>financeiros</option>
-<option>viagem</option>
-<option>casa</option>
-<option>responsabilidade civil</option>
-<option>MREmpresarial</option>
+                <option>saúde</option>
+                <option>vida</option>
+                <option>acidentes pessoais</option>
+                <option>acidentes de trabalho</option>
+                <option>PPR</option>
+                <option>financeiros</option>
+                <option>viagem</option>
+                <option>MREmpresarial</option>
+                <option>responsabilidade civil</option>
               </select>
 
               <input
@@ -230,9 +289,7 @@ export default function Oportunidades({
             <h2>Pipeline comercial</h2>
 
             {opportunities.length === 0 ? (
-              <p style={muted}>
-                Ainda não existem oportunidades.
-              </p>
+              <p style={muted}>Ainda não existem oportunidades.</p>
             ) : (
               <div style={list}>
                 {opportunities.map((item) => {
@@ -243,14 +300,12 @@ export default function Oportunidades({
                       <div style={cardTop}>
                         <div>
                           <h3 style={opportunityTitle}>
-                            {item.prospect_name ||
-                              item.clients?.name ||
+                            {item.clients?.name ||
+                              item.prospect_name ||
                               "Sem nome"}
                           </h3>
 
-                          <p style={small}>
-                            {item.policy_type}
-                          </p>
+                          <p style={small}>{item.policy_type}</p>
                         </div>
 
                         <span
@@ -274,69 +329,38 @@ export default function Oportunidades({
                         </span>
                       </div>
 
-                      <p>
-                        <strong>Telefone:</strong>{" "}
-                        {item.prospect_phone || "-"}
-                      </p>
+                      <p><strong>NIF:</strong> {item.prospect_nif || item.clients?.nif || "-"}</p>
+                      <p><strong>Telefone:</strong> {item.prospect_phone || "-"}</p>
+                      <p><strong>Seguradora:</strong> {item.current_insurer || "-"}</p>
+                      <p><strong>Prémio:</strong> {item.current_premium || "-"} €</p>
+                      <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
+                      <p><strong>Alerta:</strong> {formatDate(item.alert_date)}</p>
+                      <p><strong>Notas:</strong> {item.notes || "-"}</p>
 
-                      <p>
-                        <strong>Seguradora:</strong>{" "}
-                        {item.current_insurer || "-"}
-                      </p>
-
-                      <p>
-                        <strong>Prémio:</strong>{" "}
-                        {item.current_premium || "-"} €
-                      </p>
-
-                      <p>
-                        <strong>Vencimento:</strong>{" "}
-                        {formatDate(item.renewal_date)}
-                      </p>
-
-                      <p>
-                        <strong>Alerta:</strong>{" "}
-                        {formatDate(item.alert_date)}
-                      </p>
-
-                      <p>
-                        <strong>Notas:</strong>{" "}
-                        {item.notes || "-"}
-                      </p>
-
-                      {days !== null && days <= 30 && item.status === "por contactar" && (
-                        <div style={alertBox}>
-                          CONTACTAR ESTE CLIENTE
-                        </div>
-                      )}
+                      {days !== null &&
+                        days <= 30 &&
+                        item.status === "por contactar" && (
+                          <div style={alertBox}>CONTACTAR ESTE CLIENTE</div>
+                        )}
 
                       <div style={buttonRow}>
                         <button
                           style={contactButton}
-                          onClick={() =>
-                            updateStatus(
-                              item.id,
-                              "contactado"
-                            )
-                          }
+                          onClick={() => updateStatus(item.id, "contactado")}
                         >
                           Contactado
                         </button>
 
                         <button
                           style={winButton}
-                          onClick={() =>
-                            updateStatus(item.id, "ganho")
-                          }
+                          onClick={() => updateStatus(item.id, "ganho")}
                         >
                           Ganho
                         </button>
 
                         <button
                           style={loseButton}
-                          onClick={() =>
-                            updateStatus(item.id, "perdido")
-                          }
+                          onClick={() => updateStatus(item.id, "perdido")}
                         >
                           Perdido
                         </button>
@@ -458,6 +482,24 @@ const button = {
   color: "white",
   fontWeight: "bold",
   cursor: "pointer",
+};
+
+const existingClientBox = {
+  background: "#dcfce7",
+  color: "#166534",
+  padding: 14,
+  borderRadius: 12,
+};
+
+const newClientBox = {
+  background: "#fef3c7",
+  color: "#92400e",
+  padding: 14,
+  borderRadius: 12,
+};
+
+const boxText = {
+  margin: "6px 0 0",
 };
 
 const list = {
