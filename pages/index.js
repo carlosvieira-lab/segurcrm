@@ -43,34 +43,24 @@ function monthlyValue(policy) {
 }
 
 export async function getServerSideProps() {
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("*");
+  const { data: clients } = await supabase.from("clients").select("*");
 
-  const { data: policies } = await supabase
-    .from("policies")
-    .select("*");
+  const { data: policies } = await supabase.from("policies").select("*");
 
-  const { data: tasks } = await supabase
-    .from("tasks")
-    .select("*");
+  const { data: tasks } = await supabase.from("tasks").select("*");
 
   const { data: opportunities } = await supabase
     .from("external_policies")
-    .select("*");
+    .select("*")
+    .order("alert_date", { ascending: true });
 
   const safeClients = clients || [];
   const safePolicies = policies || [];
   const safeTasks = tasks || [];
   const safeOpportunities = opportunities || [];
 
-  const activePolicies = safePolicies.filter(
-    (p) => p.status === "ativa"
-  );
-
-  const cancelledPolicies = safePolicies.filter(
-    (p) => p.status === "anulada"
-  );
+  const activePolicies = safePolicies.filter((p) => p.status === "ativa");
+  const cancelledPolicies = safePolicies.filter((p) => p.status === "anulada");
 
   const overdue = activePolicies.filter((p) => {
     const days = daysUntil(p.next_payment_date);
@@ -103,28 +93,30 @@ export async function getServerSideProps() {
   );
 
   const normalTasks = safeTasks.filter(
-    (t) =>
-      t.priority === "NORMAL" &&
-      t.status !== "concluida"
+    (t) => t.priority === "NORMAL" && t.status !== "concluida"
   ).length;
 
   const urgentTasks = safeTasks.filter(
-    (t) =>
-      t.priority === "URGENTE" &&
-      t.status !== "concluida"
+    (t) => t.priority === "URGENTE" && t.status !== "concluida"
   ).length;
 
   const veryUrgentTasks = safeTasks.filter(
-    (t) =>
-      t.priority === "MUITO URGENTE" &&
-      t.status !== "concluida"
+    (t) => t.priority === "MUITO URGENTE" && t.status !== "concluida"
   ).length;
 
   const activeOpportunities = safeOpportunities.filter(
-    (o) =>
-      o.status !== "ganho" &&
-      o.status !== "perdido"
+    (o) => o.status !== "ganho" && o.status !== "perdido"
   ).length;
+
+  const urgentOpportunities = safeOpportunities.filter((o) => {
+    const days = daysUntil(o.alert_date);
+    return (
+      o.status !== "ganho" &&
+      o.status !== "perdido" &&
+      days !== null &&
+      days <= 30
+    );
+  });
 
   return {
     props: {
@@ -141,6 +133,7 @@ export async function getServerSideProps() {
       urgentTasks,
       veryUrgentTasks,
       activeOpportunities,
+      urgentOpportunities,
     },
   };
 }
@@ -159,29 +152,34 @@ export default function Home({
   urgentTasks,
   veryUrgentTasks,
   activeOpportunities,
+  urgentOpportunities,
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [nif, setNif] = useState("");
   const [address, setAddress] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [licenseDate, setLicenseDate] = useState("");
+  const [iban, setIban] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function createClientRecord(e) {
     e.preventDefault();
-
     setSaving(true);
 
-    const { error } = await supabase
-      .from("clients")
-      .insert({
-        name,
-        phone,
-        email,
-        nif,
-        address,
-        status: "ativo",
-      });
+    const { error } = await supabase.from("clients").insert({
+      type: "particular",
+      status: "ativo",
+      name,
+      phone,
+      email,
+      nif,
+      address,
+      birth_date: birthDate || null,
+      driving_license_start_date: licenseDate || null,
+      iban,
+    });
 
     if (error) {
       alert(error.message);
@@ -212,15 +210,13 @@ export default function Home({
         <header style={header}>
           <div>
             <h1 style={title}>Dashboard Inteligente</h1>
-
             <p style={subtitle}>
-              Visão operacional da carteira, cobranças,
-              tarefas e atividade comercial.
+              Visão operacional da carteira, cobranças, tarefas e atividade comercial.
             </p>
           </div>
 
-          <Link href="/tarefas" style={headerButton}>
-            Ver tarefas
+          <Link href="/oportunidades" style={headerButton}>
+            Ver oportunidades
           </Link>
         </header>
 
@@ -246,46 +242,50 @@ export default function Home({
           <Card title="Oportunidades" value={activeOpportunities} />
         </section>
 
+        <section style={opportunitiesPanel}>
+          <div style={panel}>
+            <h2>Oportunidades a contactar</h2>
+
+            {urgentOpportunities.length === 0 ? (
+              <p style={muted}>Não existem oportunidades urgentes neste momento.</p>
+            ) : (
+              <div style={opportunityList}>
+                {urgentOpportunities.slice(0, 5).map((item) => {
+                  const days = daysUntil(item.alert_date);
+
+                  return (
+                    <div key={item.id} style={opportunityItem}>
+                      <div>
+                        <strong>{item.prospect_name || "Sem nome"}</strong>
+                        <p style={smallText}>
+                          {item.policy_type || "Sem ramo"} · {item.current_insurer || "Sem seguradora"}
+                        </p>
+                      </div>
+
+                      <span style={alertTag}>
+                        {days <= 0 ? "CONTACTAR" : `${days} dias`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
         <section style={grid}>
           <div style={panel}>
             <h2>Novo Cliente</h2>
 
             <form onSubmit={createClientRecord} style={form}>
-              <input
-                placeholder="Nome"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                style={input}
-              />
-
-              <input
-                placeholder="Telefone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                style={input}
-              />
-
-              <input
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={input}
-              />
-
-              <input
-                placeholder="NIF"
-                value={nif}
-                onChange={(e) => setNif(e.target.value)}
-                style={input}
-              />
-
-              <input
-                placeholder="Morada"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                style={input}
-              />
+              <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
+              <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+              <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
+              <input placeholder="NIF" value={nif} onChange={(e) => setNif(e.target.value)} style={input} />
+              <input placeholder="Morada" value={address} onChange={(e) => setAddress(e.target.value)} style={input} />
+              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={input} />
+              <input type="date" value={licenseDate} onChange={(e) => setLicenseDate(e.target.value)} style={input} />
+              <input placeholder="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} style={input} />
 
               <button style={button} disabled={saving}>
                 {saving ? "A guardar..." : "Guardar cliente"}
@@ -311,10 +311,7 @@ function AlertCard({ title, value, color }) {
   return (
     <div style={card}>
       <p style={cardLabel}>{title}</p>
-
-      <h2 style={{ ...cardValue, color }}>
-        {value}
-      </h2>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
 }
@@ -323,7 +320,7 @@ const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily: "Arial",
+  fontFamily: "Arial, sans-serif",
 };
 
 const sidebar = {
@@ -422,6 +419,35 @@ const cardValue = {
   fontWeight: "bold",
 };
 
+const opportunitiesPanel = {
+  marginBottom: 30,
+};
+
+const opportunityList = {
+  display: "grid",
+  gap: 12,
+  marginTop: 16,
+};
+
+const opportunityItem = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const alertTag = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  padding: "6px 12px",
+  borderRadius: 999,
+  fontWeight: "bold",
+  fontSize: 12,
+};
+
 const grid = {
   display: "grid",
   gridTemplateColumns: "420px",
@@ -431,6 +457,7 @@ const panel = {
   background: "white",
   padding: 24,
   borderRadius: 16,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const form = {
@@ -452,4 +479,13 @@ const button = {
   color: "white",
   fontWeight: "bold",
   cursor: "pointer",
+};
+
+const smallText = {
+  color: "#6b7280",
+  margin: "6px 0 0",
+};
+
+const muted = {
+  color: "#6b7280",
 };
