@@ -91,7 +91,19 @@ export default function Sinistros({ claims, clients }) {
   const abertos = claims.filter((c) => c.status === "ABERTO");
   const pendentes = claims.filter((c) => c.status === "PENDENTE");
   const encerrados = claims.filter((c) => c.status === "ENCERRADO");
+const insurerStats = {};
+const branchStats = {};
 
+claims.forEach((claim) => {
+  const insurer = claim.insurer_name || "Sem seguradora";
+  const branch = claim.claim_branch || "Sem ramo";
+
+  insurerStats[insurer] =
+    (insurerStats[insurer] || 0) + 1;
+
+  branchStats[branch] =
+    (branchStats[branch] || 0) + 1;
+});
   const alertas = claims.filter((claim) => {
     if (claim.status === "ENCERRADO") return false;
 
