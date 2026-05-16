@@ -88,7 +88,37 @@ export default function Tarefas({ tasks }) {
 
     window.location.reload();
   }
+async function addProcedure(task) {
+  const note = prompt("Novo procedimento");
 
+  if (!note) return;
+
+  const now = new Date();
+
+  const formatted =
+    now.toLocaleDateString("pt-PT") +
+    " " +
+    now.toLocaleTimeString("pt-PT");
+
+  const previous = task.procedure_notes || "";
+
+  const updatedNotes =
+    previous +
+    "\n\n" +
+    formatted +
+    " - " +
+    note;
+
+  await supabase
+    .from("tasks")
+    .update({
+      procedure_notes: updatedNotes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", task.id);
+
+  window.location.reload();
+}
   function priorityStyle(priority) {
     if (priority === "MUITO URGENTE") {
       return {
