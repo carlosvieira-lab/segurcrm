@@ -37,6 +37,19 @@ function formatDate(date) {
   }).format(new Date(date));
 }
 
+function formatNow() {
+  const now = new Date();
+
+  return (
+    now.toLocaleDateString("pt-PT") +
+    " " +
+    now.toLocaleTimeString("pt-PT", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  );
+}
+
 export default function Tarefas({ tasks }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("comercial");
@@ -49,17 +62,21 @@ export default function Tarefas({ tasks }) {
 
   async function createTask(e) {
     e.preventDefault();
-
     setSaving(true);
+
+    const initialProcedure = procedureNotes
+      ? `${formatNow()} - ${procedureNotes}`
+      : "";
 
     const { error } = await supabase.from("tasks").insert({
       title,
       category,
       priority,
+      status: "aberta",
       description,
       prospect_name: prospectName,
       prospect_phone: prospectPhone,
-      procedure_notes: procedureNotes,
+      procedure_notes: initialProcedure,
     });
 
     if (error) {
@@ -81,44 +98,38 @@ export default function Tarefas({ tasks }) {
       updateData.closed_at = new Date().toISOString();
     }
 
-    await supabase
-      .from("tasks")
-      .update(updateData)
-      .eq("id", id);
+    await supabase.from("tasks").update(updateData).eq("id", id);
 
     window.location.reload();
   }
-async function addProcedure(task) {
-  const note = prompt("Novo procedimento");
 
-  if (!note) return;
+  async function addProcedure(task) {
+    const note = prompt("Novo procedimento adotado");
 
-  const now = new Date();
+    if (!note) return;
 
-  const formatted =
-    now.toLocaleDateString("pt-PT") +
-    " " +
-    now.toLocaleTimeString("pt-PT");
+    const previous = task.procedure_notes || "";
 
-  const previous = task.procedure_notes || "";
+    const updatedNotes = previous
+      ? `${previous}\n\n${formatNow()} - ${note}`
+      : `${formatNow()} - ${note}`;
 
-  const updatedNotes =
-    previous +
-    "\n\n" +
-    formatted +
-    " - " +
-    note;
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        procedure_notes: updatedNotes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", task.id);
 
-  await supabase
-    .from("tasks")
-    .update({
-      procedure_notes: updatedNotes,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", task.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  window.location.reload();
-}
+    window.location.reload();
+  }
+
   function priorityStyle(priority) {
     if (priority === "MUITO URGENTE") {
       return {
@@ -136,6 +147,27 @@ async function addProcedure(task) {
 
     return {
       background: "#e5e7eb",
+      color: "#374151",
+    };
+  }
+
+  function statusStyle(status) {
+    if (status === "em tratamento") {
+      return {
+        background: "#dbeafe",
+        color: "#1d4ed8",
+      };
+    }
+
+    if (status === "concluida") {
+      return {
+        background: "#dcfce7",
+        color: "#166534",
+      };
+    }
+
+    return {
+      background: "#f3f4f6",
       color: "#374151",
     };
   }
@@ -162,9 +194,8 @@ async function addProcedure(task) {
         <header style={header}>
           <div>
             <h1 style={titlePage}>Tarefas Operacionais</h1>
-
             <p style={subtitle}>
-              Gestão comercial e administrativa da operação.
+              Gestão comercial e administrativa com histórico de procedimentos.
             </p>
           </div>
         </header>
@@ -174,9 +205,7 @@ async function addProcedure(task) {
           <StatCard title="Concluídas" value={concluidas.length} />
           <StatCard
             title="Muito urgentes"
-            value={
-              abertas.filter((t) => t.priority === "MUITO URGENTE").length
-            }
+            value={abertas.filter((t) => t.priority === "MUITO URGENTE").length}
           />
         </section>
 
@@ -235,7 +264,7 @@ async function addProcedure(task) {
 
               <textarea
                 style={textarea}
-                placeholder="Procedimento adotado"
+                placeholder="Procedimento inicial"
                 value={procedureNotes}
                 onChange={(e) => setProcedureNotes(e.target.value)}
               />
@@ -258,73 +287,78 @@ async function addProcedure(task) {
                     <div style={taskTop}>
                       <div>
                         <h3 style={{ margin: 0 }}>{task.title}</h3>
-
-                        <p style={smallText}>
-                          {task.category}
-                        </p>
+                        <p style={smallText}>{task.category}</p>
                       </div>
 
-                      <span
-                        style={{
-                          ...priorityBadge,
-                          ...priorityStyle(task.priority),
-                        }}
-                      >
-                        {task.priority}
-                      </span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span
+                          style={{
+                            ...priorityBadge,
+                            ...priorityStyle(task.priority),
+                          }}
+                        >
+                          {task.priority}
+                        </span>
+
+                        <span
+                          style={{
+                            ...priorityBadge,
+                            ...statusStyle(task.status),
+                          }}
+                        >
+                          {task.status || "aberta"}
+                        </span>
+                      </div>
                     </div>
 
                     <p>
                       <strong>Cliente/Prospect:</strong>{" "}
-                      {task.clients?.name ||
-                        task.prospect_name ||
-                        "-"}
+                      {task.clients?.name || task.prospect_name || "-"}
                     </p>
 
                     <p>
-                      <strong>Telefone:</strong>{" "}
-                      {task.prospect_phone || "-"}
+                      <strong>Telefone:</strong> {task.prospect_phone || "-"}
                     </p>
 
                     <p>
-                      <strong>Descrição:</strong>{" "}
-                      {task.description || "-"}
+                      <strong>Descrição:</strong> {task.description || "-"}
                     </p>
 
                     <div style={procedureBox}>
                       <strong>Procedimento adotado</strong>
 
-                      <p style={{ marginTop: 10 }}>
+                      <pre style={procedureText}>
                         {task.procedure_notes || "-"}
-                      </p>
+                      </pre>
                     </div>
 
                     <p>
-                      <strong>Entrada:</strong>{" "}
-                      {formatDate(task.created_at)}
+                      <strong>Entrada:</strong> {formatDate(task.created_at)}
+                    </p>
+
+                    <p>
+                      <strong>Última atualização:</strong>{" "}
+                      {formatDate(task.updated_at)}
                     </p>
 
                     <div style={buttons}>
                       <button
-                        style={{
-                          ...smallButton,
-                          background: "#2563eb",
-                        }}
-                        onClick={() =>
-                          updateStatus(task.id, "em tratamento")
-                        }
+                        style={{ ...smallButton, background: "#2563eb" }}
+                        onClick={() => updateStatus(task.id, "em tratamento")}
                       >
                         Em tratamento
                       </button>
 
                       <button
-                        style={{
-                          ...smallButton,
-                          background: "#16a34a",
-                        }}
-                        onClick={() =>
-                          updateStatus(task.id, "concluida")
-                        }
+                        style={{ ...smallButton, background: "#7c3aed" }}
+                        onClick={() => addProcedure(task)}
+                      >
+                        Adicionar procedimento
+                      </button>
+
+                      <button
+                        style={{ ...smallButton, background: "#16a34a" }}
+                        onClick={() => updateStatus(task.id, "concluida")}
                       >
                         Encerrar
                       </button>
@@ -346,20 +380,30 @@ async function addProcedure(task) {
               {concluidas.map((task) => (
                 <div key={task.id} style={closedTask}>
                   <div style={taskTop}>
-                    <strong>{task.title}</strong>
+                    <div>
+                      <strong>{task.title}</strong>
+                      <p style={smallText}>
+                        {task.prospect_name || task.clients?.name || "-"}
+                      </p>
+                    </div>
 
-                    <span style={closedBadge}>
-                      concluída
-                    </span>
+                    <span style={closedBadge}>concluída</span>
                   </div>
 
                   <p style={smallText}>
-                    {task.prospect_name || task.clients?.name || "-"}
+                    Entrada: {formatDate(task.created_at)}
                   </p>
 
                   <p style={smallText}>
                     Encerrada em: {formatDate(task.closed_at)}
                   </p>
+
+                  <div style={procedureBox}>
+                    <strong>Procedimento adotado</strong>
+                    <pre style={procedureText}>
+                      {task.procedure_notes || "-"}
+                    </pre>
+                  </div>
                 </div>
               ))}
             </div>
@@ -541,10 +585,17 @@ const procedureBox = {
   marginBottom: 16,
 };
 
+const procedureText = {
+  whiteSpace: "pre-wrap",
+  fontFamily: "Arial",
+  margin: "10px 0 0",
+};
+
 const buttons = {
   display: "flex",
   gap: 10,
   marginTop: 16,
+  flexWrap: "wrap",
 };
 
 const smallButton = {
@@ -568,3 +619,4 @@ const closedBadge = {
   borderRadius: 999,
   fontSize: 12,
 };
+  
