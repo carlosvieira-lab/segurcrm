@@ -38,34 +38,39 @@ function monthlyValue(policy) {
   if (frequency === "mensal") return premium / 12;
   if (frequency === "trimestral") return premium / 4;
   if (frequency === "semestral") return premium / 2;
+
   return premium / 12;
 }
 
 export async function getServerSideProps() {
   const { data: clients } = await supabase
     .from("clients")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select("*");
 
   const { data: policies } = await supabase
     .from("policies")
-    .select(`
-      *,
-      clients(name),
-      insurers(name)
-    `)
-    .order("created_at", { ascending: false });
+    .select("*");
 
   const { data: tasks } = await supabase
     .from("tasks")
     .select("*");
 
+  const { data: opportunities } = await supabase
+    .from("external_policies")
+    .select("*");
+
   const safeClients = clients || [];
   const safePolicies = policies || [];
   const safeTasks = tasks || [];
+  const safeOpportunities = opportunities || [];
 
-  const activePolicies = safePolicies.filter((p) => p.status === "ativa");
-  const cancelledPolicies = safePolicies.filter((p) => p.status === "anulada");
+  const activePolicies = safePolicies.filter(
+    (p) => p.status === "ativa"
+  );
+
+  const cancelledPolicies = safePolicies.filter(
+    (p) => p.status === "anulada"
+  );
 
   const overdue = activePolicies.filter((p) => {
     const days = daysUntil(p.next_payment_date);
@@ -98,15 +103,27 @@ export async function getServerSideProps() {
   );
 
   const normalTasks = safeTasks.filter(
-    (t) => t.priority === "NORMAL" && t.status !== "concluida"
+    (t) =>
+      t.priority === "NORMAL" &&
+      t.status !== "concluida"
   ).length;
 
   const urgentTasks = safeTasks.filter(
-    (t) => t.priority === "URGENTE" && t.status !== "concluida"
+    (t) =>
+      t.priority === "URGENTE" &&
+      t.status !== "concluida"
   ).length;
 
   const veryUrgentTasks = safeTasks.filter(
-    (t) => t.priority === "MUITO URGENTE" && t.status !== "concluida"
+    (t) =>
+      t.priority === "MUITO URGENTE" &&
+      t.status !== "concluida"
+  ).length;
+
+  const activeOpportunities = safeOpportunities.filter(
+    (o) =>
+      o.status !== "ganho" &&
+      o.status !== "perdido"
   ).length;
 
   return {
@@ -120,10 +137,10 @@ export async function getServerSideProps() {
       next30DaysCount: next30Days.length,
       totalPremium,
       estimatedMonthlyRevenue,
-      alerts: [...overdue, ...dueToday, ...next7Days].slice(0, 6),
       normalTasks,
       urgentTasks,
       veryUrgentTasks,
+      activeOpportunities,
     },
   };
 }
@@ -138,40 +155,36 @@ export default function Home({
   next30DaysCount,
   totalPremium,
   estimatedMonthlyRevenue,
-  alerts,
   normalTasks,
   urgentTasks,
   veryUrgentTasks,
+  activeOpportunities,
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [nif, setNif] = useState("");
   const [address, setAddress] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [licenseDate, setLicenseDate] = useState("");
-  const [iban, setIban] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function createClientRecord(event) {
-    event.preventDefault();
+  async function createClientRecord(e) {
+    e.preventDefault();
+
     setSaving(true);
 
-    const { error } = await supabase.from("clients").insert({
-      type: "particular",
-      status: "ativo",
-      name,
-      phone,
-      email,
-      nif,
-      address,
-      birth_date: birthDate || null,
-      driving_license_start_date: licenseDate || null,
-      iban,
-    });
+    const { error } = await supabase
+      .from("clients")
+      .insert({
+        name,
+        phone,
+        email,
+        nif,
+        address,
+        status: "ativo",
+      });
 
     if (error) {
-      alert("Erro ao guardar cliente: " + error.message);
+      alert(error.message);
       setSaving(false);
       return;
     }
@@ -191,7 +204,7 @@ export default function Home({
           <Link href="/renovacoes" style={link}>Renovações</Link>
           <Link href="/financeiro" style={link}>Financeiro</Link>
           <Link href="/tarefas" style={link}>Tarefas</Link>
-    <Link href="/oportunidades" style={link}>Oportunidades</Link>
+          <Link href="/oportunidades" style={link}>Oportunidades</Link>
         </nav>
       </aside>
 
@@ -199,8 +212,10 @@ export default function Home({
         <header style={header}>
           <div>
             <h1 style={title}>Dashboard Inteligente</h1>
+
             <p style={subtitle}>
-              Visão operacional da carteira, cobranças, tarefas e atividade comercial.
+              Visão operacional da carteira, cobranças,
+              tarefas e atividade comercial.
             </p>
           </div>
 
@@ -228,6 +243,7 @@ export default function Home({
           <Card title="Apólices anuladas" value={cancelledPoliciesCount} />
           <Card title="Prémio em vigor" value={formatEuro(totalPremium)} />
           <Card title="Receita mensal estimada" value={formatEuro(estimatedMonthlyRevenue)} />
+          <Card title="Oportunidades" value={activeOpportunities} />
         </section>
 
         <section style={grid}>
@@ -235,78 +251,47 @@ export default function Home({
             <h2>Novo Cliente</h2>
 
             <form onSubmit={createClientRecord} style={form}>
-              <input placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required style={input} />
-              <input placeholder="Telefone" value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
-              <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
-              <input placeholder="NIF" value={nif} onChange={(e) => setNif(e.target.value)} style={input} />
-              <input placeholder="Morada" value={address} onChange={(e) => setAddress(e.target.value)} style={input} />
-              <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} style={input} />
-              <input type="date" value={licenseDate} onChange={(e) => setLicenseDate(e.target.value)} style={input} />
-              <input placeholder="IBAN" value={iban} onChange={(e) => setIban(e.target.value)} style={input} />
+              <input
+                placeholder="Nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                style={input}
+              />
 
-              <button disabled={saving} style={button}>
+              <input
+                placeholder="Telefone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                style={input}
+              />
+
+              <input
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={input}
+              />
+
+              <input
+                placeholder="NIF"
+                value={nif}
+                onChange={(e) => setNif(e.target.value)}
+                style={input}
+              />
+
+              <input
+                placeholder="Morada"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                style={input}
+              />
+
+              <button style={button} disabled={saving}>
                 {saving ? "A guardar..." : "Guardar cliente"}
               </button>
             </form>
           </div>
-
-          <div style={panel}>
-            <h2>Alertas rápidos</h2>
-
-            {alerts.length === 0 ? (
-              <p style={muted}>Sem cobranças urgentes neste momento.</p>
-            ) : (
-              <div style={list}>
-                {alerts.map((policy) => {
-                  const days = daysUntil(policy.next_payment_date);
-
-                  return (
-                    <div key={policy.id} style={alertRow}>
-                      <div>
-                        <strong>{policy.clients?.name || "Cliente"}</strong>
-                        <p style={smallText}>
-                          {policy.branch || "Sem ramo"} · {policy.insurers?.name || "Sem seguradora"}
-                        </p>
-                        <p style={smallText}>
-                          Próxima cobrança: {policy.next_payment_date || "-"}
-                        </p>
-                      </div>
-
-                      <span style={badge}>
-                        {days < 0 ? "Vencida" : days === 0 ? "Hoje" : `${days} dias`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section style={panel}>
-          <h2>Clientes recentes</h2>
-
-          {clients.length === 0 ? (
-            <p style={muted}>Ainda não existem clientes.</p>
-          ) : (
-            <div style={clientList}>
-              {clients.slice(0, 8).map((client) => (
-                <div key={client.id} style={clientRow}>
-                  <div>
-                    <Link href={`/clientes/${client.id}`} style={clientLink}>
-                      {client.name}
-                    </Link>
-
-                    <p style={smallText}>
-                      {client.nif || "Sem NIF"} · {client.phone || "Sem telefone"} · {client.email || "Sem email"}
-                    </p>
-                  </div>
-
-                  <span style={statusBadge}>{client.status || "ativo"}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </section>
       </main>
     </div>
@@ -324,9 +309,12 @@ function Card({ title, value }) {
 
 function AlertCard({ title, value, color }) {
   return (
-    <div style={alertCard}>
+    <div style={card}>
       <p style={cardLabel}>{title}</p>
-      <h2 style={{ ...cardValue, color }}>{value}</h2>
+
+      <h2 style={{ ...cardValue, color }}>
+        {value}
+      </h2>
     </div>
   );
 }
@@ -335,7 +323,7 @@ const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily: "Arial, sans-serif",
+  fontFamily: "Arial",
 };
 
 const sidebar = {
@@ -380,7 +368,7 @@ const header = {
 };
 
 const title = {
-  fontSize: 40,
+  fontSize: 42,
   margin: 0,
 };
 
@@ -392,9 +380,9 @@ const subtitle = {
 const headerButton = {
   background: "#111827",
   color: "white",
-  textDecoration: "none",
   padding: "12px 18px",
   borderRadius: 10,
+  textDecoration: "none",
 };
 
 const alertGrid = {
@@ -413,7 +401,7 @@ const taskGrid = {
 
 const cards = {
   display: "grid",
-  gridTemplateColumns: "repeat(5, 1fr)",
+  gridTemplateColumns: "repeat(6, 1fr)",
   gap: 16,
   marginBottom: 30,
 };
@@ -422,36 +410,27 @@ const card = {
   background: "white",
   padding: 20,
   borderRadius: 16,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-};
-
-const alertCard = {
-  ...card,
-  borderLeft: "6px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
   color: "#6b7280",
-  margin: 0,
 };
 
 const cardValue = {
   fontSize: 28,
-  margin: "10px 0 0",
+  fontWeight: "bold",
 };
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "420px 1fr",
-  gap: 24,
-  marginBottom: 24,
+  gridTemplateColumns: "420px",
 };
 
 const panel = {
   background: "white",
   padding: 24,
   borderRadius: 16,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
 };
 
 const form = {
@@ -466,7 +445,7 @@ const input = {
 };
 
 const button = {
-  padding: 13,
+  padding: 14,
   borderRadius: 10,
   border: "none",
   background: "#2563eb",
@@ -474,64 +453,3 @@ const button = {
   fontWeight: "bold",
   cursor: "pointer",
 };
-
-const list = {
-  display: "grid",
-  gap: 12,
-};
-
-const alertRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: 14,
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-};
-
-const badge = {
-  background: "#fee2e2",
-  color: "#991b1b",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const clientList = {
-  display: "grid",
-  gap: 12,
-};
-
-const clientRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: 14,
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-};
-
-const clientLink = {
-  color: "#2563eb",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const smallText = {
-  color: "#6b7280",
-  margin: "6px 0 0",
-};
-
-const muted = {
-  color: "#6b7280",
-};
-
-const statusBadge = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: "5px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-};
-  
