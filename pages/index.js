@@ -169,6 +169,7 @@ export default function Home({
           <Link href="/apolices" style={link}>Apólices</Link>
           <Link href="/renovacoes" style={link}>Renovações</Link>
           <Link href="/financeiro" style={link}>Financeiro</Link>
+    <Link href="/tarefas" style={link}>Tarefas</Link>
         </nav>
       </aside>
 
