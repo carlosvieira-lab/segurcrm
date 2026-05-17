@@ -35,12 +35,17 @@ export async function getServerSideProps({ params }) {
     .select("*")
     .eq("client_id", id)
     .order("created_at", { ascending: false });
-
+const { data: tasks } = await supabase
+  .from("tasks")
+  .select("*")
+  .eq("client_id", id)
+  .order("created_at", { ascending: false });
   return {
     props: {
       client,
       policies: policies || [],
       claims: claims || [],
+      tasks: tasks || [],
     },
   };
 }
@@ -88,7 +93,12 @@ function calculateAge(date) {
   return `${age} anos`;
 }
 
-export default function ClientePage({ client, policies, claims }) {
+export default function ClientePage({
+  client,
+  policies,
+  claims,
+  tasks,
+}) {
   if (!client) {
     return <div>Cliente não encontrado.</div>;
   }
@@ -96,7 +106,9 @@ export default function ClientePage({ client, policies, claims }) {
   const activePolicies = policies.filter((p) => p.status === "ativa").length;
   const cancelledPolicies = policies.filter((p) => p.status === "anulada").length;
   const openClaims = claims.filter((c) => c.status !== "ENCERRADO").length;
-
+const openTasks = tasks.filter(
+  (t) => t.status !== "concluida"
+).length;
   function clientRating() {
     if (activePolicies >= 5) return "TOP";
     if (activePolicies === 4) return "MUITO BOM";
@@ -365,6 +377,9 @@ export default function ClientePage({ client, policies, claims }) {
             <div style={redBox}>Apólices anuladas: {cancelledPolicies}</div>
             <div style={blueBox}>Sinistros abertos: {openClaims}</div>
             <div style={purpleBox}>Classificação: {clientRating()}</div>
+                <div style={orangeBox}>
+  Tarefas abertas: {openTasks}
+</div>
           </div>
         </section>
 
@@ -503,6 +518,57 @@ export default function ClientePage({ client, policies, claims }) {
             </div>
           )}
         </section>
+            <section style={card}>
+  <h2>Tarefas associadas</h2>
+
+  {tasks.length === 0 ? (
+    <p>Este cliente não tem tarefas associadas.</p>
+  ) : (
+    <div style={policiesGrid}>
+      {tasks.map((task) => (
+        <div key={task.id} style={policyCard}>
+          <div style={policyTop}>
+            <h3>{task.title}</h3>
+
+            <span
+              style={{
+                ...badge,
+                background:
+                  task.priority === "MUITO URGENTE"
+                    ? "#fee2e2"
+                    : task.priority === "URGENTE"
+                    ? "#fef3c7"
+                    : "#e5e7eb",
+                color:
+                  task.priority === "MUITO URGENTE"
+                    ? "#991b1b"
+                    : task.priority === "URGENTE"
+                    ? "#92400e"
+                    : "#374151",
+              }}
+            >
+              {task.priority}
+            </span>
+          </div>
+
+          <p><strong>Estado:</strong> {task.status || "-"}</p>
+
+          <p><strong>Categoria:</strong> {task.category || "-"}</p>
+
+          <p><strong>Descrição:</strong> {task.description || "-"}</p>
+
+          <div style={procedureBox}>
+            <strong>Procedimentos</strong>
+
+            <pre style={procedureText}>
+              {task.procedure_notes || "-"}
+            </pre>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</section>
       </main>
     </div>
   );
@@ -610,6 +676,15 @@ const purpleBox = {
   borderRadius: 12,
   fontWeight: "bold",
 };
+
+const orangeBox = {
+  background: "#fed7aa",
+  color: "#9a3412",
+  padding: "12px 18px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
+ 
 
 const infoGrid = {
   display: "grid",
