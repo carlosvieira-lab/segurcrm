@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -11,16 +11,20 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-function daysUntil(date) {
-  if (!date) return null;
+export async function getServerSideProps() {
+  const { data: policies } = await supabase
+    .from("policies")
+    .select(`
+      *,
+      clients(name),
+      insurers(name)
+    `);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const target = new Date(date);
-  target.setHours(0, 0, 0, 0);
-
-  return Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+  return {
+    props: {
+      policies: policies || [],
+    },
+  };
 }
 
 function formatEuro(value) {
@@ -30,188 +34,174 @@ function formatEuro(value) {
   }).format(Number(value || 0));
 }
 
-function formatDate(date) {
-  if (!date) return "-";
-  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
-}
-
-function receiptValue(policy) {
-  const premium = Number(policy.annual_premium || 0);
-  const frequency = policy.payment_frequency || "anual";
-
-  if (frequency === "mensal") return premium / 12;
-  if (frequency === "trimestral") return premium / 4;
-  if (frequency === "semestral") return premium / 2;
-  return premium;
-}
-
-export async function getServerSideProps() {
-  const { data: policies } = await supabase
-    .from("policies")
-    .select(`
-      *,
-      clients(name),
-      insurers(name)
-    `)
-    .order("next_payment_date", { ascending: true });
-
-  const safePolicies = policies || [];
-  const activePolicies = safePolicies.filter((p) => p.status === "ativa");
+export default function Financeiro({ policies }) {
+  const activePolicies = policies.filter(
+    (p) => p.status === "ativa"
+  );
 
   const totalAnnualPremium = activePolicies.reduce(
     (sum, p) => sum + Number(p.annual_premium || 0),
     0
   );
 
-  const expectedReceipts = activePolicies.reduce(
-    (sum, p) => sum + receiptValue(p),
-    0
+  const monthlyEstimate =
+    totalAnnualPremium / 12;
+
+  const quarterlyPolicies = activePolicies.filter(
+    (p) => p.payment_frequency === "trimestral"
   );
 
-  const overdue = activePolicies.filter((p) => {
-    const days = daysUntil(p.next_payment_date);
-    return days !== null && days < 0;
-  });
-
-  const dueThisMonth = activePolicies.filter((p) => {
-    const days = daysUntil(p.next_payment_date);
-    return days !== null && days >= 0 && days <= 30;
-  });
-
-  const overdueValue = overdue.reduce((sum, p) => sum + receiptValue(p), 0);
-  const monthValue = dueThisMonth.reduce((sum, p) => sum + receiptValue(p), 0);
-
-  const insurerTotals = {};
-
-  activePolicies.forEach((p) => {
-    const insurer = p.insurers?.name || "Sem seguradora";
-
-    if (!insurerTotals[insurer]) {
-      insurerTotals[insurer] = {
-        name: insurer,
-        annual: 0,
-        receipts: 0,
-        policies: 0,
-      };
-    }
-
-    insurerTotals[insurer].annual += Number(p.annual_premium || 0);
-    insurerTotals[insurer].receipts += receiptValue(p);
-    insurerTotals[insurer].policies += 1;
-  });
-
-  const insurerRows = Object.values(insurerTotals).sort(
-    (a, b) => b.annual - a.annual
+  const monthlyPolicies = activePolicies.filter(
+    (p) => p.payment_frequency === "mensal"
   );
 
-  return {
-    props: {
-      policies: activePolicies,
-      totalAnnualPremium,
-      expectedReceipts,
-      overdueCount: overdue.length,
-      overdueValue,
-      monthCount: dueThisMonth.length,
-      monthValue,
-      insurerRows,
-      overdue,
-      dueThisMonth,
-    },
-  };
-}
+  const yearlyPolicies = activePolicies.filter(
+    (p) =>
+      p.payment_frequency === "anual" ||
+      !p.payment_frequency
+  );
 
-export default function Financeiro({
-  policies,
-  totalAnnualPremium,
-  expectedReceipts,
-  overdueCount,
-  overdueValue,
-  monthCount,
-  monthValue,
-  insurerRows,
-  overdue,
-  dueThisMonth,
-}) {
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={link}>Renovações</Link>
-          <Link href="/financeiro" style={activeLink}>Financeiro</Link>
-        </nav>
-      </aside>
+      <Sidebar active="financeiro" />
 
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Financeiro PRO</h1>
+            <h1 style={title}>Financeiro</h1>
+
             <p style={subtitle}>
-              Produção, recibos previstos, cobranças vencidas e carteira ativa.
+              Indicadores financeiros e visão
+              global da carteira.
             </p>
           </div>
         </header>
 
-        <section style={cards}>
-          <Card title="Prémio anual em vigor" value={formatEuro(totalAnnualPremium)} />
-          <Card title="Receita prevista por ciclo" value={formatEuro(expectedReceipts)} />
-          <Card title="Cobranças vencidas" value={overdueCount} />
-          <Card title="Valor vencido" value={formatEuro(overdueValue)} />
-          <Card title="Cobranças 30 dias" value={monthCount} />
-          <Card title="Valor 30 dias" value={formatEuro(monthValue)} />
+        <section style={statsGrid}>
+          <StatCard
+            title="Prémio anual em vigor"
+            value={formatEuro(
+              totalAnnualPremium
+            )}
+            color="#16a34a"
+          />
+
+          <StatCard
+            title="Estimativa mensal"
+            value={formatEuro(
+              monthlyEstimate
+            )}
+            color="#2563eb"
+          />
+
+          <StatCard
+            title="Apólices mensais"
+            value={monthlyPolicies.length}
+            color="#7c3aed"
+          />
+
+          <StatCard
+            title="Apólices trimestrais"
+            value={
+              quarterlyPolicies.length
+            }
+            color="#f59e0b"
+          />
+
+          <StatCard
+            title="Apólices anuais"
+            value={yearlyPolicies.length}
+            color="#dc2626"
+          />
         </section>
 
         <section style={panel}>
-          <h2>Cobranças vencidas</h2>
+          <h2 style={panelTitle}>
+            Distribuição da carteira
+          </h2>
 
-          {overdue.length === 0 ? (
-            <p style={muted}>Não existem cobranças vencidas.</p>
-          ) : (
-            <FinancialTable rows={overdue} />
-          )}
+          <div style={cardsGrid}>
+            <FinanceCard
+              title="Mensal"
+              total={monthlyPolicies.length}
+              color="#7c3aed"
+            />
+
+            <FinanceCard
+              title="Trimestral"
+              total={
+                quarterlyPolicies.length
+              }
+              color="#f59e0b"
+            />
+
+            <FinanceCard
+              title="Anual"
+              total={yearlyPolicies.length}
+              color="#dc2626"
+            />
+          </div>
         </section>
 
         <section style={panel}>
-          <h2>Cobranças dos próximos 30 dias</h2>
+          <h2 style={panelTitle}>
+            Carteira ativa
+          </h2>
 
-          {dueThisMonth.length === 0 ? (
-            <p style={muted}>Não existem cobranças previstas nos próximos 30 dias.</p>
+          {activePolicies.length === 0 ? (
+            <p style={muted}>
+              Não existem apólices ativas.
+            </p>
           ) : (
-            <FinancialTable rows={dueThisMonth} />
-          )}
-        </section>
+            <div style={list}>
+              {activePolicies.map((policy) => (
+                <div
+                  key={policy.id}
+                  style={policyCard}
+                >
+                  <div>
+                    <h3 style={policyTitle}>
+                      {policy.branch ||
+                        "Sem ramo"}
+                    </h3>
 
-        <section style={panel}>
-          <h2>Produção por seguradora</h2>
+                    <p style={smallText}>
+                      Cliente:{" "}
+                      {policy.clients?.name ||
+                        "-"}
+                    </p>
 
-          {insurerRows.length === 0 ? (
-            <p style={muted}>Sem dados financeiros ainda.</p>
-          ) : (
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>Seguradora</th>
-                  <th style={th}>Apólices</th>
-                  <th style={th}>Prémio anual</th>
-                  <th style={th}>Receita por ciclo</th>
-                </tr>
-              </thead>
+                    <p style={smallText}>
+                      Seguradora:{" "}
+                      {policy.insurers?.name ||
+                        "-"}
+                    </p>
 
-              <tbody>
-                {insurerRows.map((row) => (
-                  <tr key={row.name}>
-                    <td style={td}>{row.name}</td>
-                    <td style={td}>{row.policies}</td>
-                    <td style={td}>{formatEuro(row.annual)}</td>
-                    <td style={td}>{formatEuro(row.receipts)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    <p style={smallText}>
+                      Apólice:{" "}
+                      {policy.policy_number ||
+                        "-"}
+                    </p>
+
+                    <p style={smallText}>
+                      Fracionamento:{" "}
+                      {policy.payment_frequency ||
+                        "anual"}
+                    </p>
+                  </div>
+
+                  <div
+                    style={premiumContainer}
+                  >
+                    <span style={premium}>
+                      {formatEuro(
+                        policy.annual_premium
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </section>
       </main>
@@ -219,41 +209,46 @@ export default function Financeiro({
   );
 }
 
-function FinancialTable({ rows }) {
+function StatCard({
+  title,
+  value,
+  color,
+}) {
   return (
-    <table style={table}>
-      <thead>
-        <tr>
-          <th style={th}>Cliente</th>
-          <th style={th}>Ramo</th>
-          <th style={th}>Seguradora</th>
-          <th style={th}>Fracionamento</th>
-          <th style={th}>Próxima cobrança</th>
-          <th style={th}>Valor recibo</th>
-        </tr>
-      </thead>
+    <div style={statCard}>
+      <p style={cardLabel}>{title}</p>
 
-      <tbody>
-        {rows.map((policy) => (
-          <tr key={policy.id}>
-            <td style={td}>{policy.clients?.name || "-"}</td>
-            <td style={td}>{policy.branch || "-"}</td>
-            <td style={td}>{policy.insurers?.name || "-"}</td>
-            <td style={td}>{policy.payment_frequency || "anual"}</td>
-            <td style={td}>{formatDate(policy.next_payment_date)}</td>
-            <td style={td}>{formatEuro(receiptValue(policy))}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      <h2
+        style={{
+          ...cardValue,
+          color,
+        }}
+      >
+        {value}
+      </h2>
+    </div>
   );
 }
 
-function Card({ title, value }) {
+function FinanceCard({
+  title,
+  total,
+  color,
+}) {
   return (
-    <div style={card}>
-      <p style={cardLabel}>{title}</p>
-      <h2 style={cardValue}>{value}</h2>
+    <div
+      style={{
+        ...financeCard,
+        borderTop: `5px solid ${color}`,
+      }}
+    >
+      <h3 style={financeTitle}>
+        {title}
+      </h3>
+
+      <p style={financeValue}>
+        {total}
+      </p>
     </div>
   );
 }
@@ -263,35 +258,6 @@ const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
   fontFamily: "Arial, sans-serif",
-};
-
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
 };
 
 const main = {
@@ -304,7 +270,7 @@ const header = {
 };
 
 const title = {
-  fontSize: 40,
+  fontSize: 42,
   margin: 0,
 };
 
@@ -313,18 +279,20 @@ const subtitle = {
   marginTop: 10,
 };
 
-const cards = {
+const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: 16,
+  gridTemplateColumns:
+    "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 18,
   marginBottom: 30,
 };
 
-const card = {
+const statCard = {
   background: "white",
+  borderRadius: 18,
   padding: 22,
-  borderRadius: 16,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
@@ -333,36 +301,82 @@ const cardLabel = {
 };
 
 const cardValue = {
+  marginTop: 12,
   fontSize: 28,
-  margin: "10px 0 0",
 };
 
 const panel = {
   background: "white",
-  borderRadius: 16,
+  borderRadius: 18,
   padding: 24,
   marginBottom: 24,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const panelTitle = {
+  marginTop: 0,
+  marginBottom: 20,
+};
+
+const cardsGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3,1fr)",
+  gap: 18,
+};
+
+const financeCard = {
+  background: "#f9fafb",
+  borderRadius: 16,
+  padding: 24,
+};
+
+const financeTitle = {
+  marginTop: 0,
+  marginBottom: 10,
+};
+
+const financeValue = {
+  fontSize: 36,
+  fontWeight: "bold",
+  margin: 0,
 };
 
 const muted = {
   color: "#6b7280",
 };
 
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
-  marginTop: 20,
+const list = {
+  display: "grid",
+  gap: 16,
 };
 
-const th = {
-  textAlign: "left",
-  padding: 14,
-  background: "#f9fafb",
-  borderBottom: "1px solid #e5e7eb",
+const policyCard = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 18,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
 };
 
-const td = {
-  padding: 14,
-  borderBottom: "1px solid #e5e7eb",
+const policyTitle = {
+  margin: 0,
 };
+
+const smallText = {
+  color: "#6b7280",
+  margin: "6px 0",
+};
+
+const premiumContainer = {
+  textAlign: "right",
+};
+
+const premium = {
+  fontSize: 24,
+  fontWeight: "bold",
+  color: "#16a34a",
+};
+
