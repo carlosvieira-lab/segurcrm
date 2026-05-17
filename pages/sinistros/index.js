@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -207,20 +208,7 @@ export default function Sinistros({ claims, clients }) {
 
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={link}>Renovações</Link>
-          <Link href="/financeiro" style={link}>Financeiro</Link>
-          <Link href="/tarefas" style={link}>Tarefas</Link>
-          <Link href="/oportunidades" style={link}>Oportunidades</Link>
-          <Link href="/sinistros" style={activeLink}>Sinistros</Link>
-        </nav>
-      </aside>
+      <Sidebar active="sinistros" />
 
       <main style={main}>
         <header style={header}>
@@ -592,30 +580,6 @@ const page = {
   fontFamily: "Arial, sans-serif",
 };
 
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = { marginBottom: 40 };
-
-const nav = { display: "grid", gap: 12 };
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
-};
-
 const main = { flex: 1, padding: 40 };
 
 const header = { marginBottom: 30 };
@@ -856,7 +820,6 @@ const detailButton = {
   display: "inline-block",
   marginTop: 10,
 };
-
 
 
 
