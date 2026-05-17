@@ -33,27 +33,37 @@ export default async function handler(req, res) {
   let insurer_id = null;
 
   if (cleanInsurerName) {
-    const { data: existingInsurer } = await supabase
+    let { data: existingInsurer } = await supabase
       .from("insurers")
-      .select("*")
-      .ilike("name", cleanInsurerName)
+      .select("id")
+      .eq("name", cleanInsurerName)
       .maybeSingle();
 
-    if (existingInsurer) {
-      insurer_id = existingInsurer.id;
-    } else {
+    if (!existingInsurer) {
       const { data: newInsurer, error: insurerError } = await supabase
         .from("insurers")
         .insert({ name: cleanInsurerName })
-        .select()
+        .select("id")
         .single();
 
       if (insurerError) {
-        return res.status(400).json({ error: insurerError.message });
-      }
+        const { data: fallbackInsurer } = await supabase
+          .from("insurers")
+          .select("id")
+          .eq("name", cleanInsurerName)
+          .maybeSingle();
 
-      insurer_id = newInsurer.id;
+        if (!fallbackInsurer) {
+          return res.status(400).json({ error: insurerError.message });
+        }
+
+        existingInsurer = fallbackInsurer;
+      } else {
+        existingInsurer = newInsurer;
+      }
     }
+
+    insurer_id = existingInsurer.id;
   }
 
   const { error } = await supabase.from("policies").insert({
@@ -77,3 +87,4 @@ export default async function handler(req, res) {
 
   return res.status(200).json({ success: true });
 }
+
