@@ -172,7 +172,21 @@ export default function ClientePage({ client, policies, claims, tasks }) {
     if (!numero) return;
 
     const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
-    const seguradora = prompt("Seguradora");
+  const seguradoraOpcao = prompt(
+  "Seguradora:\n1 - Generali\n2 - Real Vida\n3 - Zurich\n4 - Allianz\n5 - Ageas\n6 - Outra"
+);
+
+let seguradora = "";
+
+if (seguradoraOpcao === "1") seguradora = "Generali";
+if (seguradoraOpcao === "2") seguradora = "Real Vida";
+if (seguradoraOpcao === "3") seguradora = "Zurich";
+if (seguradoraOpcao === "4") seguradora = "Allianz";
+if (seguradoraOpcao === "5") seguradora = "Ageas";
+
+if (seguradoraOpcao === "6") {
+  seguradora = prompt("Nome da seguradora") || "";
+}
     const premio = prompt("Prémio anual");
     const fracionamento = prompt("Fracionamento (mensal, trimestral, semestral, anual)");
     const dataInicio = prompt("Data início apólice (AAAA-MM-DD)");
