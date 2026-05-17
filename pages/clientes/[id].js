@@ -35,11 +35,13 @@ export async function getServerSideProps({ params }) {
     .select("*")
     .eq("client_id", id)
     .order("created_at", { ascending: false });
-const { data: tasks } = await supabase
-  .from("tasks")
-  .select("*")
-  .eq("client_id", id)
-  .order("created_at", { ascending: false });
+
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+
   return {
     props: {
       client,
@@ -93,12 +95,7 @@ function calculateAge(date) {
   return `${age} anos`;
 }
 
-export default function ClientePage({
-  client,
-  policies,
-  claims,
-  tasks,
-}) {
+export default function ClientePage({ client, policies, claims, tasks }) {
   if (!client) {
     return <div>Cliente não encontrado.</div>;
   }
@@ -106,9 +103,8 @@ export default function ClientePage({
   const activePolicies = policies.filter((p) => p.status === "ativa").length;
   const cancelledPolicies = policies.filter((p) => p.status === "anulada").length;
   const openClaims = claims.filter((c) => c.status !== "ENCERRADO").length;
-const openTasks = tasks.filter(
-  (t) => t.status !== "concluida"
-).length;
+  const openTasks = tasks.filter((t) => t.status !== "concluida").length;
+
   function clientRating() {
     if (activePolicies >= 5) return "TOP";
     if (activePolicies === 4) return "MUITO BOM";
@@ -185,7 +181,7 @@ const openTasks = tasks.filter(
 
     const proximaCobranca = calculateNextPayment(ultimoPagamento, fracionamento);
 
-    fetch("/api/create-policy", {
+    const response = await fetch("/api/create-policy", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -197,14 +193,21 @@ const openTasks = tasks.filter(
         insurer_name: seguradora,
         annual_premium: premio,
         payment_frequency: fracionamento,
-        renewal_date: renovacao,
         start_date: dataInicio || renovacao,
+        renewal_date: renovacao,
         last_payment_date: ultimoPagamento,
         next_payment_date: proximaCobranca,
       }),
-    }).then(() => {
-      window.location.reload();
     });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(result.error || "Erro ao criar apólice");
+      return;
+    }
+
+    window.location.reload();
   }
 
   async function editPolicy(policy) {
@@ -225,6 +228,9 @@ const openTasks = tasks.filter(
       policy.payment_frequency || "anual"
     );
     if (fracionamento === null) return;
+
+    const dataInicio = prompt("Data início apólice (AAAA-MM-DD)", policy.start_date || "");
+    if (dataInicio === null) return;
 
     const renovacao = prompt("Data Renovação (AAAA-MM-DD)", policy.renewal_date || "");
     if (renovacao === null) return;
@@ -248,7 +254,7 @@ const openTasks = tasks.filter(
         .from("insurers")
         .select("*")
         .ilike("name", seguradora)
-        .single();
+        .maybeSingle();
 
       if (existingInsurer) {
         insurer_id = existingInsurer.id;
@@ -276,6 +282,7 @@ const openTasks = tasks.filter(
         insurer_id,
         annual_premium: premio || null,
         payment_frequency: fracionamento,
+        start_date: dataInicio || null,
         renewal_date: renovacao || null,
         last_payment_date: ultimoPagamento || null,
         next_payment_date: proximaCobranca || null,
@@ -378,10 +385,8 @@ const openTasks = tasks.filter(
             <div style={greenBox}>Apólices em vigor: {activePolicies}</div>
             <div style={redBox}>Apólices anuladas: {cancelledPolicies}</div>
             <div style={blueBox}>Sinistros abertos: {openClaims}</div>
+            <div style={orangeBox}>Tarefas abertas: {openTasks}</div>
             <div style={purpleBox}>Classificação: {clientRating()}</div>
-                <div style={orangeBox}>
-  Tarefas abertas: {openTasks}
-</div>
           </div>
         </section>
 
@@ -397,10 +402,7 @@ const openTasks = tasks.filter(
             <Info label="Cidade" value={client.city} />
             <Info label="Data nascimento" value={formatDate(client.birth_date)} />
             <Info label="Idade" value={calculateAge(client.birth_date)} />
-            <Info
-              label="Início carta condução"
-              value={formatDate(client.driving_license_start_date)}
-            />
+            <Info label="Início carta condução" value={formatDate(client.driving_license_start_date)} />
             <Info label="IBAN" value={client.iban} />
             <Info label="Estado" value={client.status} />
           </div>
@@ -435,9 +437,11 @@ const openTasks = tasks.filter(
                   <p><strong>Seguradora:</strong> {policy.insurers?.name || "-"}</p>
                   <p><strong>Prémio:</strong> {policy.annual_premium || 0} €</p>
                   <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
+                  <p><strong>Data início:</strong> {formatDate(policy.start_date)}</p>
                   <p><strong>Renovação:</strong> {formatDate(policy.renewal_date)}</p>
                   <p><strong>Último pagamento:</strong> {formatDate(policy.last_payment_date)}</p>
                   <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
+                  <p><strong>Anulada em:</strong> {formatDate(policy.cancelled_at)}</p>
 
                   <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                     <button
@@ -520,57 +524,53 @@ const openTasks = tasks.filter(
             </div>
           )}
         </section>
-            <section style={card}>
-  <h2>Tarefas associadas</h2>
 
-  {tasks.length === 0 ? (
-    <p>Este cliente não tem tarefas associadas.</p>
-  ) : (
-    <div style={policiesGrid}>
-      {tasks.map((task) => (
-        <div key={task.id} style={policyCard}>
-          <div style={policyTop}>
-            <h3>{task.title}</h3>
+        <section style={card}>
+          <h2>Tarefas associadas</h2>
 
-            <span
-              style={{
-                ...badge,
-                background:
-                  task.priority === "MUITO URGENTE"
-                    ? "#fee2e2"
-                    : task.priority === "URGENTE"
-                    ? "#fef3c7"
-                    : "#e5e7eb",
-                color:
-                  task.priority === "MUITO URGENTE"
-                    ? "#991b1b"
-                    : task.priority === "URGENTE"
-                    ? "#92400e"
-                    : "#374151",
-              }}
-            >
-              {task.priority}
-            </span>
-          </div>
+          {tasks.length === 0 ? (
+            <p>Este cliente não tem tarefas associadas.</p>
+          ) : (
+            <div style={policiesGrid}>
+              {tasks.map((task) => (
+                <div key={task.id} style={policyCard}>
+                  <div style={policyTop}>
+                    <h3>{task.title}</h3>
 
-          <p><strong>Estado:</strong> {task.status || "-"}</p>
+                    <span
+                      style={{
+                        ...badge,
+                        background:
+                          task.priority === "MUITO URGENTE"
+                            ? "#fee2e2"
+                            : task.priority === "URGENTE"
+                            ? "#fef3c7"
+                            : "#e5e7eb",
+                        color:
+                          task.priority === "MUITO URGENTE"
+                            ? "#991b1b"
+                            : task.priority === "URGENTE"
+                            ? "#92400e"
+                            : "#374151",
+                      }}
+                    >
+                      {task.priority}
+                    </span>
+                  </div>
 
-          <p><strong>Categoria:</strong> {task.category || "-"}</p>
+                  <p><strong>Estado:</strong> {task.status || "-"}</p>
+                  <p><strong>Categoria:</strong> {task.category || "-"}</p>
+                  <p><strong>Descrição:</strong> {task.description || "-"}</p>
 
-          <p><strong>Descrição:</strong> {task.description || "-"}</p>
-
-          <div style={procedureBox}>
-            <strong>Procedimentos</strong>
-
-            <pre style={procedureText}>
-              {task.procedure_notes || "-"}
-            </pre>
-          </div>
-        </div>
-      ))}
-    </div>
-  )}
-</section>
+                  <div style={procedureBox}>
+                    <strong>Procedimentos</strong>
+                    <pre style={procedureText}>{task.procedure_notes || "-"}</pre>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
@@ -671,14 +671,6 @@ const blueBox = {
   fontWeight: "bold",
 };
 
-const purpleBox = {
-  background: "#ede9fe",
-  color: "#5b21b6",
-  padding: "12px 18px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
 const orangeBox = {
   background: "#fed7aa",
   color: "#9a3412",
@@ -686,7 +678,14 @@ const orangeBox = {
   borderRadius: 12,
   fontWeight: "bold",
 };
- 
+
+const purpleBox = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+  padding: "12px 18px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
 
 const infoGrid = {
   display: "grid",
@@ -739,4 +738,17 @@ const detailButton = {
   textDecoration: "none",
   display: "inline-block",
   marginTop: 10,
+};
+
+const procedureBox = {
+  background: "#f9fafb",
+  borderRadius: 12,
+  padding: 14,
+  marginTop: 16,
+};
+
+const procedureText = {
+  whiteSpace: "pre-wrap",
+  fontFamily: "Arial",
+  margin: "10px 0 0",
 };
