@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -19,7 +19,8 @@ export async function getServerSideProps() {
       clients(name),
       insurers(name)
     `)
-    .eq("status", "ativa");
+    .eq("status", "ativa")
+    .order("next_payment_date", { ascending: true });
 
   return {
     props: {
@@ -42,8 +43,7 @@ function daysUntil(date) {
 
 function formatDate(date) {
   if (!date) return "Sem data";
-
-  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+  return new Date(date).toLocaleDateString("pt-PT");
 }
 
 function getPriority(policy) {
@@ -54,6 +54,7 @@ function getPriority(policy) {
   if (days === 0) return "hoje";
   if (days <= 7) return "seteDias";
   if (days <= 30) return "trintaDias";
+
   return "futuras";
 }
 
@@ -69,17 +70,7 @@ export default function Renovacoes({ policies }) {
 
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={activeLink}>Renovações</Link>
-          <Link href="/financeiro" style={link}>Financeiro</Link>
-        </nav>
-      </aside>
+      <Sidebar active="renovacoes" />
 
       <main style={main}>
         <header style={header}>
@@ -100,47 +91,12 @@ export default function Renovacoes({ policies }) {
           <SummaryCard title="Sem data" value={groups.semData.length} color="#6b7280" />
         </section>
 
-        <RenewalSection
-          title="🔴 Vencidas"
-          description="Cobranças que já passaram da data prevista."
-          policies={groups.vencidas}
-          badgeColor="#991b1b"
-        />
-
-        <RenewalSection
-          title="🟥 Hoje"
-          description="Cobranças previstas para hoje."
-          policies={groups.hoje}
-          badgeColor="#dc2626"
-        />
-
-        <RenewalSection
-          title="🟠 Próximos 7 dias"
-          description="Cobranças que exigem acompanhamento imediato."
-          policies={groups.seteDias}
-          badgeColor="#f59e0b"
-        />
-
-        <RenewalSection
-          title="🔵 Próximos 30 dias"
-          description="Cobranças previstas para este mês."
-          policies={groups.trintaDias}
-          badgeColor="#2563eb"
-        />
-
-        <RenewalSection
-          title="🟢 Futuras"
-          description="Cobranças futuras sem urgência imediata."
-          policies={groups.futuras}
-          badgeColor="#16a34a"
-        />
-
-        <RenewalSection
-          title="⚪ Sem data"
-          description="Apólices que precisam de completar último pagamento ou próxima cobrança."
-          policies={groups.semData}
-          badgeColor="#6b7280"
-        />
+        <RenewalSection title="🔴 Vencidas" description="Cobranças que já passaram da data prevista." policies={groups.vencidas} badgeColor="#991b1b" />
+        <RenewalSection title="🟥 Hoje" description="Cobranças previstas para hoje." policies={groups.hoje} badgeColor="#dc2626" />
+        <RenewalSection title="🟠 Próximos 7 dias" description="Cobranças que exigem acompanhamento imediato." policies={groups.seteDias} badgeColor="#f59e0b" />
+        <RenewalSection title="🔵 Próximos 30 dias" description="Cobranças previstas para este mês." policies={groups.trintaDias} badgeColor="#2563eb" />
+        <RenewalSection title="🟢 Futuras" description="Cobranças futuras sem urgência imediata." policies={groups.futuras} badgeColor="#16a34a" />
+        <RenewalSection title="⚪ Sem data" description="Apólices que precisam de completar último pagamento ou próxima cobrança." policies={groups.semData} badgeColor="#6b7280" />
       </main>
     </div>
   );
@@ -214,35 +170,6 @@ const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
   fontFamily: "Arial, sans-serif",
-};
-
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
 };
 
 const main = {
@@ -355,14 +282,4 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
 };
- 
-
- 
- 
-
-
-     
-
-     
-
 
