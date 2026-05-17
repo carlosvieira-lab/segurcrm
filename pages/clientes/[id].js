@@ -30,10 +30,17 @@ export async function getServerSideProps({ params }) {
     .eq("client_id", id)
     .order("created_at", { ascending: false });
 
+  const { data: claims } = await supabase
+    .from("claims")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+
   return {
     props: {
       client,
       policies: policies || [],
+      claims: claims || [],
     },
   };
 }
@@ -81,13 +88,14 @@ function calculateAge(date) {
   return `${age} anos`;
 }
 
-export default function ClientePage({ client, policies }) {
+export default function ClientePage({ client, policies, claims }) {
   if (!client) {
     return <div>Cliente não encontrado.</div>;
   }
 
   const activePolicies = policies.filter((p) => p.status === "ativa").length;
   const cancelledPolicies = policies.filter((p) => p.status === "anulada").length;
+  const openClaims = claims.filter((c) => c.status !== "ENCERRADO").length;
 
   function clientRating() {
     if (activePolicies >= 5) return "TOP";
@@ -350,17 +358,18 @@ export default function ClientePage({ client, policies }) {
         </div>
 
         <section style={card}>
-          <h2>Dados do Cliente</h2>
+          <h2>Resumo 360º</h2>
 
           <div style={statsRow}>
-            <div style={greenBox}>Em vigor: {activePolicies}</div>
-            <div style={redBox}>Anuladas: {cancelledPolicies}</div>
-            <div style={blueBox}>Total: {policies.length}</div>
+            <div style={greenBox}>Apólices em vigor: {activePolicies}</div>
+            <div style={redBox}>Apólices anuladas: {cancelledPolicies}</div>
+            <div style={blueBox}>Sinistros abertos: {openClaims}</div>
+            <div style={purpleBox}>Classificação: {clientRating()}</div>
           </div>
+        </section>
 
-          <div style={ratingBox}>
-            Classificação Cliente: {clientRating()}
-          </div>
+        <section style={card}>
+          <h2>Dados do Cliente</h2>
 
           <div style={infoGrid}>
             <Info label="Nome" value={client.name} />
@@ -447,6 +456,53 @@ export default function ClientePage({ client, policies }) {
             </div>
           )}
         </section>
+
+        <section style={card}>
+          <h2>Sinistros associados</h2>
+
+          {claims.length === 0 ? (
+            <p>Este cliente ainda não tem sinistros associados.</p>
+          ) : (
+            <div style={policiesGrid}>
+              {claims.map((claim) => (
+                <div key={claim.id} style={policyCard}>
+                  <div style={policyTop}>
+                    <h3>{claim.claim_branch || "Sem ramo"}</h3>
+
+                    <span
+                      style={{
+                        ...badge,
+                        background:
+                          claim.status === "ENCERRADO"
+                            ? "#dcfce7"
+                            : claim.status === "PENDENTE"
+                            ? "#fef3c7"
+                            : "#dbeafe",
+                        color:
+                          claim.status === "ENCERRADO"
+                            ? "#166534"
+                            : claim.status === "PENDENTE"
+                            ? "#92400e"
+                            : "#1d4ed8",
+                      }}
+                    >
+                      {claim.status || "ABERTO"}
+                    </span>
+                  </div>
+
+                  <p><strong>Nº sinistro:</strong> {claim.claim_number || "-"}</p>
+                  <p><strong>Seguradora:</strong> {claim.insurer_name || "-"}</p>
+                  <p><strong>Data sinistro:</strong> {formatDate(claim.claim_date)}</p>
+                  <p><strong>Envio seguradora:</strong> {formatDate(claim.submitted_date)}</p>
+
+                  <Link href={`/sinistros/${claim.id}`} style={detailButton}>
+                    Abrir ficha
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
@@ -517,9 +573,10 @@ const card = {
 
 const statsRow = {
   display: "flex",
+  flexWrap: "wrap",
   gap: 16,
   marginTop: 20,
-  marginBottom: 20,
+  marginBottom: 10,
 };
 
 const greenBox = {
@@ -546,15 +603,12 @@ const blueBox = {
   fontWeight: "bold",
 };
 
-const ratingBox = {
-  marginTop: 20,
-  marginBottom: 20,
-  padding: "16px 20px",
-  borderRadius: 14,
-  background: "#e0e7ff",
-  color: "#1e3a8a",
+const purpleBox = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+  padding: "12px 18px",
+  borderRadius: 12,
   fontWeight: "bold",
-  fontSize: 18,
 };
 
 const infoGrid = {
@@ -597,4 +651,15 @@ const badge = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
+  fontWeight: "bold",
+};
+
+const detailButton = {
+  background: "#111827",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  marginTop: 10,
 };
