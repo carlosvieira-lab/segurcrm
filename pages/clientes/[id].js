@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -39,16 +40,20 @@ export async function getServerSideProps({ params }) {
 
 function addMonths(dateString, months) {
   if (!dateString) return null;
+
   const date = new Date(dateString);
   date.setMonth(date.getMonth() + months);
+
   return date.toISOString().split("T")[0];
 }
 
 function calculateNextPayment(lastPaymentDate, frequency) {
   if (!lastPaymentDate) return null;
+
   if (frequency === "mensal") return addMonths(lastPaymentDate, 1);
   if (frequency === "trimestral") return addMonths(lastPaymentDate, 3);
   if (frequency === "semestral") return addMonths(lastPaymentDate, 6);
+
   return addMonths(lastPaymentDate, 12);
 }
 
@@ -66,7 +71,10 @@ function calculateAge(date) {
   let age = today.getFullYear() - birth.getFullYear();
   const monthDiff = today.getMonth() - birth.getMonth();
 
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && today.getDate() < birth.getDate())
+  ) {
     age--;
   }
 
@@ -89,8 +97,64 @@ export default function ClientePage({ client, policies }) {
     return "FRACO";
   }
 
-  function createPolicy() {
+  async function editClient() {
+    const name = prompt("Nome", client.name || "");
+    if (name === null) return;
+
+    const nif = prompt("NIF", client.nif || "");
+    if (nif === null) return;
+
+    const phone = prompt("Telefone", client.phone || "");
+    if (phone === null) return;
+
+    const email = prompt("Email", client.email || "");
+    if (email === null) return;
+
+    const address = prompt("Morada", client.address || "");
+    if (address === null) return;
+
+    const city = prompt("Cidade", client.city || "");
+    if (city === null) return;
+
+    const iban = prompt("IBAN", client.iban || "");
+    if (iban === null) return;
+
+    const birthDate = prompt("Data nascimento (AAAA-MM-DD)", client.birth_date || "");
+    if (birthDate === null) return;
+
+    const licenseDate = prompt(
+      "Início carta condução (AAAA-MM-DD)",
+      client.driving_license_start_date || ""
+    );
+    if (licenseDate === null) return;
+
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        name,
+        nif,
+        phone,
+        email,
+        address,
+        city,
+        iban,
+        birth_date: birthDate || null,
+        driving_license_start_date: licenseDate || null,
+      })
+      .eq("id", client.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function createPolicy() {
     const numero = prompt("Número da Apólice");
+    if (!numero) return;
+
     const ramo = prompt("Ramo (Auto, Casa, Saúde...)");
     const seguradora = prompt("Seguradora");
     const premio = prompt("Prémio anual");
@@ -119,6 +183,89 @@ export default function ClientePage({ client, policies }) {
     }).then(() => {
       window.location.reload();
     });
+  }
+
+  async function editPolicy(policy) {
+    const numero = prompt("Número da Apólice", policy.policy_number || "");
+    if (numero === null) return;
+
+    const ramo = prompt("Ramo", policy.branch || "");
+    if (ramo === null) return;
+
+    const seguradora = prompt("Seguradora", policy.insurers?.name || "");
+    if (seguradora === null) return;
+
+    const premio = prompt("Prémio anual", policy.annual_premium || "");
+    if (premio === null) return;
+
+    const fracionamento = prompt(
+      "Fracionamento (mensal, trimestral, semestral, anual)",
+      policy.payment_frequency || "anual"
+    );
+    if (fracionamento === null) return;
+
+    const renovacao = prompt("Data Renovação (AAAA-MM-DD)", policy.renewal_date || "");
+    if (renovacao === null) return;
+
+    const ultimoPagamento = prompt(
+      "Último pagamento (AAAA-MM-DD)",
+      policy.last_payment_date || ""
+    );
+    if (ultimoPagamento === null) return;
+
+    const proximaCobranca = prompt(
+      "Próxima cobrança (AAAA-MM-DD)",
+      policy.next_payment_date || calculateNextPayment(ultimoPagamento, fracionamento) || ""
+    );
+    if (proximaCobranca === null) return;
+
+    let insurer_id = policy.insurer_id || null;
+
+    if (seguradora) {
+      const { data: existingInsurer } = await supabase
+        .from("insurers")
+        .select("*")
+        .ilike("name", seguradora)
+        .single();
+
+      if (existingInsurer) {
+        insurer_id = existingInsurer.id;
+      } else {
+        const { data: newInsurer, error: insurerError } = await supabase
+          .from("insurers")
+          .insert({ name: seguradora })
+          .select()
+          .single();
+
+        if (insurerError) {
+          alert(insurerError.message);
+          return;
+        }
+
+        insurer_id = newInsurer.id;
+      }
+    }
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        policy_number: numero,
+        branch: ramo,
+        insurer_id,
+        annual_premium: premio || null,
+        payment_frequency: fracionamento,
+        renewal_date: renovacao || null,
+        last_payment_date: ultimoPagamento || null,
+        next_payment_date: proximaCobranca || null,
+      })
+      .eq("id", policy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
   }
 
   function deleteClient() {
@@ -172,17 +319,7 @@ export default function ClientePage({ client, policies }) {
 
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={activeLink}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={link}>Renovações</Link>
-          <Link href="/financeiro" style={link}>Financeiro</Link>
-        </nav>
-      </aside>
+      <Sidebar active="clientes" />
 
       <main style={main}>
         <div style={header}>
@@ -194,7 +331,11 @@ export default function ClientePage({ client, policies }) {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button style={button} onClick={editClient}>
+              Editar cliente
+            </button>
+
             <button style={button} onClick={createPolicy}>
               + Nova Apólice
             </button>
@@ -230,7 +371,10 @@ export default function ClientePage({ client, policies }) {
             <Info label="Cidade" value={client.city} />
             <Info label="Data nascimento" value={formatDate(client.birth_date)} />
             <Info label="Idade" value={calculateAge(client.birth_date)} />
-            <Info label="Início carta condução" value={formatDate(client.driving_license_start_date)} />
+            <Info
+              label="Início carta condução"
+              value={formatDate(client.driving_license_start_date)}
+            />
             <Info label="IBAN" value={client.iban} />
             <Info label="Estado" value={client.status} />
           </div>
@@ -270,6 +414,13 @@ export default function ClientePage({ client, policies }) {
                   <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
 
                   <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                    <button
+                      style={{ ...smallButton, background: "#111827" }}
+                      onClick={() => editPolicy(policy)}
+                    >
+                      Editar apólice
+                    </button>
+
                     <button
                       style={{ ...smallButton, background: "#16a34a" }}
                       onClick={() => updatePolicyStatus(policy.id, "ativa")}
@@ -315,35 +466,6 @@ const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
   fontFamily: "Arial",
-};
-
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
 };
 
 const main = {
