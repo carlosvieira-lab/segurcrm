@@ -26,6 +26,7 @@ export default async function handler(req, res) {
       annual_premium,
       payment_frequency,
       renewal_date,
+      start_date,
       last_payment_date,
       next_payment_date,
     } = req.body;
@@ -37,58 +38,56 @@ export default async function handler(req, res) {
         .from("insurers")
         .select("*")
         .ilike("name", insurer_name)
-        .single();
+        .maybeSingle();
 
       if (existingInsurer) {
         insurer_id = existingInsurer.id;
       } else {
-        const { data: newInsurer } = await supabase
+        const { data: newInsurer, error: insurerError } = await supabase
           .from("insurers")
-          .insert([
-            {
-              name: insurer_name,
-            },
-          ])
+          .insert({
+            name: insurer_name,
+          })
           .select()
           .single();
+
+        if (insurerError) {
+          return res.status(400).json({
+            error: insurerError.message,
+          });
+        }
 
         insurer_id = newInsurer.id;
       }
     }
 
-    const { data, error } = await supabase
-      .from("policies")
-      .insert([
-        {
-          client_id,
-          insurer_id,
-          policy_number,
-          branch,
-          annual_premium,
-          payment_frequency,
-          renewal_date,
-          last_payment_date,
-          next_payment_date,
-          status: "ativa",
-        },
-      ])
-      .select()
-      .single();
+    const { error } = await supabase.from("policies").insert({
+      client_id,
+      policy_number,
+      branch,
+      insurer_id,
+      annual_premium: annual_premium || null,
+      payment_frequency: payment_frequency || "anual",
+      renewal_date: renewal_date || null,
+      start_date: start_date || renewal_date || null,
+      last_payment_date: last_payment_date || null,
+      next_payment_date: next_payment_date || null,
+      status: "ativa",
+      cancelled_at: null,
+    });
 
     if (error) {
-      console.error(error);
-
-      return res.status(500).json({
+      return res.status(400).json({
         error: error.message,
       });
     }
 
-    return res.status(200).json(data);
-  } catch (err) {
-    console.error(err);
-
+    return res.status(200).json({
+      success: true,
+    });
+  } catch (error) {
     return res.status(500).json({
-      error: "Erro interno",
+      error: error.message,
     });
   }
 }
