@@ -179,6 +179,7 @@ const openTasks = tasks.filter(
     const seguradora = prompt("Seguradora");
     const premio = prompt("Prémio anual");
     const fracionamento = prompt("Fracionamento (mensal, trimestral, semestral, anual)");
+    const dataInicio = prompt("Data início apólice (AAAA-MM-DD)");
     const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
     const ultimoPagamento = prompt("Último pagamento (AAAA-MM-DD)");
 
@@ -197,6 +198,7 @@ const openTasks = tasks.filter(
         annual_premium: premio,
         payment_frequency: fracionamento,
         renewal_date: renovacao,
+        start_date: dataInicio || renovacao,
         last_payment_date: ultimoPagamento,
         next_payment_date: proximaCobranca,
       }),
