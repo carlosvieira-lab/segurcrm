@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -105,7 +105,6 @@ export default function Oportunidades({ opportunities, urgentCount, clients }) {
 
   async function createOpportunity(e) {
     e.preventDefault();
-
     setSaving(true);
 
     const renewal = new Date(renewalDate);
@@ -150,19 +149,7 @@ export default function Oportunidades({ opportunities, urgentCount, clients }) {
 
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={link}>Renovações</Link>
-          <Link href="/financeiro" style={link}>Financeiro</Link>
-          <Link href="/tarefas" style={link}>Tarefas</Link>
-          <Link href="/oportunidades" style={activeLink}>Oportunidades</Link>
-        </nav>
-      </aside>
+      <Sidebar active="oportunidades" />
 
       <main style={main}>
         <header style={header}>
@@ -200,9 +187,7 @@ export default function Oportunidades({ opportunities, urgentCount, clients }) {
                   ) : (
                     <>
                       <strong>Novo potencial cliente</strong>
-                      <p style={boxText}>
-                        Este NIF ainda não existe no CRM.
-                      </p>
+                      <p style={boxText}>Este NIF ainda não existe no CRM.</p>
                     </>
                   )}
                 </div>
@@ -246,7 +231,7 @@ export default function Oportunidades({ opportunities, urgentCount, clients }) {
                 <option>PPR</option>
                 <option>financeiros</option>
                 <option>viagem</option>
-                <option>MREmpresarial</option>
+                <option>multirriscos</option>
                 <option>responsabilidade civil</option>
               </select>
 
@@ -300,9 +285,7 @@ export default function Oportunidades({ opportunities, urgentCount, clients }) {
                       <div style={cardTop}>
                         <div>
                           <h3 style={opportunityTitle}>
-                            {item.clients?.name ||
-                              item.prospect_name ||
-                              "Sem nome"}
+                            {item.clients?.name || item.prospect_name || "Sem nome"}
                           </h3>
 
                           <p style={small}>{item.policy_type}</p>
@@ -382,35 +365,6 @@ const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
   fontFamily: "Arial, sans-serif",
-};
-
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
 };
 
 const main = {
