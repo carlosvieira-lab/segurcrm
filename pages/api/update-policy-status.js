@@ -12,19 +12,37 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método não permitido" });
+    return res.status(405).json({
+      error: "Método não permitido",
+    });
   }
 
   const { policy_id, status } = req.body;
 
+  const updateData = {
+    status,
+  };
+
+  if (status === "anulada") {
+    updateData.cancelled_at = new Date().toISOString().split("T")[0];
+  }
+
+  if (status === "ativa") {
+    updateData.cancelled_at = null;
+  }
+
   const { error } = await supabase
     .from("policies")
-    .update({ status })
+    .update(updateData)
     .eq("id", policy_id);
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return res.status(400).json({
+      error: error.message,
+    });
   }
 
-  return res.status(200).json({ success: true });
+  return res.status(200).json({
+    success: true,
+  });
 }
