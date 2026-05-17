@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -16,12 +16,8 @@ export async function getServerSideProps() {
     .from("policies")
     .select(`
       *,
-      clients (
-        name
-      ),
-      insurers (
-        name
-      )
+      clients(name),
+      insurers(name)
     `)
     .order("created_at", { ascending: false });
 
@@ -32,64 +28,109 @@ export async function getServerSideProps() {
   };
 }
 
+function formatDate(date) {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString("pt-PT");
+}
+
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
+}
+
 export default function Apolices({ policies }) {
+  const activePolicies = policies.filter((p) => p.status === "ativa");
+  const cancelledPolicies = policies.filter((p) => p.status === "anulada");
+
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={link}>Clientes</Link>
-          <Link href="/apolices" style={activeLink}>Apólices</Link>
-          <a style={link}>Renovações</a>
-          <a style={link}>Tarefas</a>
-          <a style={link}>Sinistros</a>
-        </nav>
-      </aside>
+      <Sidebar active="apolices" />
 
       <main style={main}>
-        <div style={header}>
+        <header style={header}>
           <div>
             <h1 style={title}>Apólices</h1>
-            <p style={subtitle}>Gestão das apólices dos clientes.</p>
+            <p style={subtitle}>Visão geral das apólices da carteira.</p>
           </div>
+        </header>
 
-          <button style={button}>+ Nova apólice</button>
-        </div>
+        <section style={stats}>
+          <StatCard title="Total" value={policies.length} />
+          <StatCard title="Ativas" value={activePolicies.length} color="#16a34a" />
+          <StatCard title="Anuladas" value={cancelledPolicies.length} color="#dc2626" />
+        </section>
 
-        <div style={tableCard}>
-          <table style={table}>
-            <thead>
-              <tr>
-                <th style={th}>Nº Apólice</th>
-                <th style={th}>Cliente</th>
-                <th style={th}>Seguradora</th>
-                <th style={th}>Ramo</th>
-                <th style={th}>Renovação</th>
-                <th style={th}>Prémio</th>
-                <th style={th}>Estado</th>
-              </tr>
-            </thead>
+        <section style={panel}>
+          <h2>Lista de apólices</h2>
 
-            <tbody>
+          {policies.length === 0 ? (
+            <p style={muted}>Ainda não existem apólices.</p>
+          ) : (
+            <div style={list}>
               {policies.map((policy) => (
-                <tr key={policy.id}>
-                  <td style={td}><strong>{policy.policy_number || "-"}</strong></td>
-                  <td style={td}>{policy.clients?.name || "-"}</td>
-                  <td style={td}>{policy.insurers?.name || "-"}</td>
-                  <td style={td}>{policy.branch || "-"}</td>
-                  <td style={td}>{policy.renewal_date || "-"}</td>
-                  <td style={td}>{policy.annual_premium || 0} €</td>
-                  <td style={td}>
-                    <span style={badge}>{policy.status || "ativa"}</span>
-                  </td>
-                </tr>
+                <div key={policy.id} style={policyCard}>
+                  <div>
+                    <h3 style={policyTitle}>
+                      {policy.branch || "Sem ramo"}
+                    </h3>
+
+                    <p style={smallText}>
+                      Cliente: {policy.clients?.name || "-"}
+                    </p>
+
+                    <p style={smallText}>
+                      Seguradora: {policy.insurers?.name || "-"}
+                    </p>
+
+                    <p style={smallText}>
+                      Apólice: {policy.policy_number || "-"}
+                    </p>
+
+                    <p style={smallText}>
+                      Prémio: {formatEuro(policy.annual_premium)}
+                    </p>
+
+                    <p style={smallText}>
+                      Fracionamento: {policy.payment_frequency || "anual"}
+                    </p>
+
+                    <p style={smallText}>
+                      Renovação: {formatDate(policy.renewal_date)}
+                    </p>
+
+                    <p style={smallText}>
+                      Próxima cobrança: {formatDate(policy.next_payment_date)}
+                    </p>
+                  </div>
+
+                  <span
+                    style={{
+                      ...statusBadge,
+                      background:
+                        policy.status === "anulada" ? "#fee2e2" : "#dcfce7",
+                      color:
+                        policy.status === "anulada" ? "#991b1b" : "#166534",
+                    }}
+                  >
+                    {policy.status || "ativa"}
+                  </span>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+        </section>
       </main>
+    </div>
+  );
+}
+
+function StatCard({ title, value, color = "#111827" }) {
+  return (
+    <div style={statCard}>
+      <p style={cardLabel}>{title}</p>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
 }
@@ -101,93 +142,87 @@ const page = {
   fontFamily: "Arial, sans-serif",
 };
 
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
-};
-
 const main = {
   flex: 1,
   padding: 40,
 };
 
 const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
   marginBottom: 30,
 };
 
 const title = {
-  fontSize: 34,
+  fontSize: 42,
   margin: 0,
 };
 
 const subtitle = {
   color: "#6b7280",
+  marginTop: 10,
 };
 
-const button = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
+const stats = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 16,
+  marginBottom: 30,
 };
 
-const tableCard = {
+const statCard = {
+  background: "white",
+  padding: 22,
+  borderRadius: 16,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const cardLabel = {
+  color: "#6b7280",
+  margin: 0,
+};
+
+const cardValue = {
+  fontSize: 30,
+  margin: "10px 0 0",
+};
+
+const panel = {
   background: "white",
   borderRadius: 16,
-  overflow: "hidden",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  padding: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
+const muted = {
+  color: "#6b7280",
 };
 
-const th = {
-  textAlign: "left",
-  padding: 18,
-  background: "#f9fafb",
-  borderBottom: "1px solid #e5e7eb",
+const list = {
+  display: "grid",
+  gap: 14,
 };
 
-const td = {
-  padding: 18,
-  borderBottom: "1px solid #e5e7eb",
+const policyCard = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 16,
 };
 
-const badge = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: "5px 10px",
+const policyTitle = {
+  margin: 0,
+  fontSize: 20,
+};
+
+const smallText = {
+  color: "#6b7280",
+  margin: "6px 0",
+};
+
+const statusBadge = {
+  padding: "6px 12px",
   borderRadius: 999,
   fontSize: 12,
+  fontWeight: "bold",
 };
