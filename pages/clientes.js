@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -66,38 +67,41 @@ export default function Clientes({ clients }) {
 
   return (
     <div style={page}>
-      <aside style={sidebar}>
-        <h2 style={logo}>SegurCRM</h2>
-
-        <nav style={nav}>
-          <Link href="/" style={link}>Dashboard</Link>
-          <Link href="/clientes" style={activeLink}>Clientes</Link>
-          <Link href="/apolices" style={link}>Apólices</Link>
-          <Link href="/renovacoes" style={link}>Renovações</Link>
-          <Link href="/financeiro" style={link}>Financeiro</Link>
-          <Link href="/tarefas" style={link}>Tarefas</Link>
-          <Link href="/oportunidades" style={link}>Oportunidades</Link>
-          <Link href="/sinistros" style={link}>Sinistros</Link>
-        </nav>
-      </aside>
+      <Sidebar active="clientes" />
 
       <main style={main}>
         <header style={header}>
           <div>
             <h1 style={title}>Clientes</h1>
-            <p style={subtitle}>Gestão da carteira de clientes.</p>
+
+            <p style={subtitle}>
+              Gestão da carteira de clientes.
+            </p>
           </div>
         </header>
 
         <section style={stats}>
-          <StatCard title="Total de clientes" value={clients.length} />
+          <StatCard
+            title="Total de clientes"
+            value={clients.length}
+          />
+
           <StatCard
             title="Ativos"
-            value={clients.filter((c) => c.status === "ativo").length}
+            value={
+              clients.filter(
+                (c) => c.status === "ativo"
+              ).length
+            }
           />
+
           <StatCard
             title="Potenciais"
-            value={clients.filter((c) => c.status === "potencial").length}
+            value={
+              clients.filter(
+                (c) => c.status === "potencial"
+              ).length
+            }
           />
         </section>
 
@@ -105,11 +109,16 @@ export default function Clientes({ clients }) {
           <div style={panel}>
             <h2>Novo Cliente</h2>
 
-            <form onSubmit={createClientRecord} style={form}>
+            <form
+              onSubmit={createClientRecord}
+              style={form}
+            >
               <input
                 placeholder="Nome"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
                 required
                 style={input}
               />
@@ -117,63 +126,90 @@ export default function Clientes({ clients }) {
               <input
                 placeholder="NIF"
                 value={nif}
-                onChange={(e) => setNif(e.target.value)}
+                onChange={(e) =>
+                  setNif(e.target.value)
+                }
                 style={input}
               />
 
               <input
                 placeholder="Telefone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) =>
+                  setPhone(e.target.value)
+                }
                 style={input}
               />
 
               <input
                 placeholder="Email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 style={input}
               />
 
               <input
                 placeholder="Morada"
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) =>
+                  setAddress(e.target.value)
+                }
                 style={input}
               />
 
               <input
                 placeholder="Cidade"
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(e) =>
+                  setCity(e.target.value)
+                }
                 style={input}
               />
 
               <input
                 placeholder="IBAN"
                 value={iban}
-                onChange={(e) => setIban(e.target.value)}
+                onChange={(e) =>
+                  setIban(e.target.value)
+                }
                 style={input}
               />
 
-              <label style={label}>Data de nascimento</label>
+              <label style={label}>
+                Data de nascimento
+              </label>
+
               <input
                 type="date"
                 value={birthDate}
-                onChange={(e) => setBirthDate(e.target.value)}
+                onChange={(e) =>
+                  setBirthDate(e.target.value)
+                }
                 style={input}
               />
 
-              <label style={label}>Início da carta de condução</label>
+              <label style={label}>
+                Início da carta de condução
+              </label>
+
               <input
                 type="date"
                 value={licenseDate}
-                onChange={(e) => setLicenseDate(e.target.value)}
+                onChange={(e) =>
+                  setLicenseDate(e.target.value)
+                }
                 style={input}
               />
 
-              <button style={button} disabled={saving}>
-                {saving ? "A guardar..." : "Guardar cliente"}
+              <button
+                style={button}
+                disabled={saving}
+              >
+                {saving
+                  ? "A guardar..."
+                  : "Guardar cliente"}
               </button>
             </form>
           </div>
@@ -182,29 +218,44 @@ export default function Clientes({ clients }) {
             <h2>Lista de clientes</h2>
 
             {clients.length === 0 ? (
-              <p style={muted}>Ainda não existem clientes.</p>
+              <p style={muted}>
+                Ainda não existem clientes.
+              </p>
             ) : (
               <div style={list}>
                 {clients.map((client) => (
-                  <div key={client.id} style={clientCard}>
+                  <div
+                    key={client.id}
+                    style={clientCard}
+                  >
                     <div>
-                      <Link href={`/clientes/${client.id}`} style={clientName}>
+                      <Link
+                        href={`/clientes/${client.id}`}
+                        style={clientName}
+                      >
                         {client.name}
                       </Link>
 
                       <p style={smallText}>
-                        {client.nif || "Sem NIF"} ·{" "}
-                        {client.phone || "Sem telefone"} ·{" "}
-                        {client.email || "Sem email"}
+                        {client.nif ||
+                          "Sem NIF"}{" "}
+                        ·{" "}
+                        {client.phone ||
+                          "Sem telefone"}{" "}
+                        ·{" "}
+                        {client.email ||
+                          "Sem email"}
                       </p>
 
                       <p style={smallText}>
-                        {client.city || "Sem cidade"}
+                        {client.city ||
+                          "Sem cidade"}
                       </p>
                     </div>
 
                     <span style={statusBadge}>
-                      {client.status || "ativo"}
+                      {client.status ||
+                        "ativo"}
                     </span>
                   </div>
                 ))}
@@ -221,6 +272,7 @@ function StatCard({ title, value }) {
   return (
     <div style={statCard}>
       <p style={cardLabel}>{title}</p>
+
       <h2 style={cardValue}>{value}</h2>
     </div>
   );
@@ -231,35 +283,6 @@ const page = {
   minHeight: "100vh",
   background: "#f3f4f6",
   fontFamily: "Arial, sans-serif",
-};
-
-const sidebar = {
-  width: 240,
-  background: "#111827",
-  color: "white",
-  padding: 24,
-};
-
-const logo = {
-  marginBottom: 40,
-};
-
-const nav = {
-  display: "grid",
-  gap: 12,
-};
-
-const link = {
-  color: "#cbd5e1",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-};
-
-const activeLink = {
-  ...link,
-  background: "#2563eb",
-  color: "white",
 };
 
 const main = {
@@ -283,7 +306,8 @@ const subtitle = {
 
 const stats = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
+  gridTemplateColumns:
+    "repeat(3, 1fr)",
   gap: 16,
   marginBottom: 30,
 };
@@ -292,7 +316,8 @@ const statCard = {
   background: "white",
   padding: 22,
   borderRadius: 16,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
@@ -307,7 +332,8 @@ const cardValue = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "420px 1fr",
+  gridTemplateColumns:
+    "420px 1fr",
   gap: 24,
 };
 
@@ -315,7 +341,8 @@ const panel = {
   background: "white",
   borderRadius: 16,
   padding: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const form = {
