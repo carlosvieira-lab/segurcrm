@@ -99,7 +99,7 @@ export default function ClientePage({
     if (!numero) return;
 
     const ramo = prompt(
-      "Ramo (Auto, Casa, Saúde...)"
+      "Ramo"
     );
 
     const seguradora =
@@ -138,26 +138,18 @@ export default function ClientePage({
           },
           body: JSON.stringify({
             client_id: client.id,
-
             policy_number: numero,
-
             branch: ramo,
-
             insurer_name:
               seguradora,
-
             annual_premium:
               premio,
-
             commission_per_payment:
               commissionPerPayment,
-
             payment_frequency:
               fracionamento,
-
             start_date:
               dataInicio,
-
             renewal_date:
               renovacao,
           }),
@@ -236,22 +228,6 @@ export default function ClientePage({
     )
       return;
 
-    const dataInicio = prompt(
-      "Data início",
-      policy.start_date || ""
-    );
-
-    if (dataInicio === null)
-      return;
-
-    const renovacao = prompt(
-      "Renovação",
-      policy.renewal_date || ""
-    );
-
-    if (renovacao === null)
-      return;
-
     let insurer_id =
       policy.insurer_id || null;
 
@@ -319,14 +295,6 @@ export default function ClientePage({
 
           payment_frequency:
             fracionamento,
-
-          start_date:
-            dataInicio ||
-            null,
-
-          renewal_date:
-            renovacao ||
-            null,
         })
         .eq("id", policy.id);
 
@@ -342,12 +310,56 @@ export default function ClientePage({
     policyId,
     status
   ) {
-    await supabase
-      .from("policies")
-      .update({
-        status,
-      })
-      .eq("id", policyId);
+    const response =
+      await fetch(
+        "/api/update-policy-status",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            policy_id: policyId,
+            status,
+          }),
+        }
+      );
+
+    if (!response.ok) {
+      alert(
+        "Erro ao atualizar estado"
+      );
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function markPolicyPaid(
+    policyId
+  ) {
+    const response =
+      await fetch(
+        "/api/mark-policy-paid",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            policy_id: policyId,
+          }),
+        }
+      );
+
+    if (!response.ok) {
+      alert(
+        "Erro ao marcar pagamento"
+      );
+      return;
+    }
 
     window.location.reload();
   }
@@ -440,8 +452,7 @@ export default function ClientePage({
                         Prémio comercial anual:
                       </strong>{" "}
                       {policy.annual_premium ||
-                        0}{" "}
-                      €
+                        0} €
                     </p>
 
                     <p>
@@ -449,8 +460,7 @@ export default function ClientePage({
                         Comissão pagamento:
                       </strong>{" "}
                       {policy.commission_per_payment ||
-                        0}{" "}
-                      €
+                        0} €
                     </p>
 
                     <p>
@@ -459,8 +469,7 @@ export default function ClientePage({
                       </strong>{" "}
                       {calculateAnnualCommission(
                         policy
-                      )}{" "}
-                      €
+                      )} €
                     </p>
 
                     <p>
@@ -541,6 +550,11 @@ export default function ClientePage({
                           background:
                             "#2563eb",
                         }}
+                        onClick={() =>
+                          markPolicyPaid(
+                            policy.id
+                          )
+                        }
                       >
                         Marcar pago
                       </button>
