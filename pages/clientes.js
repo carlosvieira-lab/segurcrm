@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -27,6 +27,8 @@ export async function getServerSideProps() {
 }
 
 export default function Clientes({ clients }) {
+  const [search, setSearch] = useState("");
+
   const [name, setName] = useState("");
   const [nif, setNif] = useState("");
   const [phone, setPhone] = useState("");
@@ -37,6 +39,27 @@ export default function Clientes({ clients }) {
   const [birthDate, setBirthDate] = useState("");
   const [licenseDate, setLicenseDate] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const filteredClients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    if (!term) return clients;
+
+    return clients.filter((client) => {
+      const searchable = [
+        client.name,
+        client.nif,
+        client.phone,
+        client.email,
+        client.city,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(term);
+    });
+  }, [clients, search]);
 
   async function createClientRecord(e) {
     e.preventDefault();
@@ -73,52 +96,50 @@ export default function Clientes({ clients }) {
         <header style={header}>
           <div>
             <h1 style={title}>Clientes</h1>
-
             <p style={subtitle}>
-              Gestão da carteira de clientes.
+              Pesquisa por nome, NIF, telefone ou email e abre a ficha 360º.
             </p>
           </div>
         </header>
 
         <section style={stats}>
-          <StatCard
-            title="Total de clientes"
-            value={clients.length}
-          />
+          <StatCard title="Total de clientes" value={clients.length} />
 
           <StatCard
             title="Ativos"
-            value={
-              clients.filter(
-                (c) => c.status === "ativo"
-              ).length
-            }
+            value={clients.filter((c) => c.status === "ativo").length}
           />
 
           <StatCard
             title="Potenciais"
-            value={
-              clients.filter(
-                (c) => c.status === "potencial"
-              ).length
-            }
+            value={clients.filter((c) => c.status === "potencial").length}
           />
+        </section>
+
+        <section style={searchPanel}>
+          <label style={label}>Pesquisar cliente</label>
+
+          <input
+            placeholder="Escreve nome, apelido, NIF, telefone ou email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={searchInput}
+          />
+
+          <p style={smallText}>
+            Resultados encontrados: {filteredClients.length}
+          </p>
         </section>
 
         <section style={grid}>
           <div style={panel}>
             <h2>Novo Cliente</h2>
 
-            <form
-              onSubmit={createClientRecord}
-              style={form}
-            >
+            <form onSubmit={createClientRecord} style={form}>
               <input
                 placeholder="Nome"
                 value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
+                onChange={(e) => setName(e.target.value)}
                 required
                 style={input}
               />
@@ -126,90 +147,65 @@ export default function Clientes({ clients }) {
               <input
                 placeholder="NIF"
                 value={nif}
-                onChange={(e) =>
-                  setNif(e.target.value)
-                }
+                onChange={(e) => setNif(e.target.value)}
                 style={input}
               />
 
               <input
                 placeholder="Telefone"
                 value={phone}
-                onChange={(e) =>
-                  setPhone(e.target.value)
-                }
+                onChange={(e) => setPhone(e.target.value)}
                 style={input}
               />
 
               <input
                 placeholder="Email"
                 value={email}
-                onChange={(e) =>
-                  setEmail(e.target.value)
-                }
+                onChange={(e) => setEmail(e.target.value)}
                 style={input}
               />
 
               <input
                 placeholder="Morada"
                 value={address}
-                onChange={(e) =>
-                  setAddress(e.target.value)
-                }
+                onChange={(e) => setAddress(e.target.value)}
                 style={input}
               />
 
               <input
                 placeholder="Cidade"
                 value={city}
-                onChange={(e) =>
-                  setCity(e.target.value)
-                }
+                onChange={(e) => setCity(e.target.value)}
                 style={input}
               />
 
               <input
                 placeholder="IBAN"
                 value={iban}
-                onChange={(e) =>
-                  setIban(e.target.value)
-                }
+                onChange={(e) => setIban(e.target.value)}
                 style={input}
               />
 
-              <label style={label}>
-                Data de nascimento
-              </label>
+              <label style={label}>Data de nascimento</label>
 
               <input
                 type="date"
                 value={birthDate}
-                onChange={(e) =>
-                  setBirthDate(e.target.value)
-                }
+                onChange={(e) => setBirthDate(e.target.value)}
                 style={input}
               />
 
-              <label style={label}>
-                Início da carta de condução
-              </label>
+              <label style={label}>Início da carta de condução</label>
 
               <input
                 type="date"
                 value={licenseDate}
-                onChange={(e) =>
-                  setLicenseDate(e.target.value)
-                }
+                onChange={(e) => setLicenseDate(e.target.value)}
                 style={input}
               />
 
-              <button
-                style={button}
-                disabled={saving}
-              >
-                {saving
-                  ? "A guardar..."
-                  : "Guardar cliente"}
+              <button style={button} disabled={saving}>
+                {saving ? "A guardar..." : "Guardar cliente"}
               </button>
             </form>
           </div>
@@ -217,46 +213,36 @@ export default function Clientes({ clients }) {
           <div style={panel}>
             <h2>Lista de clientes</h2>
 
-            {clients.length === 0 ? (
-              <p style={muted}>
-                Ainda não existem clientes.
-              </p>
+            {filteredClients.length === 0 ? (
+              <p style={muted}>Nenhum cliente encontrado.</p>
             ) : (
               <div style={list}>
-                {clients.map((client) => (
-                  <div
-                    key={client.id}
-                    style={clientCard}
-                  >
+                {filteredClients.map((client) => (
+                  <div key={client.id} style={clientCard}>
                     <div>
-                      <Link
-                        href={`/clientes/${client.id}`}
-                        style={clientName}
-                      >
-                        {client.name}
+                      <Link href={`/clientes/${client.id}`} style={clientName}>
+                        {client.name || "Sem nome"}
                       </Link>
 
                       <p style={smallText}>
-                        {client.nif ||
-                          "Sem NIF"}{" "}
-                        ·{" "}
-                        {client.phone ||
-                          "Sem telefone"}{" "}
-                        ·{" "}
-                        {client.email ||
-                          "Sem email"}
+                        NIF: {client.nif || "-"} · Tel:{" "}
+                        {client.phone || "-"} · Email: {client.email || "-"}
                       </p>
 
                       <p style={smallText}>
-                        {client.city ||
-                          "Sem cidade"}
+                        {client.city || "Sem cidade"}
                       </p>
                     </div>
 
-                    <span style={statusBadge}>
-                      {client.status ||
-                        "ativo"}
-                    </span>
+                    <div style={rightSide}>
+                      <span style={statusBadge}>
+                        {client.status || "ativo"}
+                      </span>
+
+                      <Link href={`/clientes/${client.id}`} style={openButton}>
+                        Abrir ficha
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -272,7 +258,6 @@ function StatCard({ title, value }) {
   return (
     <div style={statCard}>
       <p style={cardLabel}>{title}</p>
-
       <h2 style={cardValue}>{value}</h2>
     </div>
   );
@@ -306,18 +291,16 @@ const subtitle = {
 
 const stats = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(3, 1fr)",
+  gridTemplateColumns: "repeat(3, 1fr)",
   gap: 16,
-  marginBottom: 30,
+  marginBottom: 24,
 };
 
 const statCard = {
   background: "white",
   padding: 22,
   borderRadius: 16,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
@@ -330,10 +313,27 @@ const cardValue = {
   margin: "10px 0 0",
 };
 
+const searchPanel = {
+  background: "white",
+  borderRadius: 16,
+  padding: 24,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const searchInput = {
+  width: "100%",
+  padding: 16,
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
+  marginTop: 8,
+  boxSizing: "border-box",
+};
+
 const grid = {
   display: "grid",
-  gridTemplateColumns:
-    "420px 1fr",
+  gridTemplateColumns: "420px 1fr",
   gap: 24,
 };
 
@@ -341,8 +341,7 @@ const panel = {
   background: "white",
   borderRadius: 16,
   padding: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const form = {
@@ -407,5 +406,22 @@ const statusBadge = {
   padding: "6px 12px",
   borderRadius: 999,
   fontSize: 12,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const rightSide = {
+  display: "grid",
+  gap: 8,
+  justifyItems: "end",
+};
+
+const openButton = {
+  background: "#111827",
+  color: "white",
+  padding: "8px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontSize: 13,
   fontWeight: "bold",
 };
