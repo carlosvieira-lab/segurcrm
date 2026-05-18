@@ -1,27 +1,111 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
+import { createClient } from "@supabase/supabase-js";
 
-export default function Sidebar({ active }) {
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://accmdxprsetsqsrepflq.supabase.co";
+
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
+
+const supabase = createClient(
+  supabaseUrl,
+  supabaseKey
+);
+
+export default function Sidebar({
+  active,
+}) {
+  const router = useRouter();
+
+  async function logout() {
+    await supabase.auth.signOut();
+
+    router.push("/login");
+  }
+
   return (
     <aside style={sidebar}>
-      <h2 style={logo}>SegurCRM</h2>
+      <div>
+        <h2 style={logo}>
+          SegurCRM
+        </h2>
 
-      <nav style={nav}>
-        <NavLink href="/" label="Dashboard" active={active === "dashboard"} />
-        <NavLink href="/clientes" label="Clientes" active={active === "clientes"} />
-        <NavLink href="/apolices" label="Apólices" active={active === "apolices"} />
-        <NavLink href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
-        <NavLink href="/financeiro" label="Financeiro" active={active === "financeiro"} />
-        <NavLink href="/tarefas" label="Tarefas" active={active === "tarefas"} />
-        <NavLink href="/oportunidades" label="Oportunidades" active={active === "oportunidades"} />
-        <NavLink href="/sinistros" label="Sinistros" active={active === "sinistros"} />
-      </nav>
+        <nav style={nav}>
+          <MenuItem
+            href="/"
+            label="Dashboard"
+            active={
+              active ===
+              "dashboard"
+            }
+          />
+
+          <MenuItem
+            href="/clientes"
+            label="Clientes"
+            active={
+              active ===
+              "clientes"
+            }
+          />
+
+          <MenuItem
+            href="/sinistros"
+            label="Sinistros"
+            active={
+              active ===
+              "sinistros"
+            }
+          />
+
+          <MenuItem
+            href="/comissoes"
+            label="Comissões"
+            active={
+              active ===
+              "comissoes"
+            }
+          />
+
+          <MenuItem
+            href="/agenda"
+            label="Agenda"
+            active={
+              active ===
+              "agenda"
+            }
+          />
+        </nav>
+      </div>
+
+      <button
+        style={logoutButton}
+        onClick={logout}
+      >
+        Sair
+      </button>
     </aside>
   );
 }
 
-function NavLink({ href, label, active }) {
+function MenuItem({
+  href,
+  label,
+  active,
+}) {
   return (
-    <Link href={href} style={active ? activeLink : link}>
+    <Link
+      href={href}
+      style={{
+        ...menuItem,
+        ...(active
+          ? activeMenuItem
+          : {}),
+      }}
+    >
       {label}
     </Link>
   );
@@ -32,26 +116,41 @@ const sidebar = {
   background: "#111827",
   color: "white",
   padding: 24,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent:
+    "space-between",
 };
 
 const logo = {
   marginBottom: 40,
+  fontSize: 28,
 };
 
 const nav = {
-  display: "grid",
+  display: "flex",
+  flexDirection: "column",
   gap: 12,
 };
 
-const link = {
-  color: "#cbd5e1",
+const menuItem = {
+  color: "white",
   textDecoration: "none",
   padding: "12px 14px",
   borderRadius: 10,
+  fontWeight: "bold",
 };
 
-const activeLink = {
-  ...link,
+const activeMenuItem = {
   background: "#2563eb",
+};
+
+const logoutButton = {
+  background: "#dc2626",
   color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
