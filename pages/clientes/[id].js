@@ -338,6 +338,20 @@ export default function ClientePage({
     window.location.reload();
   }
 
+  async function updatePolicyStatus(
+    policyId,
+    status
+  ) {
+    await supabase
+      .from("policies")
+      .update({
+        status,
+      })
+      .eq("id", policyId);
+
+    window.location.reload();
+  }
+
   return (
     <div style={page}>
       <Sidebar active="clientes" />
@@ -466,18 +480,71 @@ export default function ClientePage({
                       )}
                     </p>
 
-                    <button
-                      style={
-                        editButton
-                      }
-                      onClick={() =>
-                        editPolicy(
-                          policy
-                        )
-                      }
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap: 8,
+                        flexWrap:
+                          "wrap",
+                        marginTop: 16,
+                      }}
                     >
-                      Editar
-                    </button>
+                      <button
+                        style={
+                          editButton
+                        }
+                        onClick={() =>
+                          editPolicy(
+                            policy
+                          )
+                        }
+                      >
+                        Editar
+                      </button>
+
+                      <button
+                        style={{
+                          ...smallButton,
+                          background:
+                            "#16a34a",
+                        }}
+                        onClick={() =>
+                          updatePolicyStatus(
+                            policy.id,
+                            "ativa"
+                          )
+                        }
+                      >
+                        Em vigor
+                      </button>
+
+                      <button
+                        style={{
+                          ...smallButton,
+                          background:
+                            "#dc2626",
+                        }}
+                        onClick={() =>
+                          updatePolicyStatus(
+                            policy.id,
+                            "anulada"
+                          )
+                        }
+                      >
+                        Anulada
+                      </button>
+
+                      <button
+                        style={{
+                          ...smallButton,
+                          background:
+                            "#2563eb",
+                        }}
+                      >
+                        Marcar pago
+                      </button>
+                    </div>
                   </div>
                 )
               )}
@@ -530,13 +597,22 @@ const button = {
 };
 
 const editButton = {
-  marginTop: 14,
   background: "#2563eb",
   color: "white",
   border: "none",
   padding: "10px 14px",
   borderRadius: 10,
   cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const smallButton = {
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const card = {
@@ -577,4 +653,3 @@ const badge = {
   fontSize: 12,
   fontWeight: "bold",
 };
-                  
