@@ -10,100 +10,47 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
 
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export default function Sidebar({
-  active,
-}) {
+export default function Sidebar({ active }) {
   const router = useRouter();
 
   async function logout() {
     await supabase.auth.signOut();
-
     router.push("/login");
   }
 
   return (
     <aside style={sidebar}>
       <div>
-        <h2 style={logo}>
-          SegurCRM
-        </h2>
+        <h2 style={logo}>SegurCRM</h2>
 
         <nav style={nav}>
-          <MenuItem
-            href="/"
-            label="Dashboard"
-            active={
-              active ===
-              "dashboard"
-            }
-          />
-
-          <MenuItem
-            href="/clientes"
-            label="Clientes"
-            active={
-              active ===
-              "clientes"
-            }
-          />
-
-          <MenuItem
-            href="/sinistros"
-            label="Sinistros"
-            active={
-              active ===
-              "sinistros"
-            }
-          />
-
-          <MenuItem
-            href="/comissoes"
-            label="Comissões"
-            active={
-              active ===
-              "comissoes"
-            }
-          />
-
-          <MenuItem
-            href="/agenda"
-            label="Agenda"
-            active={
-              active ===
-              "agenda"
-            }
-          />
+          <MenuItem href="/" label="Dashboard" active={active === "dashboard"} />
+          <MenuItem href="/clientes" label="Clientes" active={active === "clientes"} />
+          <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
+          <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
+          <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
+          <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
+          <MenuItem href="/oportunidades" label="Oportunidades" active={active === "oportunidades"} />
+          <MenuItem href="/sinistros" label="Sinistros" active={active === "sinistros"} />
         </nav>
       </div>
 
-      <button
-        style={logoutButton}
-        onClick={logout}
-      >
+      <button style={logoutButton} onClick={logout}>
         Sair
       </button>
     </aside>
   );
 }
 
-function MenuItem({
-  href,
-  label,
-  active,
-}) {
+function MenuItem({ href, label, active }) {
   return (
     <Link
       href={href}
       style={{
         ...menuItem,
-        ...(active
-          ? activeMenuItem
-          : {}),
+        ...(active ? activeMenuItem : {}),
       }}
     >
       {label}
@@ -118,8 +65,8 @@ const sidebar = {
   padding: 24,
   display: "flex",
   flexDirection: "column",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
+  minHeight: "100vh",
 };
 
 const logo = {
