@@ -16,7 +16,6 @@ export async function getServerSideProps() {
     .from("policies")
     .select(`
       *,
-      clients(name),
       insurers(name)
     `);
 
@@ -34,32 +33,88 @@ function formatEuro(value) {
   }).format(Number(value || 0));
 }
 
-export default function Financeiro({ policies }) {
-  const activePolicies = policies.filter(
-    (p) => p.status === "ativa"
-  );
+function annualCommission(policy) {
+  const commission = Number(policy.commission_per_payment || 0);
+  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
 
-  const totalAnnualPremium = activePolicies.reduce(
+  if (frequency === "mensal") return commission * 12;
+  if (frequency === "trimestral") return commission * 4;
+  if (frequency === "semestral") return commission * 2;
+
+  return commission;
+}
+
+export default function Financeiro({ policies }) {
+  const activePolicies = policies.filter((p) => p.status !== "anulada");
+  const cancelledPolicies = policies.filter((p) => p.status === "anulada");
+
+  const activePremium = activePolicies.reduce(
     (sum, p) => sum + Number(p.annual_premium || 0),
     0
   );
 
-  const monthlyEstimate =
-    totalAnnualPremium / 12;
-
-  const quarterlyPolicies = activePolicies.filter(
-    (p) => p.payment_frequency === "trimestral"
+  const cancelledPremium = cancelledPolicies.reduce(
+    (sum, p) => sum + Number(p.annual_premium || 0),
+    0
   );
 
-  const monthlyPolicies = activePolicies.filter(
-    (p) => p.payment_frequency === "mensal"
+  const activeCommission = activePolicies.reduce(
+    (sum, p) => sum + annualCommission(p),
+    0
   );
 
-  const yearlyPolicies = activePolicies.filter(
-    (p) =>
-      p.payment_frequency === "anual" ||
-      !p.payment_frequency
+  const lostCommission = cancelledPolicies.reduce(
+    (sum, p) => sum + annualCommission(p),
+    0
   );
+
+  const monthlyCommissionEstimate = activeCommission / 12;
+
+  const insurerStats = {};
+  const branchStats = {};
+  const frequencyStats = {};
+
+  activePolicies.forEach((policy) => {
+    const insurer = policy.insurers?.name || "Sem seguradora";
+    const branch = policy.branch || "Sem ramo";
+    const frequency = policy.payment_frequency || "anual";
+    const commission = annualCommission(policy);
+    const premium = Number(policy.annual_premium || 0);
+
+    if (!insurerStats[insurer]) {
+      insurerStats[insurer] = {
+        policies: 0,
+        premium: 0,
+        commission: 0,
+      };
+    }
+
+    insurerStats[insurer].policies += 1;
+    insurerStats[insurer].premium += premium;
+    insurerStats[insurer].commission += commission;
+
+    if (!branchStats[branch]) {
+      branchStats[branch] = {
+        policies: 0,
+        premium: 0,
+        commission: 0,
+      };
+    }
+
+    branchStats[branch].policies += 1;
+    branchStats[branch].premium += premium;
+    branchStats[branch].commission += commission;
+
+    if (!frequencyStats[frequency]) {
+      frequencyStats[frequency] = {
+        policies: 0,
+        commission: 0,
+      };
+    }
+
+    frequencyStats[frequency].policies += 1;
+    frequencyStats[frequency].commission += commission;
+  });
 
   return (
     <div style={page}>
@@ -69,138 +124,90 @@ export default function Financeiro({ policies }) {
         <header style={header}>
           <div>
             <h1 style={title}>Financeiro</h1>
-
             <p style={subtitle}>
-              Indicadores financeiros e visão
-              global da carteira.
+              Painel financeiro de prémios comerciais e comissões.
             </p>
           </div>
         </header>
 
         <section style={statsGrid}>
           <StatCard
-            title="Prémio anual em vigor"
-            value={formatEuro(
-              totalAnnualPremium
-            )}
+            title="Prémio comercial em vigor"
+            value={formatEuro(activePremium)}
             color="#16a34a"
           />
 
           <StatCard
-            title="Estimativa mensal"
-            value={formatEuro(
-              monthlyEstimate
-            )}
+            title="Comissão anual em vigor"
+            value={formatEuro(activeCommission)}
             color="#2563eb"
           />
 
           <StatCard
-            title="Apólices mensais"
-            value={monthlyPolicies.length}
+            title="Comissão mensal estimada"
+            value={formatEuro(monthlyCommissionEstimate)}
             color="#7c3aed"
           />
 
           <StatCard
-            title="Apólices trimestrais"
-            value={
-              quarterlyPolicies.length
-            }
-            color="#f59e0b"
+            title="Prémio anulado"
+            value={formatEuro(cancelledPremium)}
+            color="#dc2626"
           />
 
           <StatCard
-            title="Apólices anuais"
-            value={yearlyPolicies.length}
-            color="#dc2626"
+            title="Comissão perdida"
+            value={formatEuro(lostCommission)}
+            color="#991b1b"
           />
         </section>
 
-        <section style={panel}>
-          <h2 style={panelTitle}>
-            Distribuição da carteira
-          </h2>
-
-          <div style={cardsGrid}>
-            <FinanceCard
-              title="Mensal"
-              total={monthlyPolicies.length}
-              color="#7c3aed"
+        <section style={grid2}>
+          <Panel title="Comissão por seguradora">
+            <FinanceTable
+              rows={Object.entries(insurerStats)
+                .sort((a, b) => b[1].commission - a[1].commission)
+                .map(([name, item]) => ({
+                  name,
+                  policies: item.policies,
+                  premium: item.premium,
+                  commission: item.commission,
+                }))}
             />
+          </Panel>
 
-            <FinanceCard
-              title="Trimestral"
-              total={
-                quarterlyPolicies.length
-              }
-              color="#f59e0b"
+          <Panel title="Comissão por ramo">
+            <FinanceTable
+              rows={Object.entries(branchStats)
+                .sort((a, b) => b[1].commission - a[1].commission)
+                .map(([name, item]) => ({
+                  name,
+                  policies: item.policies,
+                  premium: item.premium,
+                  commission: item.commission,
+                }))}
             />
-
-            <FinanceCard
-              title="Anual"
-              total={yearlyPolicies.length}
-              color="#dc2626"
-            />
-          </div>
+          </Panel>
         </section>
 
         <section style={panel}>
-          <h2 style={panelTitle}>
-            Carteira ativa
-          </h2>
+          <h2 style={panelTitle}>Comissão por fracionamento</h2>
 
-          {activePolicies.length === 0 ? (
-            <p style={muted}>
-              Não existem apólices ativas.
-            </p>
+          {Object.keys(frequencyStats).length === 0 ? (
+            <p style={muted}>Sem dados disponíveis.</p>
           ) : (
-            <div style={list}>
-              {activePolicies.map((policy) => (
-                <div
-                  key={policy.id}
-                  style={policyCard}
-                >
-                  <div>
-                    <h3 style={policyTitle}>
-                      {policy.branch ||
-                        "Sem ramo"}
+            <div style={frequencyGrid}>
+              {Object.entries(frequencyStats)
+                .sort((a, b) => b[1].commission - a[1].commission)
+                .map(([frequency, item]) => (
+                  <div key={frequency} style={frequencyCard}>
+                    <p style={cardLabel}>{frequency}</p>
+                    <h3 style={frequencyValue}>
+                      {formatEuro(item.commission)}
                     </h3>
-
-                    <p style={smallText}>
-                      Cliente:{" "}
-                      {policy.clients?.name ||
-                        "-"}
-                    </p>
-
-                    <p style={smallText}>
-                      Seguradora:{" "}
-                      {policy.insurers?.name ||
-                        "-"}
-                    </p>
-
-                    <p style={smallText}>
-                      Apólice:{" "}
-                      {policy.policy_number ||
-                        "-"}
-                    </p>
-
-                    <p style={smallText}>
-                      Fracionamento:{" "}
-                      {policy.payment_frequency ||
-                        "anual"}
-                    </p>
+                    <p style={muted}>{item.policies} apólices</p>
                   </div>
-
-                  <div
-                    style={premiumContainer}
-                  >
-                    <span style={premium}>
-                      {formatEuro(
-                        policy.annual_premium
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </section>
@@ -209,46 +216,48 @@ export default function Financeiro({ policies }) {
   );
 }
 
-function StatCard({
-  title,
-  value,
-  color,
-}) {
+function StatCard({ title, value, color }) {
   return (
     <div style={statCard}>
       <p style={cardLabel}>{title}</p>
-
-      <h2
-        style={{
-          ...cardValue,
-          color,
-        }}
-      >
-        {value}
-      </h2>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
 }
 
-function FinanceCard({
-  title,
-  total,
-  color,
-}) {
+function Panel({ title, children }) {
   return (
-    <div
-      style={{
-        ...financeCard,
-        borderTop: `5px solid ${color}`,
-      }}
-    >
-      <h3 style={financeTitle}>
-        {title}
-      </h3>
+    <section style={panel}>
+      <h2 style={panelTitle}>{title}</h2>
+      {children}
+    </section>
+  );
+}
 
-      <p style={financeValue}>
-        {total}
-      </p>
+function FinanceTable({ rows }) {
+  if (rows.length === 0) {
+    return <p style={muted}>Sem dados disponíveis.</p>;
+  }
+
+  return (
+    <div style={table}>
+      <div style={tableHeader}>
+        <span>Nome</span>
+        <span>Apólices</span>
+        <span>Prémio</span>
+        <span>Comissão</span>
+      </div>
+
+      {rows.map((row) => (
+        <div key={row.name} style={tableRow}>
+          <strong>{row.name}</strong>
+          <span>{row.policies}</span>
+          <span>{formatEuro(row.premium)}</span>
+          <strong style={{ color: "#2563eb" }}>
+            {formatEuro(row.commission)}
+          </strong>
+        </div>
+      ))}
     </div>
   );
 }
@@ -281,18 +290,16 @@ const subtitle = {
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit,minmax(220px,1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 18,
   marginBottom: 30,
 };
 
 const statCard = {
   background: "white",
+  padding: 24,
   borderRadius: 18,
-  padding: 22,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
@@ -301,8 +308,14 @@ const cardLabel = {
 };
 
 const cardValue = {
-  marginTop: 12,
   fontSize: 28,
+  marginTop: 12,
+};
+
+const grid2 = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 24,
 };
 
 const panel = {
@@ -310,8 +323,7 @@ const panel = {
   borderRadius: 18,
   padding: 24,
   marginBottom: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const panelTitle = {
@@ -319,64 +331,49 @@ const panelTitle = {
   marginBottom: 20,
 };
 
-const cardsGrid = {
+const table = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(3,1fr)",
-  gap: 18,
+  gap: 8,
 };
 
-const financeCard = {
-  background: "#f9fafb",
-  borderRadius: 16,
-  padding: 24,
-};
-
-const financeTitle = {
-  marginTop: 0,
-  marginBottom: 10,
-};
-
-const financeValue = {
-  fontSize: 36,
+const tableHeader = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.8fr 1fr 1fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
   fontWeight: "bold",
-  margin: 0,
+  fontSize: 14,
+};
+
+const tableRow = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.8fr 1fr 1fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+};
+
+const frequencyGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+};
+
+const frequencyCard = {
+  background: "#f9fafb",
+  borderRadius: 14,
+  padding: 20,
+};
+
+const frequencyValue = {
+  margin: "10px 0",
+  fontSize: 26,
+  color: "#2563eb",
 };
 
 const muted = {
   color: "#6b7280",
 };
-
-const list = {
-  display: "grid",
-  gap: 16,
-};
-
-const policyCard = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 18,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-};
-
-const policyTitle = {
-  margin: 0,
-};
-
-const smallText = {
-  color: "#6b7280",
-  margin: "6px 0",
-};
-
-const premiumContainer = {
-  textAlign: "right",
-};
-
-const premium = {
-  fontSize: 24,
-  fontWeight: "bold",
-  color: "#16a34a",
-};
-
