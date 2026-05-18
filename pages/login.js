@@ -15,20 +15,26 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export default function Login() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(
+    "carlos.vieira@lojasegurostrajouce.com"
+  );
+
   const [password, setPassword] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
+
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
     setLoading(false);
 
@@ -46,79 +52,128 @@ export default function Login() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    const { error } =
+      await supabase.auth.signUp({
+        email,
+        password,
+      });
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    alert("Utilizador criado. Confirma o email antes de entrar.");
+    alert(
+      "Utilizador criado. Confirma o email antes de entrar."
+    );
   }
 
   async function recoverPassword() {
     if (!email) {
-      alert("Escreve primeiro o teu email.");
+      alert(
+        "Escreve primeiro o teu email."
+      );
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + "/login",
-    });
+    const { error } =
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        {
+          redirectTo:
+            window.location.origin +
+            "/login",
+        }
+      );
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    alert("Email de recuperação enviado.");
+    alert(
+      "Email de recuperação enviado."
+    );
   }
 
   return (
     <div style={page}>
-      <form style={card} onSubmit={handleLogin}>
-        <h1 style={title}>SegurCRM</h1>
+      <form
+        style={card}
+        onSubmit={handleLogin}
+      >
+        <h1 style={title}>
+          SegurCRM
+        </h1>
 
-        <p style={subtitle}>Login seguro</p>
+        <p style={subtitle}>
+          Login seguro
+        </p>
 
         <input
           style={input}
           type="email"
           placeholder="Email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) =>
+            setEmail(e.target.value)
+          }
         />
 
         <div style={passwordBox}>
           <input
             style={passwordInput}
-            type={showPassword ? "text" : "password"}
+            type={
+              showPassword
+                ? "text"
+                : "password"
+            }
             placeholder="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) =>
+              setPassword(
+                e.target.value
+              )
+            }
           />
 
           <button
             type="button"
             style={eyeButton}
-            onClick={() => setShowPassword(!showPassword)}
+            onClick={() =>
+              setShowPassword(
+                !showPassword
+              )
+            }
           >
-            {showPassword ? "🙈" : "👁️"}
+            {showPassword
+              ? "🙈"
+              : "👁️"}
           </button>
         </div>
 
-        <button style={button} disabled={loading}>
-          {loading ? "A entrar..." : "Entrar"}
+        <button
+          style={button}
+          disabled={loading}
+        >
+          {loading
+            ? "A entrar..."
+            : "Entrar"}
         </button>
 
-        <button type="button" style={secondaryButton} onClick={createUser}>
+        <button
+          type="button"
+          style={secondaryButton}
+          onClick={createUser}
+        >
           Criar utilizador
         </button>
 
-        <button type="button" style={linkButton} onClick={recoverPassword}>
+        <button
+          type="button"
+          style={linkButton}
+          onClick={recoverPassword}
+        >
           Recuperar password
         </button>
       </form>
@@ -132,7 +187,8 @@ const page = {
   alignItems: "center",
   justifyContent: "center",
   background: "#111827",
-  fontFamily: "Arial, sans-serif",
+  fontFamily:
+    "Arial, sans-serif",
 };
 
 const card = {
