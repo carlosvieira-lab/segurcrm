@@ -113,6 +113,10 @@ export default function ClientePage({
       "Ramo"
     );
 
+    const matricula = prompt(
+      "Matrícula"
+    );
+
     const seguradora =
       prompt("Seguradora") || "";
 
@@ -155,6 +159,8 @@ export default function ClientePage({
             client_id: client.id,
             policy_number: numero,
             branch: ramo,
+            license_plate:
+              matricula,
             insurer_name:
               seguradora,
             annual_premium:
@@ -202,6 +208,14 @@ export default function ClientePage({
     );
 
     if (ramo === null) return;
+
+    const matricula = prompt(
+      "Matrícula",
+      policy.license_plate || ""
+    );
+
+    if (matricula === null)
+      return;
 
     const seguradora = prompt(
       "Seguradora",
@@ -325,6 +339,9 @@ export default function ClientePage({
           policy_number: numero,
 
           branch: ramo,
+
+          license_plate:
+            matricula,
 
           insurer_id,
 
@@ -470,6 +487,14 @@ export default function ClientePage({
                     Nº:
                   </strong>{" "}
                   {policy.policy_number ||
+                    "-"}
+                </p>
+
+                <p>
+                  <strong>
+                    Matrícula:
+                  </strong>{" "}
+                  {policy.license_plate ||
                     "-"}
                 </p>
 
