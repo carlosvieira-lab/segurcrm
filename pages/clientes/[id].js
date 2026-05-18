@@ -16,6 +16,11 @@ export async function getServerSideProps({ params }) {
   const { id } = params;
 
   const { data: client } = await supabase
+    const { data: opportunities } = await supabase
+  .from("opportunities")
+  .select("*")
+  .eq("client_id", id)
+  .order("created_at", { ascending: false });
     .from("clients")
     .select("*")
     .eq("id", id)
@@ -48,6 +53,7 @@ export async function getServerSideProps({ params }) {
       policies: policies || [],
       claims: claims || [],
       tasks: tasks || [],
+      opportunities: opportunities || [],
     },
   };
 }
@@ -95,7 +101,13 @@ function calculateAge(date) {
   return `${age} anos`;
 }
 
-export default function ClientePage({ client, policies, claims, tasks }) {
+export default function ClientePage({
+  client,
+  policies,
+  claims,
+  tasks,
+  opportunities,
+}) {
   if (!client) {
     return <div>Cliente não encontrado.</div>;
   }
@@ -104,6 +116,9 @@ export default function ClientePage({ client, policies, claims, tasks }) {
   const cancelledPolicies = policies.filter((p) => p.status === "anulada").length;
   const openClaims = claims.filter((c) => c.status !== "ENCERRADO").length;
   const openTasks = tasks.filter((t) => t.status !== "concluida").length;
+  const openOpportunities = opportunities.filter(
+  (o) => o.status !== "fechada"
+).length;
 
   function clientRating() {
     if (activePolicies >= 5) return "TOP";
@@ -401,6 +416,9 @@ if (seguradoraOpcao === "6") {
             <div style={blueBox}>Sinistros abertos: {openClaims}</div>
             <div style={orangeBox}>Tarefas abertas: {openTasks}</div>
             <div style={purpleBox}>Classificação: {clientRating()}</div>
+                <div style={pinkBox}>
+  Oportunidades: {openOpportunities}
+</div>
           </div>
         </section>
 
@@ -585,6 +603,35 @@ if (seguradoraOpcao === "6") {
             </div>
           )}
         </section>
+            </section>
+
+<section style={card}>
+  <h2>Oportunidades comerciais</h2>
+
+  {opportunities.length === 0 ? (
+    <p>Este cliente não tem oportunidades comerciais.</p>
+  ) : (
+    <div style={policiesGrid}>
+      {opportunities.map((opportunity) => (
+        <div key={opportunity.id} style={policyCard}>
+          <div style={policyTop}>
+            <h3>{opportunity.branch || "Sem ramo"}</h3>
+
+            <span style={badge}>
+              {opportunity.status || "aberta"}
+            </span>
+          </div>
+
+          <p><strong>Seguradora atual:</strong> {opportunity.current_insurer || "-"}</p>
+          <p><strong>Prémio atual:</strong> {opportunity.current_premium || 0} €</p>
+          <p><strong>Notas:</strong> {opportunity.notes || "-"}</p>
+        </div>
+      ))}
+    </div>
+  )}
+</section>
+
+</main>
       </main>
     </div>
   );
@@ -694,6 +741,13 @@ const orangeBox = {
 };
 
 const purpleBox = {
+  const pinkBox = {
+  background: "#fce7f3",
+  color: "#9d174d",
+  padding: "12px 18px",
+  borderRadius: 12,
+  fontWeight: "bold",
+};
   background: "#ede9fe",
   color: "#5b21b6",
   padding: "12px 18px",
