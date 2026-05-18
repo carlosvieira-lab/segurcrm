@@ -20,26 +20,13 @@ export async function getServerSideProps() {
       insurers(name)
     `);
 
-  const { data: claims } = await supabase
-    .from("claims")
-    .select(`
-      *,
-      clients(name)
-    `);
+  const { data: claims } = await supabase.from("claims").select("*");
 
-  const { data: tasks } = await supabase
-    .from("tasks")
-    .select(`
-      *,
-      clients(name)
-    `);
+  const { data: tasks } = await supabase.from("tasks").select("*");
 
   const { data: opportunities } = await supabase
-    .from("opportunities")
-    .select(`
-      *,
-      clients(name)
-    `);
+    .from("external_policies")
+    .select("*");
 
   return {
     props: {
@@ -58,51 +45,19 @@ function formatEuro(value) {
   }).format(Number(value || 0));
 }
 
-function formatDate(date) {
-  if (!date) return "-";
-
-  return new Date(date).toLocaleDateString("pt-PT");
+function getYear(date) {
+  if (!date) return "Sem ano";
+  return new Date(date).getFullYear().toString();
 }
 
-function daysUntil(date) {
-  if (!date) return null;
-
-  const today = new Date();
-  const target = new Date(date);
-
-  const diff =
-    target.getTime() - today.getTime();
-
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+function percent(value, max) {
+  if (!max || max === 0) return "0%";
+  return `${Math.max(5, Math.round((value / max) * 100))}%`;
 }
 
-export default function Dashboard({
-  policies,
-  claims,
-  tasks,
-  opportunities,
-}) {
-  const activePolicies = policies.filter(
-    (p) => p.status !== "anulada"
-  );
-
-  const cancelledPolicies = policies.filter(
-    (p) => p.status === "anulada"
-  );
-
-  const openClaims = claims.filter(
-    (c) => c.status !== "ENCERRADO"
-  );
-
-  const urgentTasks = tasks.filter(
-    (t) =>
-      t.priority === "URGENTE" ||
-      t.priority === "MUITO URGENTE"
-  );
-
-  const openOpportunities = opportunities.filter(
-    (o) => o.status !== "fechada"
-  );
+export default function Dashboard({ policies, claims, tasks, opportunities }) {
+  const activePolicies = policies.filter((p) => p.status !== "anulada");
+  const cancelledPolicies = policies.filter((p) => p.status === "anulada");
 
   const activeRevenue = activePolicies.reduce(
     (sum, p) => sum + Number(p.annual_premium || 0),
@@ -114,226 +69,170 @@ export default function Dashboard({
     0
   );
 
-  const renewalsSoon = activePolicies.filter((p) => {
-    const days = daysUntil(p.renewal_date);
+  const openClaims = claims.filter((c) => c.status !== "ENCERRADO");
 
-    return days !== null && days <= 30 && days >= 0;
-  });
+  const urgentTasks = tasks.filter(
+    (t) => t.priority === "URGENTE" || t.priority === "MUITO URGENTE"
+  );
+
+  const openOpportunities = opportunities.filter(
+    (o) => o.status !== "ganho" && o.status !== "perdido"
+  );
 
   const insurerStats = {};
+  const yearlyStats = {};
+  const branchStats = {};
 
-  activePolicies.forEach((policy) => {
-    const insurer =
-      policy.insurers?.name ||
-      "Sem seguradora";
+  policies.forEach((policy) => {
+    const insurer = policy.insurers?.name || "Sem seguradora";
+    const branch = policy.branch || "Sem ramo";
+    const premium = Number(policy.annual_premium || 0);
 
-    if (!insurerStats[insurer]) {
-      insurerStats[insurer] = {
-        count: 0,
-        premium: 0,
+    if (!insurerStats[insurer]) insurerStats[insurer] = 0;
+    if (policy.status !== "anulada") insurerStats[insurer] += premium;
+
+    if (!branchStats[branch]) branchStats[branch] = 0;
+    if (policy.status !== "anulada") branchStats[branch] += premium;
+
+    const startYear = getYear(policy.start_date || policy.created_at);
+
+    if (!yearlyStats[startYear]) {
+      yearlyStats[startYear] = {
+        newPremium: 0,
+        cancelledPremium: 0,
       };
     }
 
-    insurerStats[insurer].count += 1;
+    yearlyStats[startYear].newPremium += premium;
 
-    insurerStats[insurer].premium += Number(
-      policy.annual_premium || 0
-    );
+    if (policy.cancelled_at) {
+      const cancelledYear = getYear(policy.cancelled_at);
+
+      if (!yearlyStats[cancelledYear]) {
+        yearlyStats[cancelledYear] = {
+          newPremium: 0,
+          cancelledPremium: 0,
+        };
+      }
+
+      yearlyStats[cancelledYear].cancelledPremium += premium;
+    }
   });
 
-  const topInsurers = Object.entries(
-    insurerStats
-  )
-    .sort(
-      (a, b) =>
-        b[1].premium - a[1].premium
-    )
+  const topInsurers = Object.entries(insurerStats)
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
+
+  const topBranches = Object.entries(branchStats)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const years = Object.keys(yearlyStats).sort((a, b) => Number(b) - Number(a));
+
+  const maxInsurerValue = Math.max(...topInsurers.map(([, value]) => value), 0);
+  const maxBranchValue = Math.max(...topBranches.map(([, value]) => value), 0);
+  const maxYearValue = Math.max(
+    ...years.map((year) => yearlyStats[year].newPremium),
+    0
+  );
 
   return (
     <div style={page}>
       <Sidebar active="dashboard" />
 
       <main style={main}>
-        <div style={header}>
+        <header style={header}>
           <div>
-            <h1 style={title}>
-              Dashboard Executivo
-            </h1>
-
-            <p style={subtitle}>
-              Operação global da mediadora
-            </p>
+            <h1 style={title}>Dashboard Executivo</h1>
+            <p style={subtitle}>Visão global da operação da mediadora.</p>
           </div>
-        </div>
+        </header>
 
         <section style={statsGrid}>
-          <StatCard
-            title="Apólices em vigor"
-            value={activePolicies.length}
-            color="#166534"
-          />
+          <StatCard title="Apólices em vigor" value={activePolicies.length} color="#166534" />
+          <StatCard title="Apólices anuladas" value={cancelledPolicies.length} color="#991b1b" />
+          <StatCard title="Receita ativa" value={formatEuro(activeRevenue)} color="#166534" />
+          <StatCard title="Receita perdida" value={formatEuro(lostRevenue)} color="#991b1b" />
+          <StatCard title="Sinistros abertos" value={openClaims.length} color="#1d4ed8" />
+          <StatCard title="Tarefas urgentes" value={urgentTasks.length} color="#9a3412" />
+          <StatCard title="Oportunidades" value={openOpportunities.length} color="#9d174d" />
+        </section>
 
-          <StatCard
-            title="Apólices anuladas"
-            value={cancelledPolicies.length}
-            color="#991b1b"
-          />
+        <section style={grid2}>
+          <ChartCard title="Receita por seguradora">
+            {topInsurers.length === 0 ? (
+              <p style={muted}>Sem dados.</p>
+            ) : (
+              topInsurers.map(([name, value]) => (
+                <BarRow
+                  key={name}
+                  label={name}
+                  value={formatEuro(value)}
+                  width={percent(value, maxInsurerValue)}
+                  color="#2563eb"
+                />
+              ))
+            )}
+          </ChartCard>
 
-          <StatCard
-            title="Receita ativa"
-            value={formatEuro(activeRevenue)}
-            color="#166534"
-          />
-
-          <StatCard
-            title="Receita perdida"
-            value={formatEuro(lostRevenue)}
-            color="#991b1b"
-          />
-
-          <StatCard
-            title="Sinistros abertos"
-            value={openClaims.length}
-            color="#1d4ed8"
-          />
-
-          <StatCard
-            title="Tarefas urgentes"
-            value={urgentTasks.length}
-            color="#9a3412"
-          />
-
-          <StatCard
-            title="Oportunidades"
-            value={openOpportunities.length}
-            color="#9d174d"
-          />
+          <ChartCard title="Receita por ramo">
+            {topBranches.length === 0 ? (
+              <p style={muted}>Sem dados.</p>
+            ) : (
+              topBranches.map(([name, value]) => (
+                <BarRow
+                  key={name}
+                  label={name}
+                  value={formatEuro(value)}
+                  width={percent(value, maxBranchValue)}
+                  color="#16a34a"
+                />
+              ))
+            )}
+          </ChartCard>
         </section>
 
         <section style={panel}>
-          <h2 style={panelTitle}>
-            🔔 Alertas Operacionais
-          </h2>
+          <h2 style={panelTitle}>Produção anual</h2>
+
+          {years.length === 0 ? (
+            <p style={muted}>Sem dados anuais.</p>
+          ) : (
+            <div style={yearGrid}>
+              {years.map((year) => (
+                <div key={year} style={yearCard}>
+                  <strong>{year}</strong>
+
+                  <div style={barTrack}>
+                    <div
+                      style={{
+                        ...barFill,
+                        width: percent(yearlyStats[year].newPremium, maxYearValue),
+                        background: "#16a34a",
+                      }}
+                    />
+                  </div>
+
+                  <p style={smallText}>
+                    Nova: {formatEuro(yearlyStats[year].newPremium)}
+                  </p>
+
+                  <p style={smallTextRed}>
+                    Anulada: {formatEuro(yearlyStats[year].cancelledPremium)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section style={panel}>
+          <h2 style={panelTitle}>Alertas operacionais</h2>
 
           <div style={alertsGrid}>
-            <div style={alertCard}>
-              <h3>Renovações próximas</h3>
-
-              {renewalsSoon.length === 0 ? (
-                <p>Sem renovações próximas.</p>
-              ) : (
-                renewalsSoon.slice(0, 5).map((p) => (
-                  <div
-                    key={p.id}
-                    style={alertItem}
-                  >
-                    <strong>
-                      {p.clients?.name || "-"}
-                    </strong>
-
-                    <span>
-                      {p.branch || "-"} ·{" "}
-                      {formatDate(
-                        p.renewal_date
-                      )}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div style={alertCard}>
-              <h3>Tarefas urgentes</h3>
-
-              {urgentTasks.length === 0 ? (
-                <p>Sem tarefas urgentes.</p>
-              ) : (
-                urgentTasks
-                  .slice(0, 5)
-                  .map((task) => (
-                    <div
-                      key={task.id}
-                      style={alertItem}
-                    >
-                      <strong>
-                        {task.title}
-                      </strong>
-
-                      <span>
-                        {task.clients?.name ||
-                          "-"}
-                      </span>
-                    </div>
-                  ))
-              )}
-            </div>
-
-            <div style={alertCard}>
-              <h3>Sinistros pendentes</h3>
-
-              {openClaims.length === 0 ? (
-                <p>
-                  Sem sinistros pendentes.
-                </p>
-              ) : (
-                openClaims
-                  .slice(0, 5)
-                  .map((claim) => (
-                    <div
-                      key={claim.id}
-                      style={alertItem}
-                    >
-                      <strong>
-                        {claim.claim_number ||
-                          "-"}
-                      </strong>
-
-                      <span>
-                        {claim.clients?.name ||
-                          "-"}
-                      </span>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section style={panel}>
-          <h2 style={panelTitle}>
-            Top Seguradoras
-          </h2>
-
-          <div style={table}>
-            <div style={tableHeader}>
-              <span>Seguradora</span>
-              <span>Apólices</span>
-              <span>Receita</span>
-            </div>
-
-            {topInsurers.map(
-              ([name, data]) => (
-                <div
-                  key={name}
-                  style={tableRow}
-                >
-                  <strong>{name}</strong>
-
-                  <span>{data.count}</span>
-
-                  <strong
-                    style={{
-                      color: "#166534",
-                    }}
-                  >
-                    {formatEuro(
-                      data.premium
-                    )}
-                  </strong>
-                </div>
-              )
-            )}
+            <AlertBox title="Tarefas urgentes" count={urgentTasks.length} />
+            <AlertBox title="Sinistros abertos" count={openClaims.length} />
+            <AlertBox title="Oportunidades abertas" count={openOpportunities.length} />
           </div>
         </section>
       </main>
@@ -341,23 +240,44 @@ export default function Dashboard({
   );
 }
 
-function StatCard({
-  title,
-  value,
-  color,
-}) {
+function StatCard({ title, value, color }) {
   return (
     <div style={statCard}>
       <p style={cardLabel}>{title}</p>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
+    </div>
+  );
+}
 
-      <h2
-        style={{
-          ...cardValue,
-          color,
-        }}
-      >
-        {value}
-      </h2>
+function ChartCard({ title, children }) {
+  return (
+    <section style={panel}>
+      <h2 style={panelTitle}>{title}</h2>
+      <div style={chartList}>{children}</div>
+    </section>
+  );
+}
+
+function BarRow({ label, value, width, color }) {
+  return (
+    <div style={barRow}>
+      <div style={barTop}>
+        <strong>{label}</strong>
+        <span>{value}</span>
+      </div>
+
+      <div style={barTrack}>
+        <div style={{ ...barFill, width, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+function AlertBox({ title, count }) {
+  return (
+    <div style={alertBox}>
+      <p>{title}</p>
+      <strong>{count}</strong>
     </div>
   );
 }
@@ -390,8 +310,7 @@ const subtitle = {
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(220px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 18,
   marginBottom: 30,
 };
@@ -400,8 +319,7 @@ const statCard = {
   background: "white",
   padding: 24,
   borderRadius: 18,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
@@ -410,8 +328,14 @@ const cardLabel = {
 };
 
 const cardValue = {
-  fontSize: 30,
+  fontSize: 28,
   marginTop: 12,
+};
+
+const grid2 = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 24,
 };
 
 const panel = {
@@ -419,8 +343,7 @@ const panel = {
   padding: 24,
   borderRadius: 18,
   marginBottom: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const panelTitle = {
@@ -428,52 +351,69 @@ const panelTitle = {
   marginBottom: 20,
 };
 
-const alertsGrid = {
+const chartList = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 20,
+  gap: 18,
 };
 
-const alertCard = {
+const barRow = {
+  display: "grid",
+  gap: 8,
+};
+
+const barTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+};
+
+const barTrack = {
+  background: "#e5e7eb",
+  borderRadius: 999,
+  height: 12,
+  overflow: "hidden",
+};
+
+const barFill = {
+  height: "100%",
+  borderRadius: 999,
+};
+
+const yearGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 16,
+};
+
+const yearCard = {
+  background: "#f9fafb",
+  borderRadius: 14,
+  padding: 18,
+};
+
+const smallText = {
+  color: "#166534",
+  fontWeight: "bold",
+};
+
+const smallTextRed = {
+  color: "#991b1b",
+  fontWeight: "bold",
+};
+
+const alertsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+};
+
+const alertBox = {
   background: "#f9fafb",
   padding: 20,
   borderRadius: 14,
 };
 
-const alertItem = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  padding: "10px 0",
-  borderBottom:
-    "1px solid #e5e7eb",
+const muted = {
+  color: "#6b7280",
 };
 
-const table = {
-  display: "grid",
-  gap: 8,
-};
-
-const tableHeader = {
-  display: "grid",
-  gridTemplateColumns:
-    "2fr 1fr 1fr",
-  gap: 12,
-  background: "#f3f4f6",
-  padding: "12px 14px",
-  borderRadius: 12,
-  fontWeight: "bold",
-};
-
-const tableRow = {
-  display: "grid",
-  gridTemplateColumns:
-    "2fr 1fr 1fr",
-  gap: 12,
-  padding: "14px",
-  borderBottom:
-    "1px solid #e5e7eb",
-  alignItems: "center",
-};
-   
