@@ -1,0 +1,182 @@
+import { useState } from "react";
+import { useRouter } from "next/router";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const supabase = createClient(
+  supabaseUrl,
+  supabaseKey
+);
+
+export default function Login() {
+  const router = useRouter();
+
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+
+    setLoading(true);
+
+    const { error } =
+      await supabase.auth.signInWithPassword(
+        {
+          email,
+          password,
+        }
+      );
+
+    setLoading(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    router.push("/");
+  }
+
+  async function createUser() {
+    const { error } =
+      await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert(
+      "Utilizador criado com sucesso"
+    );
+  }
+
+  return (
+    <div style={page}>
+      <form
+        style={card}
+        onSubmit={handleLogin}
+      >
+        <h1 style={title}>
+          SegurCRM
+        </h1>
+
+        <p style={subtitle}>
+          Login seguro
+        </p>
+
+        <input
+          style={input}
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) =>
+            setEmail(e.target.value)
+          }
+        />
+
+        <input
+          style={input}
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) =>
+            setPassword(
+              e.target.value
+            )
+          }
+        />
+
+        <button
+          style={button}
+          disabled={loading}
+        >
+          {loading
+            ? "A entrar..."
+            : "Entrar"}
+        </button>
+
+        <button
+          type="button"
+          style={secondaryButton}
+          onClick={createUser}
+        >
+          Criar utilizador
+        </button>
+      </form>
+    </div>
+  );
+}
+
+const page = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#111827",
+  fontFamily:
+    "Arial, sans-serif",
+};
+
+const card = {
+  background: "white",
+  padding: 40,
+  borderRadius: 20,
+  width: 380,
+  display: "flex",
+  flexDirection: "column",
+  gap: 16,
+};
+
+const title = {
+  margin: 0,
+  fontSize: 38,
+};
+
+const subtitle = {
+  color: "#6b7280",
+  marginBottom: 10,
+};
+
+const input = {
+  padding: 14,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
+};
+
+const button = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: 14,
+  borderRadius: 10,
+  fontWeight: "bold",
+  cursor: "pointer",
+  fontSize: 16,
+};
+
+const secondaryButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: 14,
+  borderRadius: 10,
+  fontWeight: "bold",
+  cursor: "pointer",
+  fontSize: 16,
+};
