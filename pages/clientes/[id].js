@@ -31,9 +31,9 @@ export async function getServerSideProps({
     await supabase
       .from("policies")
       .select(`
-      *,
-      insurers(name)
-    `)
+        *,
+        insurers(name)
+      `)
       .eq("client_id", id)
       .order("created_at", {
         ascending: false,
@@ -63,9 +63,10 @@ function calculateAnnualCommission(
       0
   );
 
-  const frequency =
+  const frequency = String(
     policy.payment_frequency ||
-    "anual";
+      "anual"
+  ).toLowerCase();
 
   if (frequency === "mensal") {
     return commission * 12;
@@ -115,7 +116,7 @@ export default function ClientePage({
 
     const fracionamento =
       prompt(
-        "Fracionamento (mensal, trimestral, semestral, anual)"
+        "Fracionamento (Mensal, Trimestral, Semestral, Anual)"
       );
 
     const dataInicio = prompt(
@@ -227,7 +228,7 @@ export default function ClientePage({
       prompt(
         "Fracionamento",
         policy.payment_frequency ||
-          "anual"
+          "Anual"
       );
 
     if (
@@ -576,5 +577,4 @@ const badge = {
   fontSize: 12,
   fontWeight: "bold",
 };
- 
                   
