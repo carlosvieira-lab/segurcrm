@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../../components/Sidebar";
 
@@ -10,34 +9,25 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
 
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function getServerSideProps({
-  params,
-}) {
+export async function getServerSideProps({ params }) {
   const { id } = params;
 
-  const { data: client } =
-    await supabase
-      .from("clients")
-      .select("*")
-      .eq("id", id)
-      .single();
+  const { data: client } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("id", id)
+    .single();
 
-  const { data: policies } =
-    await supabase
-      .from("policies")
-      .select(`
-        *,
-        insurers(name)
-      `)
-      .eq("client_id", id)
-      .order("created_at", {
-        ascending: false,
-      });
+  const { data: policies } = await supabase
+    .from("policies")
+    .select(`
+      *,
+      insurers(name)
+    `)
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
 
   return {
     props: {
@@ -49,254 +39,154 @@ export async function getServerSideProps({
 
 function formatDate(date) {
   if (!date) return "-";
-
-  return new Intl.DateTimeFormat(
-    "pt-PT"
-  ).format(new Date(date));
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-function calculateAnnualCommission(
-  policy
-) {
-  const commission = Number(
-    policy.commission_per_payment ||
-      0
-  );
+function calculateAnnualCommission(policy) {
+  const commission = Number(policy.commission_per_payment || 0);
+  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
 
-  const frequency = String(
-    policy.payment_frequency ||
-      "anual"
-  ).toLowerCase();
-
-  if (frequency === "mensal") {
-    return commission * 12;
-  }
-
-  if (
-    frequency === "trimestral"
-  ) {
-    return commission * 4;
-  }
-
-  if (
-    frequency === "semestral"
-  ) {
-    return commission * 2;
-  }
+  if (frequency === "mensal") return commission * 12;
+  if (frequency === "trimestral") return commission * 4;
+  if (frequency === "semestral") return commission * 2;
 
   return commission;
 }
 
-export default function ClientePage({
-  client,
-  policies,
-}) {
+export default function ClientePage({ client, policies }) {
   async function createPolicy() {
-    const numero = prompt(
-      "Número da Apólice"
-    );
-
+    const numero = prompt("Número da Apólice");
     if (!numero) return;
 
-    const ramo = prompt(
-      "Ramo"
+    const ramo = prompt("Ramo");
+    const seguradora = prompt("Seguradora") || "";
+    const premio = prompt("Prémio comercial anual");
+    const commissionPerPayment = prompt("Comissão por pagamento (€)");
+    const fracionamento = prompt(
+      "Fracionamento (Mensal, Trimestral, Semestral, Anual)"
     );
+    const dataInicio = prompt("Data início apólice (AAAA-MM-DD)");
+    const renovacao = prompt("Data Renovação (AAAA-MM-DD)");
+    const ultimoPagamento = prompt("Último pagamento (AAAA-MM-DD)");
 
-    const seguradora =
-      prompt("Seguradora") || "";
-
-    const premio = prompt(
-      "Prémio comercial anual"
-    );
-
-    const commissionPerPayment =
-      prompt(
-        "Comissão por pagamento (€)"
-      );
-
-    const fracionamento =
-      prompt(
-        "Fracionamento (Mensal, Trimestral, Semestral, Anual)"
-      );
-
-    const dataInicio = prompt(
-      "Data início apólice (AAAA-MM-DD)"
-    );
-
-    const renovacao = prompt(
-      "Data Renovação (AAAA-MM-DD)"
-    );
-
-    const response =
-      await fetch(
-        "/api/create-policy",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            client_id: client.id,
-            policy_number: numero,
-            branch: ramo,
-            insurer_name:
-              seguradora,
-            annual_premium:
-              premio,
-            commission_per_payment:
-              commissionPerPayment,
-            payment_frequency:
-              fracionamento,
-            start_date:
-              dataInicio,
-            renewal_date:
-              renovacao,
-          }),
-        }
-      );
+    const response = await fetch("/api/create-policy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: client.id,
+        policy_number: numero,
+        branch: ramo,
+        insurer_name: seguradora,
+        annual_premium: premio,
+        commission_per_payment: commissionPerPayment,
+        payment_frequency: fracionamento,
+        start_date: dataInicio,
+        renewal_date: renovacao,
+        last_payment_date: ultimoPagamento,
+      }),
+    });
 
     if (response.ok) {
       window.location.reload();
     } else {
-      const error =
-        await response.json();
-
-      alert(
-        error.error ||
-          "Erro ao criar apólice"
-      );
+      const error = await response.json();
+      alert(error.error || "Erro ao criar apólice");
     }
   }
 
-  async function editPolicy(
-    policy
-  ) {
-    const numero = prompt(
-      "Número da Apólice",
-      policy.policy_number || ""
-    );
-
+  async function editPolicy(policy) {
+    const numero = prompt("Número da Apólice", policy.policy_number || "");
     if (numero === null) return;
 
-    const ramo = prompt(
-      "Ramo",
-      policy.branch || ""
-    );
-
+    const ramo = prompt("Ramo", policy.branch || "");
     if (ramo === null) return;
 
-    const seguradora = prompt(
-      "Seguradora",
-      policy.insurers?.name ||
-        ""
-    );
-
-    if (seguradora === null)
-      return;
+    const seguradora = prompt("Seguradora", policy.insurers?.name || "");
+    if (seguradora === null) return;
 
     const premio = prompt(
       "Prémio comercial anual",
-      policy.annual_premium ||
-        ""
+      policy.annual_premium || ""
     );
-
     if (premio === null) return;
 
-    const commissionPerPayment =
-      prompt(
-        "Comissão por pagamento (€)",
-        policy.commission_per_payment ||
-          ""
-      );
+    const commissionPerPayment = prompt(
+      "Comissão por pagamento (€)",
+      policy.commission_per_payment || ""
+    );
+    if (commissionPerPayment === null) return;
 
-    if (
-      commissionPerPayment ===
-      null
-    )
-      return;
+    const fracionamento = prompt(
+      "Fracionamento",
+      policy.payment_frequency || "Anual"
+    );
+    if (fracionamento === null) return;
 
-    const fracionamento =
-      prompt(
-        "Fracionamento",
-        policy.payment_frequency ||
-          "Anual"
-      );
+    const dataInicio = prompt(
+      "Data início apólice (AAAA-MM-DD)",
+      policy.start_date || ""
+    );
+    if (dataInicio === null) return;
 
-    if (
-      fracionamento === null
-    )
-      return;
+    const renovacao = prompt(
+      "Data Renovação (AAAA-MM-DD)",
+      policy.renewal_date || ""
+    );
+    if (renovacao === null) return;
 
-    let insurer_id =
-      policy.insurer_id || null;
+    const ultimoPagamento = prompt(
+      "Último pagamento (AAAA-MM-DD)",
+      policy.last_payment_date || ""
+    );
+    if (ultimoPagamento === null) return;
+
+    const proximaCobranca = prompt(
+      "Próxima cobrança (AAAA-MM-DD)",
+      policy.next_payment_date || ""
+    );
+    if (proximaCobranca === null) return;
+
+    let insurer_id = policy.insurer_id || null;
 
     if (seguradora) {
-      let {
-        data: existingInsurer,
-      } = await supabase
+      let { data: existingInsurer } = await supabase
         .from("insurers")
         .select("id")
-        .eq(
-          "name",
-          seguradora.trim()
-        )
+        .eq("name", seguradora.trim())
         .maybeSingle();
 
       if (!existingInsurer) {
-        const {
-          data: newInsurer,
-        } = await supabase
+        const { data: newInsurer } = await supabase
           .from("insurers")
-          .insert({
-            name:
-              seguradora.trim(),
-          })
+          .insert({ name: seguradora.trim() })
           .select("id")
           .single();
 
-        existingInsurer =
-          newInsurer;
+        existingInsurer = newInsurer;
       }
 
-      insurer_id =
-        existingInsurer.id;
+      insurer_id = existingInsurer.id;
     }
 
-    const { error } =
-      await supabase
-        .from("policies")
-        .update({
-          policy_number: numero,
-
-          branch: ramo,
-
-          insurer_id,
-
-          annual_premium:
-            premio
-              ? String(
-                  premio
-                ).replace(
-                  ",",
-                  "."
-                )
-              : null,
-
-          commission_per_payment:
-            commissionPerPayment
-              ? String(
-                  commissionPerPayment
-                ).replace(
-                  ",",
-                  "."
-                )
-              : null,
-
-          payment_frequency:
-            fracionamento,
-        })
-        .eq("id", policy.id);
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        policy_number: numero,
+        branch: ramo,
+        insurer_id,
+        annual_premium: premio ? String(premio).replace(",", ".") : null,
+        commission_per_payment: commissionPerPayment
+          ? String(commissionPerPayment).replace(",", ".")
+          : null,
+        payment_frequency: fracionamento,
+        start_date: dataInicio || null,
+        renewal_date: renovacao || null,
+        last_payment_date: ultimoPagamento || null,
+        next_payment_date: proximaCobranca || null,
+      })
+      .eq("id", policy.id);
 
     if (error) {
       alert(error.message);
@@ -306,58 +196,39 @@ export default function ClientePage({
     window.location.reload();
   }
 
-  async function updatePolicyStatus(
-    policyId,
-    status
-  ) {
-    const response =
-      await fetch(
-        "/api/update-policy-status",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            policy_id: policyId,
-            status,
-          }),
-        }
-      );
+  async function updatePolicyStatus(policyId, status) {
+    const response = await fetch("/api/update-policy-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy_id: policyId,
+        status,
+      }),
+    });
 
     if (!response.ok) {
-      alert(
-        "Erro ao atualizar estado"
-      );
+      alert("Erro ao atualizar estado");
       return;
     }
 
     window.location.reload();
   }
 
-  async function markPolicyPaid(
-    policyId
-  ) {
-    const response =
-      await fetch(
-        "/api/mark-policy-paid",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            policy_id: policyId,
-          }),
-        }
-      );
+  async function markPolicyPaid(policyId) {
+    const response = await fetch("/api/mark-policy-paid", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy_id: policyId,
+      }),
+    });
 
     if (!response.ok) {
-      alert(
-        "Erro ao marcar pagamento"
-      );
+      alert("Erro ao marcar pagamento");
       return;
     }
 
@@ -371,20 +242,11 @@ export default function ClientePage({
       <main style={main}>
         <div style={header}>
           <div>
-            <h1 style={title}>
-              {client.name}
-            </h1>
-
-            <p style={subtitle}>
-              {client.nif ||
-                "Sem NIF"}
-            </p>
+            <h1 style={title}>{client.name}</h1>
+            <p style={subtitle}>{client.nif || "Sem NIF"}</p>
           </div>
 
-          <button
-            style={button}
-            onClick={createPolicy}
-          >
+          <button style={button} onClick={createPolicy}>
             + Nova Apólice
           </button>
         </div>
@@ -392,176 +254,60 @@ export default function ClientePage({
         <section style={card}>
           <h2>Apólices</h2>
 
-          {policies.length ===
-          0 ? (
-            <p>
-              Sem apólices.
-            </p>
+          {policies.length === 0 ? (
+            <p>Sem apólices.</p>
           ) : (
-            <div
-              style={policiesGrid}
-            >
-              {policies.map(
-                (policy) => (
-                  <div
-                    key={policy.id}
-                    style={
-                      policyCard
-                    }
-                  >
-                    <div
-                      style={
-                        policyTop
-                      }
-                    >
-                      <h3>
-                        {policy.branch ||
-                          "Sem ramo"}
-                      </h3>
-
-                      <span
-                        style={
-                          badge
-                        }
-                      >
-                        {policy.status ||
-                          "ativa"}
-                      </span>
-                    </div>
-
-                    <p>
-                      <strong>
-                        Nº:
-                      </strong>{" "}
-                      {policy.policy_number ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Seguradora:
-                      </strong>{" "}
-                      {policy
-                        .insurers
-                        ?.name ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Prémio comercial anual:
-                      </strong>{" "}
-                      {policy.annual_premium ||
-                        0} €
-                    </p>
-
-                    <p>
-                      <strong>
-                        Comissão pagamento:
-                      </strong>{" "}
-                      {policy.commission_per_payment ||
-                        0} €
-                    </p>
-
-                    <p>
-                      <strong>
-                        Comissão anual:
-                      </strong>{" "}
-                      {calculateAnnualCommission(
-                        policy
-                      )} €
-                    </p>
-
-                    <p>
-                      <strong>
-                        Fracionamento:
-                      </strong>{" "}
-                      {policy.payment_frequency ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Renovação:
-                      </strong>{" "}
-                      {formatDate(
-                        policy.renewal_date
-                      )}
-                    </p>
-
-                    <div
-                      style={{
-                        display:
-                          "flex",
-                        gap: 8,
-                        flexWrap:
-                          "wrap",
-                        marginTop: 16,
-                      }}
-                    >
-                      <button
-                        style={
-                          editButton
-                        }
-                        onClick={() =>
-                          editPolicy(
-                            policy
-                          )
-                        }
-                      >
-                        Editar
-                      </button>
-
-                      <button
-                        style={{
-                          ...smallButton,
-                          background:
-                            "#16a34a",
-                        }}
-                        onClick={() =>
-                          updatePolicyStatus(
-                            policy.id,
-                            "ativa"
-                          )
-                        }
-                      >
-                        Em vigor
-                      </button>
-
-                      <button
-                        style={{
-                          ...smallButton,
-                          background:
-                            "#dc2626",
-                        }}
-                        onClick={() =>
-                          updatePolicyStatus(
-                            policy.id,
-                            "anulada"
-                          )
-                        }
-                      >
-                        Anulada
-                      </button>
-
-                      <button
-                        style={{
-                          ...smallButton,
-                          background:
-                            "#2563eb",
-                        }}
-                        onClick={() =>
-                          markPolicyPaid(
-                            policy.id
-                          )
-                        }
-                      >
-                        Marcar pago
-                      </button>
-                    </div>
+            <div style={policiesGrid}>
+              {policies.map((policy) => (
+                <div key={policy.id} style={policyCard}>
+                  <div style={policyTop}>
+                    <h3>{policy.branch || "Sem ramo"}</h3>
+                    <span style={badge}>{policy.status || "ativa"}</span>
                   </div>
-                )
-              )}
+
+                  <p><strong>Nº:</strong> {policy.policy_number || "-"}</p>
+                  <p><strong>Seguradora:</strong> {policy.insurers?.name || "-"}</p>
+                  <p><strong>Prémio comercial anual:</strong> {policy.annual_premium || 0} €</p>
+                  <p><strong>Comissão pagamento:</strong> {policy.commission_per_payment || 0} €</p>
+                  <p><strong>Comissão anual:</strong> {calculateAnnualCommission(policy)} €</p>
+                  <p><strong>Fracionamento:</strong> {policy.payment_frequency || "-"}</p>
+                  <p><strong>Data início:</strong> {formatDate(policy.start_date)}</p>
+                  <p><strong>Renovação:</strong> {formatDate(policy.renewal_date)}</p>
+                  <p><strong>Último pagamento:</strong> {formatDate(policy.last_payment_date)}</p>
+                  <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
+                  <p><strong>Anulada em:</strong> {formatDate(policy.cancelled_at)}</p>
+
+                  <div style={buttonGroup}>
+                    <button
+                      style={editButton}
+                      onClick={() => editPolicy(policy)}
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      style={{ ...smallButton, background: "#16a34a" }}
+                      onClick={() => updatePolicyStatus(policy.id, "ativa")}
+                    >
+                      Em vigor
+                    </button>
+
+                    <button
+                      style={{ ...smallButton, background: "#dc2626" }}
+                      onClick={() => updatePolicyStatus(policy.id, "anulada")}
+                    >
+                      Anulada
+                    </button>
+
+                    <button
+                      style={{ ...smallButton, background: "#2563eb" }}
+                      onClick={() => markPolicyPaid(policy.id)}
+                    >
+                      Marcar pago
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -574,8 +320,7 @@ const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily:
-    "Arial, sans-serif",
+  fontFamily: "Arial, sans-serif",
 };
 
 const main = {
@@ -585,8 +330,7 @@ const main = {
 
 const header = {
   display: "flex",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 30,
 };
@@ -629,19 +373,24 @@ const smallButton = {
   fontWeight: "bold",
 };
 
+const buttonGroup = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 16,
+};
+
 const card = {
   background: "white",
   padding: 24,
   borderRadius: 18,
   marginBottom: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const policiesGrid = {
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(300px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
   gap: 16,
 };
 
@@ -653,8 +402,7 @@ const policyCard = {
 
 const policyTop = {
   display: "flex",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 12,
 };
@@ -667,4 +415,3 @@ const badge = {
   fontSize: 12,
   fontWeight: "bold",
 };
-
