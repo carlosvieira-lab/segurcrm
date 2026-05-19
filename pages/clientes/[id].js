@@ -4,10 +4,12 @@ import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../../components/Sidebar";
 
 const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://accmdxprsetsqsrepflq.supabase.co";
 
 const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
 
 const supabase = createClient(
   supabaseUrl,
