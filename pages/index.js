@@ -16,6 +16,10 @@ const supabase = createClient(
 );
 
 export async function getServerSideProps() {
+  const today = new Date()
+    .toISOString()
+    .split("T")[0];
+
   const { data: clients } =
     await supabase
       .from("clients")
@@ -26,85 +30,99 @@ export async function getServerSideProps() {
       .from("policies")
       .select("*");
 
-  const { data: claims } =
-    await supabase
-      .from("claims")
-      .select("*");
-
   const { data: tasks } =
     await supabase
       .from("tasks")
       .select("*");
 
+  const { data: opportunities } =
+    await supabase
+      .from("opportunities")
+      .select("*");
+
+  const overdueTasks =
+    (tasks || []).filter(
+      (task) =>
+        task.status !==
+          "concluida" &&
+        task.due_date &&
+        task.due_date < today
+    );
+
+  const todayTasks =
+    (tasks || []).filter(
+      (task) =>
+        task.status !==
+          "concluida" &&
+        task.due_date === today
+    );
+
+  const renewal30 =
+    (policies || []).filter(
+      (policy) => {
+        if (!policy.renewal_date)
+          return false;
+
+        const renewal =
+          new Date(
+            policy.renewal_date
+          );
+
+        const diff =
+          Math.ceil(
+            (renewal -
+              new Date()) /
+              (1000 *
+                60 *
+                60 *
+                24)
+          );
+
+        return (
+          diff >= 0 &&
+          diff <= 30
+        );
+      }
+    );
+
+  const opportunitiesAlert =
+    (opportunities || []).filter(
+      (item) =>
+        item.status !==
+          "ganho" &&
+        item.status !==
+          "perdido" &&
+        item.contact_date &&
+        item.contact_date <=
+          today
+    );
+
   return {
     props: {
-      clients: clients || [],
-      policies: policies || [],
-      claims: claims || [],
-      tasks: tasks || [],
+      totalClients:
+        clients?.length || 0,
+      totalPolicies:
+        policies?.length || 0,
+      overdueTasks:
+        overdueTasks.length,
+      todayTasks:
+        todayTasks.length,
+      renewal30:
+        renewal30.length,
+      opportunitiesAlert:
+        opportunitiesAlert.length,
     },
   };
 }
 
 export default function Dashboard({
-  clients,
-  policies,
-  claims,
-  tasks,
+  totalClients,
+  totalPolicies,
+  overdueTasks,
+  todayTasks,
+  renewal30,
+  opportunitiesAlert,
 }) {
-  const activePolicies =
-    policies.filter(
-      (p) => p.status !== "anulada"
-    );
-
-  const totalPremium =
-    activePolicies.reduce(
-      (sum, p) =>
-        sum +
-        Number(
-          p.annual_premium || 0
-        ),
-      0
-    );
-
-  const openClaims =
-    claims.filter(
-      (c) =>
-        c.status !== "ENCERRADO"
-    );
-
-  const openTasks =
-    tasks.filter(
-      (t) => t.status !== "fechada"
-    );
-
-  async function generateRenewalTasks() {
-    const response =
-      await fetch(
-        "/api/generate-renewal-tasks",
-        {
-          method: "POST",
-        }
-      );
-
-    const result =
-      await response.json();
-
-    if (!response.ok) {
-      alert(
-        result.error ||
-          "Erro ao gerar tarefas"
-      );
-      return;
-    }
-
-    alert(
-      `Tarefas criadas: ${result.created}`
-    );
-
-    window.location.reload();
-  }
-
   return (
     <div style={page}>
       <Sidebar active="dashboard" />
@@ -117,131 +135,144 @@ export default function Dashboard({
             </h1>
 
             <p style={subtitle}>
-              Visão global da operação da mediadora.
+              Visão geral do
+              SegurCRM.
             </p>
-
-            <button
-              style={
-                automationButton
-              }
-              onClick={
-                generateRenewalTasks
-              }
-            >
-              Gerar tarefas de renovação
-            </button>
           </div>
         </div>
+
+        {opportunitiesAlert >
+          0 && (
+          <Link
+            href="/oportunidades"
+            style={
+              alertCard
+            }
+          >
+            <div>
+              <h2
+                style={
+                  alertTitle
+                }
+              >
+                ⚠️ Alertas de
+                Captação
+              </h2>
+
+              <p
+                style={
+                  alertText
+                }
+              >
+                Tens{" "}
+                <strong>
+                  {
+                    opportunitiesAlert
+                  }
+                </strong>{" "}
+                contacto(s)
+                comercial(is)
+                para fazer
+                agora.
+              </p>
+            </div>
+
+            <div
+              style={
+                alertButton
+              }
+            >
+              Abrir Agenda
+            </div>
+          </Link>
+        )}
 
         <section style={grid}>
           <Card
             title="Clientes"
-            value={clients.length}
+            value={
+              totalClients
+            }
             color="#2563eb"
           />
 
           <Card
-            title="Apólices ativas"
+            title="Apólices"
             value={
-              activePolicies.length
+              totalPolicies
             }
-            color="#16a34a"
+            color="#0f766e"
           />
 
           <Card
-            title="Prémios anuais"
-            value={`${totalPremium.toFixed(
-              2
-            )} €`}
-            color="#7c3aed"
-          />
-
-          <Card
-            title="Sinistros abertos"
+            title="Tarefas vencidas"
             value={
-              openClaims.length
+              overdueTasks
             }
             color="#dc2626"
           />
 
           <Card
-            title="Tarefas abertas"
+            title="Tarefas hoje"
             value={
-              openTasks.length
+              todayTasks
+            }
+            color="#7c3aed"
+          />
+
+          <Card
+            title="Renovações 30 dias"
+            value={
+              renewal30
             }
             color="#f59e0b"
           />
+
+          <Card
+            title="Contactos comerciais"
+            value={
+              opportunitiesAlert
+            }
+            color="#111827"
+          />
         </section>
 
-        <section style={section}>
-          <div style={sectionTop}>
-            <h2>
-              Últimos clientes
-            </h2>
+        <section style={quickGrid}>
+          <QuickLink
+            href="/clientes"
+            title="Clientes"
+            desc="Consultar carteira"
+          />
 
-            <Link
-              href="/clientes"
-              style={linkButton}
-            >
-              Ver todos
-            </Link>
-          </div>
+          <QuickLink
+            href="/apolices"
+            title="Apólices"
+            desc="Gestão de apólices"
+          />
 
-          <div style={list}>
-            {clients
-              .slice(0, 5)
-              .map((client) => (
-                <Link
-                  key={client.id}
-                  href={`/clientes/${client.id}`}
-                  style={item}
-                >
-                  <strong>
-                    {client.name}
-                  </strong>
+          <QuickLink
+            href="/tarefas"
+            title="Tarefas"
+            desc="Agenda operacional"
+          />
 
-                  <span>
-                    {client.nif ||
-                      "-"}
-                  </span>
-                </Link>
-              ))}
-          </div>
-        </section>
+          <QuickLink
+            href="/oportunidades"
+            title="Agenda de Captação"
+            desc="Contactos comerciais"
+          />
 
-        <section style={section}>
-          <div style={sectionTop}>
-            <h2>
-              Tarefas recentes
-            </h2>
+          <QuickLink
+            href="/renovacoes"
+            title="Renovações"
+            desc="Controlo de vencimentos"
+          />
 
-            <Link
-              href="/tarefas"
-              style={linkButton}
-            >
-              Ver tarefas
-            </Link>
-          </div>
-
-          <div style={list}>
-            {tasks
-              .slice(0, 5)
-              .map((task) => (
-                <div
-                  key={task.id}
-                  style={item}
-                >
-                  <strong>
-                    {task.title}
-                  </strong>
-
-                  <span>
-                    {task.priority ||
-                      "-"}
-                  </span>
-                </div>
-              ))}
-          </div>
+          <QuickLink
+            href="/financeiro"
+            title="Financeiro"
+            desc="Comissões e cobranças"
+          />
         </section>
       </main>
     </div>
@@ -260,14 +291,35 @@ function Card({
         borderTop: `6px solid ${color}`,
       }}
     >
-      <p style={cardTitle}>
+      <p style={cardLabel}>
         {title}
       </p>
 
-      <h2 style={cardValue}>
+      <h2
+        style={{
+          ...cardValue,
+          color,
+        }}
+      >
         {value}
       </h2>
     </div>
+  );
+}
+
+function QuickLink({
+  href,
+  title,
+  desc,
+}) {
+  return (
+    <Link
+      href={href}
+      style={quickCard}
+    >
+      <h3>{title}</h3>
+      <p>{desc}</p>
+    </Link>
   );
 }
 
@@ -298,14 +350,37 @@ const subtitle = {
   marginTop: 10,
 };
 
-const automationButton = {
-  marginTop: 16,
-  background: "#7c3aed",
+const alertCard = {
+  background:
+    "linear-gradient(135deg,#fee2e2,#fecaca)",
+  border:
+    "2px solid #dc2626",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  textDecoration: "none",
+  color: "#111827",
+};
+
+const alertTitle = {
+  margin: 0,
+  color: "#991b1b",
+};
+
+const alertText = {
+  marginTop: 10,
+};
+
+const alertButton = {
+  background: "#dc2626",
   color: "white",
-  border: "none",
-  padding: "12px 18px",
+  padding:
+    "12px 18px",
   borderRadius: 10,
-  cursor: "pointer",
   fontWeight: "bold",
 };
 
@@ -313,7 +388,7 @@ const grid = {
   display: "grid",
   gridTemplateColumns:
     "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 20,
+  gap: 18,
   marginBottom: 30,
 };
 
@@ -325,54 +400,29 @@ const card = {
     "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const cardTitle = {
+const cardLabel = {
   color: "#6b7280",
-  marginBottom: 12,
+  margin: 0,
 };
 
 const cardValue = {
-  margin: 0,
-  fontSize: 32,
+  marginTop: 12,
+  fontSize: 34,
 };
 
-const section = {
-  background: "white",
-  padding: 24,
-  borderRadius: 18,
-  marginBottom: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const sectionTop = {
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  marginBottom: 18,
-};
-
-const linkButton = {
-  background: "#111827",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 10,
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const list = {
+const quickGrid = {
   display: "grid",
-  gap: 12,
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 18,
 };
 
-const item = {
-  background: "#f9fafb",
-  padding: 16,
-  borderRadius: 12,
-  display: "flex",
-  justifyContent:
-    "space-between",
+const quickCard = {
+  background: "white",
+  padding: 22,
+  borderRadius: 18,
   textDecoration: "none",
   color: "#111827",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
 };
