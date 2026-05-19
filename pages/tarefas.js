@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -15,10 +16,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function getServerSideProps() {
   const { data: tasks } = await supabase
     .from("tasks")
-    .select(`
-      *,
-      clients(name)
-    `)
+    .select("*, clients(id, name, nif), policies(id, policy_number, branch, license_plate)")
     .order("created_at", { ascending: false });
 
   return {
@@ -30,112 +28,109 @@ export async function getServerSideProps() {
 
 function formatDate(date) {
   if (!date) return "-";
-
-  return new Intl.DateTimeFormat("pt-PT", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(date));
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-function formatNow() {
-  const now = new Date();
+function normalizePriority(priority) {
+  const p = String(priority || "NORMAL").toUpperCase();
 
-  return (
-    now.toLocaleDateString("pt-PT") +
-    " " +
-    now.toLocaleTimeString("pt-PT", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  );
+  if (p === "URGENTE") return "URGENTE";
+  if (p === "MUITO URGENTE") return "MUITO URGENTE";
+
+  return "NORMAL";
+}
+
+function normalizeCategory(category) {
+  const c = String(category || "").toLowerCase();
+
+  if (c.includes("comercial")) return "COMERCIAL";
+  if (c.includes("administrativa")) return "ADMINISTRATIVA";
+
+  return "OUTRA";
 }
 
 export default function Tarefas({ tasks }) {
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("comercial");
-  const [priority, setPriority] = useState("NORMAL");
-  const [description, setDescription] = useState("");
-  const [prospectName, setProspectName] = useState("");
-  const [prospectPhone, setProspectPhone] = useState("");
-  const [procedureNotes, setProcedureNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState("TODAS");
+  const [categoryFilter, setCategoryFilter] = useState("TODAS");
 
-  const abertas = tasks.filter((t) => t.status !== "concluida");
-  const concluidas = tasks.filter((t) => t.status === "concluida");
+  const openTasks = tasks.filter((t) => t.status !== "concluida");
 
-  async function createTask(e) {
-    e.preventDefault();
-    setSaving(true);
+  const normalTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "NORMAL"
+  );
 
-    const initialProcedure = procedureNotes
-      ? `${formatNow()} - ${procedureNotes}`
-      : "";
+  const urgentTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "URGENTE"
+  );
+
+  const veryUrgentTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "MUITO URGENTE"
+  );
+
+  const administrativeTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "ADMINISTRATIVA"
+  );
+
+  const commercialTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "COMERCIAL"
+  );
+
+  let filteredTasks = openTasks;
+
+  if (priorityFilter !== "TODAS") {
+    filteredTasks = filteredTasks.filter(
+      (t) => normalizePriority(t.priority) === priorityFilter
+    );
+  }
+
+  if (categoryFilter !== "TODAS") {
+    filteredTasks = filteredTasks.filter(
+      (t) => normalizeCategory(t.category) === categoryFilter
+    );
+  }
+
+  async function createTask() {
+    const title = prompt("Título da tarefa");
+    if (!title) return;
+
+    const description = prompt("Descrição");
+
+    const category = prompt(
+      "Categoria: ADMINISTRATIVA ou COMERCIAL",
+      "ADMINISTRATIVA"
+    );
+
+    const priority = prompt(
+      "Prioridade: NORMAL, URGENTE ou MUITO URGENTE",
+      "NORMAL"
+    );
+
+    const due_date = prompt("Data limite (AAAA-MM-DD)");
 
     const { error } = await supabase.from("tasks").insert({
       title,
-      category,
-      priority,
-      status: "aberta",
       description,
-      prospect_name: prospectName,
-      prospect_phone: prospectPhone,
-      procedure_notes: initialProcedure,
+      category: normalizeCategory(category),
+      priority: normalizePriority(priority),
+      status: "aberta",
+      due_date: due_date || null,
     });
 
     if (error) {
       alert(error.message);
-      setSaving(false);
       return;
     }
 
     window.location.reload();
   }
 
-  async function updateStatus(task, status) {
-    const previous = task.procedure_notes || "";
-
-    const actionText =
-      status === "em tratamento"
-        ? "Tarefa passou para EM TRATAMENTO"
-        : "Tarefa ENCERRADA";
-
-    const updatedNotes = previous
-      ? `${previous}\n\n${formatNow()} - ${actionText}`
-      : `${formatNow()} - ${actionText}`;
-
-    const updateData = {
-      status,
-      procedure_notes: updatedNotes,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (status === "concluida") {
-      updateData.closed_at = new Date().toISOString();
-    }
-
-    await supabase.from("tasks").update(updateData).eq("id", task.id);
-
-    window.location.reload();
-  }
-
-  async function addProcedure(task) {
-    const note = prompt("Novo procedimento adotado");
-
-    if (!note) return;
-
-    const previous = task.procedure_notes || "";
-
-    const updatedNotes = previous
-      ? `${previous}\n\n${formatNow()} - ${note}`
-      : `${formatNow()} - ${note}`;
-
+  async function completeTask(taskId) {
     const { error } = await supabase
       .from("tasks")
       .update({
-        procedure_notes: updatedNotes,
-        updated_at: new Date().toISOString(),
+        status: "concluida",
       })
-      .eq("id", task.id);
+      .eq("id", taskId);
 
     if (error) {
       alert(error.message);
@@ -143,48 +138,6 @@ export default function Tarefas({ tasks }) {
     }
 
     window.location.reload();
-  }
-
-  function priorityStyle(priority) {
-    if (priority === "MUITO URGENTE") {
-      return {
-        background: "#fee2e2",
-        color: "#991b1b",
-      };
-    }
-
-    if (priority === "URGENTE") {
-      return {
-        background: "#fef3c7",
-        color: "#92400e",
-      };
-    }
-
-    return {
-      background: "#e5e7eb",
-      color: "#374151",
-    };
-  }
-
-  function statusStyle(status) {
-    if (status === "em tratamento") {
-      return {
-        background: "#dbeafe",
-        color: "#1d4ed8",
-      };
-    }
-
-    if (status === "concluida") {
-      return {
-        background: "#dcfce7",
-        color: "#166534",
-      };
-    }
-
-    return {
-      background: "#f3f4f6",
-      color: "#374151",
-    };
   }
 
   return (
@@ -194,223 +147,172 @@ export default function Tarefas({ tasks }) {
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={titlePage}>Tarefas Operacionais</h1>
-
+            <h1 style={title}>Tarefas</h1>
             <p style={subtitle}>
-              Gestão comercial e administrativa com histórico operacional.
+              Gestão por prioridade e categoria.
             </p>
           </div>
+
+          <button style={button} onClick={createTask}>
+            + Nova tarefa
+          </button>
         </header>
 
-        <section style={stats}>
-          <StatCard title="Abertas" value={abertas.length} />
-          <StatCard title="Concluídas" value={concluidas.length} />
-          <StatCard
-            title="Muito urgentes"
-            value={
-              abertas.filter((t) => t.priority === "MUITO URGENTE").length
-            }
-          />
+        <section style={card}>
+          <h2>Prioridade</h2>
+
+          <div style={statsGrid}>
+            <FilterCard
+              title="Todas"
+              value={openTasks.length}
+              active={priorityFilter === "TODAS"}
+              color="#111827"
+              onClick={() => setPriorityFilter("TODAS")}
+            />
+
+            <FilterCard
+              title="Normais"
+              value={normalTasks.length}
+              active={priorityFilter === "NORMAL"}
+              color="#2563eb"
+              onClick={() => setPriorityFilter("NORMAL")}
+            />
+
+            <FilterCard
+              title="Urgentes"
+              value={urgentTasks.length}
+              active={priorityFilter === "URGENTE"}
+              color="#f59e0b"
+              onClick={() => setPriorityFilter("URGENTE")}
+            />
+
+            <FilterCard
+              title="Muito urgentes"
+              value={veryUrgentTasks.length}
+              active={priorityFilter === "MUITO URGENTE"}
+              color="#dc2626"
+              onClick={() => setPriorityFilter("MUITO URGENTE")}
+            />
+          </div>
         </section>
 
-        <section style={grid}>
-          <div style={panel}>
-            <h2>Nova tarefa</h2>
+        <section style={card}>
+          <h2>Categoria</h2>
 
-            <form onSubmit={createTask} style={form}>
-              <input
-                style={input}
-                placeholder="Título"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
+          <div style={statsGrid}>
+            <FilterCard
+              title="Todas"
+              value={openTasks.length}
+              active={categoryFilter === "TODAS"}
+              color="#111827"
+              onClick={() => setCategoryFilter("TODAS")}
+            />
 
-              <select
-                style={input}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="comercial">Comercial</option>
-                <option value="administrativa">Administrativa</option>
-              </select>
+            <FilterCard
+              title="Administrativas"
+              value={administrativeTasks.length}
+              active={categoryFilter === "ADMINISTRATIVA"}
+              color="#0f766e"
+              onClick={() => setCategoryFilter("ADMINISTRATIVA")}
+            />
 
-              <select
-                style={input}
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option>NORMAL</option>
-                <option>URGENTE</option>
-                <option>MUITO URGENTE</option>
-              </select>
-
-              <input
-                style={input}
-                placeholder="Nome do prospect / cliente"
-                value={prospectName}
-                onChange={(e) => setProspectName(e.target.value)}
-              />
-
-              <input
-                style={input}
-                placeholder="Telefone"
-                value={prospectPhone}
-                onChange={(e) => setProspectPhone(e.target.value)}
-              />
-
-              <textarea
-                style={textarea}
-                placeholder="Descrição da tarefa"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-
-              <textarea
-                style={textarea}
-                placeholder="Procedimento inicial"
-                value={procedureNotes}
-                onChange={(e) => setProcedureNotes(e.target.value)}
-              />
-
-              <button style={button} disabled={saving}>
-                {saving ? "A guardar..." : "Criar tarefa"}
-              </button>
-            </form>
+            <FilterCard
+              title="Comerciais"
+              value={commercialTasks.length}
+              active={categoryFilter === "COMERCIAL"}
+              color="#7c3aed"
+              onClick={() => setCategoryFilter("COMERCIAL")}
+            />
           </div>
+        </section>
 
-          <div style={panel}>
-            <h2>Tarefas abertas</h2>
+        <section style={card}>
+          <h2>
+            Tarefas filtradas: {filteredTasks.length}
+          </h2>
 
-            {abertas.length === 0 ? (
-              <p style={muted}>Sem tarefas abertas.</p>
-            ) : (
-              <div style={list}>
-                {abertas.map((task) => (
+          {filteredTasks.length === 0 ? (
+            <p style={muted}>Sem tarefas nesta seleção.</p>
+          ) : (
+            <div style={taskGrid}>
+              {filteredTasks.map((task) => {
+                const priority = normalizePriority(task.priority);
+                const category = normalizeCategory(task.category);
+
+                return (
                   <div key={task.id} style={taskCard}>
                     <div style={taskTop}>
-                      <div>
-                        <h3 style={{ margin: 0 }}>{task.title}</h3>
+                      <h3>{task.title || "Sem título"}</h3>
 
-                        <p style={smallText}>{task.category}</p>
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div style={badgeRow}>
                         <span
                           style={{
-                            ...priorityBadge,
-                            ...priorityStyle(task.priority),
+                            ...badge,
+                            ...priorityStyle(priority),
                           }}
                         >
-                          {task.priority}
+                          {priority}
                         </span>
 
                         <span
                           style={{
-                            ...priorityBadge,
-                            ...statusStyle(task.status),
+                            ...badge,
+                            ...categoryStyle(category),
                           }}
                         >
-                          {task.status || "aberta"}
+                          {category}
                         </span>
                       </div>
                     </div>
 
                     <p>
-                      <strong>Cliente/Prospect:</strong>{" "}
-                      {task.clients?.name || task.prospect_name || "-"}
+                      <strong>Estado:</strong> {task.status || "aberta"}
                     </p>
 
                     <p>
-                      <strong>Telefone:</strong> {task.prospect_phone || "-"}
+                      <strong>Data limite:</strong> {formatDate(task.due_date)}
                     </p>
+
+                    <p>
+                      <strong>Cliente:</strong>{" "}
+                      {task.clients?.name ? (
+                        <Link href={`/clientes/${task.clients.id}`} style={link}>
+                          {task.clients.name}
+                        </Link>
+                      ) : (
+                        "Tarefa geral"
+                      )}
+                    </p>
+
+                    {task.policies && (
+                      <p>
+                        <strong>Apólice:</strong>{" "}
+                        {task.policies.policy_number || "-"} ·{" "}
+                        {task.policies.license_plate || "-"}
+                      </p>
+                    )}
 
                     <p>
                       <strong>Descrição:</strong> {task.description || "-"}
                     </p>
 
-                    <div style={procedureBox}>
-                      <strong>Procedimento adotado</strong>
-
-                      <pre style={procedureText}>
-                        {task.procedure_notes || "-"}
-                      </pre>
-                    </div>
-
-                    <p>
-                      <strong>Entrada:</strong> {formatDate(task.created_at)}
-                    </p>
-
-                    <p>
-                      <strong>Última atualização:</strong>{" "}
-                      {formatDate(task.updated_at)}
-                    </p>
-
-                    <div style={buttons}>
-                      <button
-                        style={{ ...smallButton, background: "#2563eb" }}
-                        onClick={() => updateStatus(task, "em tratamento")}
-                      >
-                        Em tratamento
-                      </button>
-
-                      <button
-                        style={{ ...smallButton, background: "#7c3aed" }}
-                        onClick={() => addProcedure(task)}
-                      >
-                        Adicionar procedimento
-                      </button>
+                    <div style={buttonGroup}>
+                      {task.client_id && (
+                        <Link href={`/clientes/${task.client_id}`} style={smallLinkButton}>
+                          Abrir cliente
+                        </Link>
+                      )}
 
                       <button
                         style={{ ...smallButton, background: "#16a34a" }}
-                        onClick={() => updateStatus(task, "concluida")}
+                        onClick={() => completeTask(task.id)}
                       >
-                        Encerrar
+                        Concluir
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section style={panel}>
-          <h2>Histórico encerrado</h2>
-
-          {concluidas.length === 0 ? (
-            <p style={muted}>Ainda não existem tarefas concluídas.</p>
-          ) : (
-            <div style={list}>
-              {concluidas.map((task) => (
-                <div key={task.id} style={closedTask}>
-                  <div style={taskTop}>
-                    <div>
-                      <strong>{task.title}</strong>
-
-                      <p style={smallText}>
-                        {task.prospect_name || task.clients?.name || "-"}
-                      </p>
-                    </div>
-
-                    <span style={closedBadge}>concluída</span>
-                  </div>
-
-                  <p style={smallText}>Entrada: {formatDate(task.created_at)}</p>
-
-                  <p style={smallText}>
-                    Encerrada em: {formatDate(task.closed_at)}
-                  </p>
-
-                  <div style={procedureBox}>
-                    <strong>Procedimento adotado</strong>
-
-                    <pre style={procedureText}>
-                      {task.procedure_notes || "-"}
-                    </pre>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -419,13 +321,62 @@ export default function Tarefas({ tasks }) {
   );
 }
 
-function StatCard({ title, value }) {
+function FilterCard({ title, value, color, active, onClick }) {
   return (
-    <div style={statCard}>
+    <button
+      style={{
+        ...statCard,
+        borderTop: `6px solid ${color}`,
+        outline: active ? `3px solid ${color}` : "none",
+      }}
+      onClick={onClick}
+    >
       <p style={cardLabel}>{title}</p>
-      <h2 style={cardValue}>{value}</h2>
-    </div>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
+    </button>
   );
+}
+
+function priorityStyle(priority) {
+  if (priority === "MUITO URGENTE") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  if (priority === "URGENTE") {
+    return {
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  return {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+  };
+}
+
+function categoryStyle(category) {
+  if (category === "COMERCIAL") {
+    return {
+      background: "#ede9fe",
+      color: "#5b21b6",
+    };
+  }
+
+  if (category === "ADMINISTRATIVA") {
+    return {
+      background: "#ccfbf1",
+      color: "#0f766e",
+    };
+  }
+
+  return {
+    background: "#e5e7eb",
+    color: "#374151",
+  };
 }
 
 const page = {
@@ -441,11 +392,14 @@ const main = {
 };
 
 const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   marginBottom: 30,
 };
 
-const titlePage = {
-  fontSize: 40,
+const title = {
+  fontSize: 42,
   margin: 0,
 };
 
@@ -454,18 +408,30 @@ const subtitle = {
   marginTop: 10,
 };
 
-const stats = {
+const button = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: 16,
-  marginBottom: 30,
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 18,
 };
 
 const statCard = {
   background: "white",
-  padding: 22,
-  borderRadius: 16,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  padding: 24,
+  borderRadius: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  border: "none",
+  textAlign: "left",
+  cursor: "pointer",
 };
 
 const cardLabel = {
@@ -474,127 +440,83 @@ const cardLabel = {
 };
 
 const cardValue = {
-  fontSize: 28,
-  marginTop: 10,
+  marginTop: 12,
+  fontSize: 32,
 };
 
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "420px 1fr",
-  gap: 24,
-};
-
-const panel = {
+const card = {
   background: "white",
-  borderRadius: 16,
+  borderRadius: 18,
   padding: 24,
   marginBottom: 24,
-  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const form = {
+const taskGrid = {
   display: "grid",
-  gap: 12,
-};
-
-const input = {
-  padding: 13,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-};
-
-const textarea = {
-  minHeight: 100,
-  padding: 13,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-};
-
-const button = {
-  padding: 14,
-  borderRadius: 10,
-  border: "none",
-  background: "#2563eb",
-  color: "white",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const muted = {
-  color: "#6b7280",
-};
-
-const list = {
-  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   gap: 16,
 };
 
 const taskCard = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
+  background: "#f9fafb",
   padding: 18,
+  borderRadius: 14,
 };
 
 const taskTop = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 16,
+  alignItems: "flex-start",
+  gap: 12,
 };
 
-const priorityBadge = {
+const badgeRow = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const badge = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
+  whiteSpace: "nowrap",
 };
 
-const smallText = {
-  color: "#6b7280",
-};
-
-const procedureBox = {
-  background: "#f9fafb",
-  borderRadius: 12,
-  padding: 14,
-  marginTop: 16,
-  marginBottom: 16,
-};
-
-const procedureText = {
-  whiteSpace: "pre-wrap",
-  fontFamily: "Arial",
-  margin: "10px 0 0",
-};
-
-const buttons = {
+const buttonGroup = {
   display: "flex",
-  gap: 10,
-  marginTop: 16,
+  gap: 8,
   flexWrap: "wrap",
+  marginTop: 16,
 };
 
 const smallButton = {
-  border: "none",
   color: "white",
-  padding: "10px 12px",
-  borderRadius: 8,
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
   cursor: "pointer",
+  fontWeight: "bold",
 };
 
-const closedTask = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: 16,
+const smallLinkButton = {
+  background: "#111827",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 10,
+  textDecoration: "none",
+  fontWeight: "bold",
 };
 
-const closedBadge = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: "5px 10px",
-  borderRadius: 999,
-  fontSize: 12,
+const link = {
+  color: "#2563eb",
+  fontWeight: "bold",
+  textDecoration: "none",
 };
- 
 
-    
+const muted = {
+  color: "#6b7280",
+};
