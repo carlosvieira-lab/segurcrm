@@ -32,7 +32,7 @@ function formatDate(date) {
 }
 
 function normalizePriority(priority) {
-  const p = String(priority || "NORMAL").toUpperCase();
+  const p = String(priority || "NORMAL").toUpperCase().trim();
 
   if (p === "URGENTE") return "URGENTE";
   if (p === "MUITO URGENTE") return "MUITO URGENTE";
@@ -41,12 +41,21 @@ function normalizePriority(priority) {
 }
 
 function normalizeCategory(category) {
-  const c = String(category || "").toLowerCase();
+  const c = String(category || "").toLowerCase().trim();
 
-  if (c.includes("comercial")) return "COMERCIAL";
-  if (c.includes("administrativa")) return "ADMINISTRATIVA";
+  if (c.includes("comercial")) {
+    return "COMERCIAL";
+  }
 
-  return "OUTRA";
+  if (
+    c.includes("administrativa") ||
+    c.includes("administrativo") ||
+    c.includes("admin")
+  ) {
+    return "ADMINISTRATIVA";
+  }
+
+  return "SEM CATEGORIA";
 }
 
 export default function Tarefas({ tasks }) {
@@ -73,6 +82,10 @@ export default function Tarefas({ tasks }) {
 
   const commercialTasks = openTasks.filter(
     (t) => normalizeCategory(t.category) === "COMERCIAL"
+  );
+
+  const uncategorizedTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "SEM CATEGORIA"
   );
 
   let filteredTasks = openTasks;
@@ -223,13 +236,19 @@ export default function Tarefas({ tasks }) {
               color="#7c3aed"
               onClick={() => setCategoryFilter("COMERCIAL")}
             />
+
+            <FilterCard
+              title="Sem categoria"
+              value={uncategorizedTasks.length}
+              active={categoryFilter === "SEM CATEGORIA"}
+              color="#6b7280"
+              onClick={() => setCategoryFilter("SEM CATEGORIA")}
+            />
           </div>
         </section>
 
         <section style={card}>
-          <h2>
-            Tarefas filtradas: {filteredTasks.length}
-          </h2>
+          <h2>Tarefas filtradas: {filteredTasks.length}</h2>
 
           {filteredTasks.length === 0 ? (
             <p style={muted}>Sem tarefas nesta seleção.</p>
@@ -298,7 +317,10 @@ export default function Tarefas({ tasks }) {
 
                     <div style={buttonGroup}>
                       {task.client_id && (
-                        <Link href={`/clientes/${task.client_id}`} style={smallLinkButton}>
+                        <Link
+                          href={`/clientes/${task.client_id}`}
+                          style={smallLinkButton}
+                        >
                           Abrir cliente
                         </Link>
                       )}
@@ -370,6 +392,13 @@ function categoryStyle(category) {
     return {
       background: "#ccfbf1",
       color: "#0f766e",
+    };
+  }
+
+  if (category === "SEM CATEGORIA") {
+    return {
+      background: "#e5e7eb",
+      color: "#374151",
     };
   }
 
