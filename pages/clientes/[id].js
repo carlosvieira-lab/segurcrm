@@ -58,6 +58,60 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
+function clientRating(policies, totalCommission) {
+  const count = policies.length;
+
+  if (count >= 5 || totalCommission >= 150) return "TOP";
+  if (count >= 4 || totalCommission >= 120) return "MUITO BOM";
+  if (count >= 3 || totalCommission >= 100) return "BOM";
+  if (count >= 2 || totalCommission >= 50) return "MÉDIO";
+  if (count >= 1 || totalCommission >= 20) return "FRACO";
+
+  return "SEM CARTEIRA";
+}
+
+function ratingStyle(rating) {
+  if (rating === "TOP") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+    };
+  }
+
+  if (rating === "MUITO BOM") {
+    return {
+      background: "#dbeafe",
+      color: "#1d4ed8",
+    };
+  }
+
+  if (rating === "BOM") {
+    return {
+      background: "#ede9fe",
+      color: "#5b21b6",
+    };
+  }
+
+  if (rating === "MÉDIO") {
+    return {
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  if (rating === "FRACO") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#374151",
+  };
+}
+
 function InfoItem({ label, value }) {
   return (
     <div style={infoItem}>
@@ -144,10 +198,7 @@ export default function ClientePage({ client, policies, claims }) {
     );
     if (fracionamento === null) return;
 
-    const dataInicio = prompt(
-      "Data início apólice",
-      policy.start_date || ""
-    );
+    const dataInicio = prompt("Data início apólice", policy.start_date || "");
     if (dataInicio === null) return;
 
     const renovacao = prompt("Renovação", policy.renewal_date || "");
@@ -268,6 +319,8 @@ export default function ClientePage({ client, policies, claims }) {
     0
   );
 
+  const rating = clientRating(policies, totalCommission);
+
   return (
     <div style={page}>
       <Sidebar active="clientes" />
@@ -319,6 +372,15 @@ export default function ClientePage({ client, policies, claims }) {
             <div style={statBox}>
               <span style={statLabel}>Comissão anual</span>
               <strong style={statValue}>{totalCommission.toFixed(2)} €</strong>
+            </div>
+
+            <div style={{ ...statBox, ...ratingStyle(rating) }}>
+              <span style={{ ...statLabel, color: ratingStyle(rating).color }}>
+                Classificação
+              </span>
+              <strong style={{ ...statValue, color: ratingStyle(rating).color }}>
+                {rating}
+              </strong>
             </div>
           </div>
         </section>
@@ -587,4 +649,3 @@ const claimCard = {
   textDecoration: "none",
   color: "#111827",
 };
-
