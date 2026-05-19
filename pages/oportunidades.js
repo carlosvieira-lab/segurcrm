@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -30,6 +31,15 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
+function addMonths(dateString, months) {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+  date.setMonth(date.getMonth() + months);
+
+  return date.toISOString().split("T")[0];
+}
+
 function todayText() {
   return new Date().toLocaleString("pt-PT", {
     dateStyle: "short",
@@ -37,75 +47,175 @@ function todayText() {
   });
 }
 
-function calculateContactDate(renewalDate) {
-  if (!renewalDate) return null;
-
-  const date = new Date(renewalDate);
-  date.setMonth(date.getMonth() - 1);
-
-  return date.toISOString().split("T")[0];
-}
-
 export default function Oportunidades({ opportunities }) {
-  async function createOpportunity() {
-    const clientNif = prompt("NIF do cliente, se existir em carteira");
+  const [clientNif, setClientNif] = useState("");
+  const [clientId, setClientId] = useState(null);
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [opportunityText, setOpportunityText] = useState("");
+  const [renewalDate, setRenewalDate] = useState("");
+  const [contactDate, setContactDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [clientFound, setClientFound] = useState(false);
 
-    let client_id = null;
-    let clientName = "";
-    let clientPhone = "";
+  useEffect(() => {
+    setContactDate(addMonths(renewalDate, -1));
+  }, [renewalDate]);
 
-    if (clientNif) {
-      const { data: existingClient } = await supabase
-        .from("clients")
-        .select("id, name, nif, phone")
-        .eq("nif", clientNif)
-        .maybeSingle();
+  async function searchClientByNif() {
+    if (!clientNif) return;
 
-      if (existingClient) {
-        client_id = existingClient.id;
-        clientName = existingClient.name || "";
-        clientPhone = existingClient.phone || "";
-      }
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name, nif, phone")
+      .eq("nif", clientNif)
+      .maybeSingle();
+
+    if (data) {
+      setClientId(data.id);
+      setClientName(data.name || "");
+      setClientPhone(data.phone || "");
+      setClientFound(true);
+    } else {
+      setClientId(null);
+      setClientFound(false);
+      setClientName("");
+      setClientPhone("");
+      alert("Cliente não encontrado em carteira. Podes preencher manualmente.");
     }
+  }
+
+  async function createOpportunity(e) {
+    e.preventDefault();
 
     if (!clientName) {
-      clientName = prompt("Nome do cliente") || "";
+      alert("Preenche o nome do cliente.");
+      return;
     }
 
-    if (!clientPhone) {
-      clientPhone = prompt("Telefone do cliente") || "";
+    if (!opportunityText) {
+      alert("Preenche a descrição da oportunidade.");
+      return;
     }
 
-    if (!clientName) return;
+    if (!renewalDate) {
+      alert("Preenche a data de vencimento.");
+      return;
+    }
 
-    const insuranceType = prompt(
-      "Seguro a captar (Casa, Automóvel, Vida, Saúde, etc.)"
-    );
+    setSaving(true);
 
-    const currentInsurer = prompt("Companhia atual");
+    const procedureText = `${todayText()} - Oportunidade criada: ${opportunityText}`;
 
-    const renewalDate = prompt("Data de vencimento (AAAA-MM-DD)");
+    const { data: opportunity, error } = await supabase
+      .from("opportunities")
+      .insert({
+        client_id: clientId,
+        client_nif: clientNif || null,
+        client_phone: clientPhone || null,
+        name: clientName,
+        insurance_type: opportunityText,
+        renewal_date: renewalDate,
+        contact_date: contactDate || null,
+        status: "por contactar",
+        procedure_notes: procedureText,
+      })
+      .select("id")
+      .single();
 
-    const contactDate = calculateContactDate(renewalDate);
+    if (error) {
+      setSaving(false);
+      alert(error.message);
+      return;
+    }
 
-    const notes = prompt("Procedimento inicial / observações");
-
-    const initialProcedure = notes
-      ? `${todayText()} - ${notes}`
-      : `${todayText()} - Oportunidade criada.`;
-
-    const { error } = await supabase.from("opportunities").insert({
-      client_id,
-      client_nif: clientNif || null,
-      client_phone: clientPhone || null,
-      name: clientName,
-      insurance_type: insuranceType || null,
-      current_insurer: currentInsurer || null,
-      renewal_date: renewalDate || null,
-      contact_date: contactDate || null,
-      status: "por contactar",
-      procedure_notes: initialProcedure,
+    await supabase.from("tasks").insert({
+      client_id: clientId,
+      title: `Contactar ${clientName} para oportunidade`,
+      category: "COMERCIAL",
+      priority: "NORMAL",
+      status: "aberta",
+      due_date: contactDate || null,
+      origin: "automática - oportunidade",
+      description: `Contactar cliente 1 mês antes do vencimento da apólice na congénere. Oportunidade: ${opportunityText}`,
     });
+
+    setSaving(false);
+
+    setClientNif("");
+    setClientId(null);
+    setClientName("");
+    setClientPhone("");
+    setOpportunityText("");
+    setRenewalDate("");
+    setContactDate("");
+    setClientFound(false);
+
+    window.location.reload();
+  }
+
+  async function editOpportunity(item) {
+    const name = prompt("Nome do cliente", item.name || "");
+    if (name === null) return;
+
+    const client_nif = prompt("NIF", item.client_nif || item.clients?.nif || "");
+    if (client_nif === null) return;
+
+    const client_phone = prompt(
+      "Contacto telefónico",
+      item.client_phone || item.clients?.phone || ""
+    );
+    if (client_phone === null) return;
+
+    const insurance_type = prompt(
+      "Descrição da oportunidade",
+      item.insurance_type || ""
+    );
+    if (insurance_type === null) return;
+
+    const renewal_date = prompt(
+      "Data de vencimento (AAAA-MM-DD)",
+      item.renewal_date || ""
+    );
+    if (renewal_date === null) return;
+
+    const contact_date = prompt(
+      "Data para contactar (AAAA-MM-DD)",
+      item.contact_date || addMonths(renewal_date, -1) || ""
+    );
+    if (contact_date === null) return;
+
+    const status = prompt(
+      "Estado (por contactar, contactado, ganho, perdido)",
+      item.status || "por contactar"
+    );
+    if (status === null) return;
+
+    let foundClient = null;
+
+    if (client_nif) {
+      const { data } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("nif", client_nif)
+        .maybeSingle();
+
+      foundClient = data;
+    }
+
+    const { error } = await supabase
+      .from("opportunities")
+      .update({
+        client_id: foundClient?.id || item.client_id || null,
+        client_nif: client_nif || null,
+        client_phone: client_phone || null,
+        name,
+        insurance_type,
+        renewal_date: renewal_date || null,
+        contact_date: contact_date || null,
+        status: status || "por contactar",
+      })
+      .eq("id", item.id);
 
     if (error) {
       alert(error.message);
@@ -115,23 +225,21 @@ export default function Oportunidades({ opportunities }) {
     window.location.reload();
   }
 
-  async function addProcedure(opportunity) {
-    const note = prompt("Novo procedimento");
-
+  async function addProcedure(item) {
+    const note = prompt("Novo procedimento / cronologia");
     if (!note) return;
 
-    const previous = opportunity.procedure_notes || "";
-
-    const updatedNotes = previous
+    const previous = item.procedure_notes || "";
+    const next = previous
       ? `${previous}\n\n${todayText()} - ${note}`
       : `${todayText()} - ${note}`;
 
     const { error } = await supabase
       .from("opportunities")
       .update({
-        procedure_notes: updatedNotes,
+        procedure_notes: next,
       })
-      .eq("id", opportunity.id);
+      .eq("id", item.id);
 
     if (error) {
       alert(error.message);
@@ -141,90 +249,18 @@ export default function Oportunidades({ opportunities }) {
     window.location.reload();
   }
 
-  async function editOpportunity(opportunity) {
-    const name = prompt("Nome do cliente", opportunity.name || "");
-    if (name === null) return;
+  async function updateStatus(item, status) {
+    const previous = item.procedure_notes || "";
+    const line = `${todayText()} - Estado alterado para ${status}`;
+    const next = previous ? `${previous}\n\n${line}` : line;
 
-    const client_nif = prompt("NIF", opportunity.client_nif || "");
-    if (client_nif === null) return;
-
-    const client_phone = prompt("Telefone", opportunity.client_phone || "");
-    if (client_phone === null) return;
-
-    const insurance_type = prompt(
-      "Seguro a captar",
-      opportunity.insurance_type || ""
-    );
-    if (insurance_type === null) return;
-
-    const current_insurer = prompt(
-      "Companhia atual",
-      opportunity.current_insurer || ""
-    );
-    if (current_insurer === null) return;
-
-    const renewal_date = prompt(
-      "Data de vencimento (AAAA-MM-DD)",
-      opportunity.renewal_date || ""
-    );
-    if (renewal_date === null) return;
-
-    const contact_date = prompt(
-      "Data para contactar (AAAA-MM-DD)",
-      opportunity.contact_date || calculateContactDate(renewal_date) || ""
-    );
-    if (contact_date === null) return;
-
-    const status = prompt(
-      "Estado (por contactar, contactado, ganho, perdido)",
-      opportunity.status || "por contactar"
-    );
-    if (status === null) return;
-
-    let client_id = opportunity.client_id || null;
-
-    if (client_nif) {
-      const { data: existingClient } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("nif", client_nif)
-        .maybeSingle();
-
-      if (existingClient) {
-        client_id = existingClient.id;
-      }
-    }
-
-    const { error } = await supabase
-      .from("opportunities")
-      .update({
-        client_id,
-        name,
-        client_nif: client_nif || null,
-        client_phone: client_phone || null,
-        insurance_type: insurance_type || null,
-        current_insurer: current_insurer || null,
-        renewal_date: renewal_date || null,
-        contact_date: contact_date || null,
-        status: status || "por contactar",
-      })
-      .eq("id", opportunity.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    window.location.reload();
-  }
-
-  async function updateStatus(id, status) {
     const { error } = await supabase
       .from("opportunities")
       .update({
         status,
+        procedure_notes: next,
       })
-      .eq("id", id);
+      .eq("id", item.id);
 
     if (error) {
       alert(error.message);
@@ -237,43 +273,102 @@ export default function Oportunidades({ opportunities }) {
   const today = new Date().toISOString().split("T")[0];
 
   const toContact = opportunities.filter(
-    (o) =>
-      o.status !== "ganho" &&
-      o.status !== "perdido" &&
-      o.contact_date &&
-      o.contact_date <= today
+    (item) =>
+      item.status !== "ganho" &&
+      item.status !== "perdido" &&
+      item.contact_date &&
+      item.contact_date <= today
   );
 
   const future = opportunities.filter(
-    (o) =>
-      o.status !== "ganho" &&
-      o.status !== "perdido" &&
-      o.contact_date &&
-      o.contact_date > today
+    (item) =>
+      item.status !== "ganho" &&
+      item.status !== "perdido" &&
+      item.contact_date &&
+      item.contact_date > today
   );
 
-  const won = opportunities.filter((o) => o.status === "ganho");
-  const lost = opportunities.filter((o) => o.status === "perdido");
+  const won = opportunities.filter((item) => item.status === "ganho");
+  const lost = opportunities.filter((item) => item.status === "perdido");
 
   return (
     <div style={page}>
       <Sidebar active="oportunidades" />
 
       <main style={main}>
-        <div style={header}>
+        <header style={header}>
           <div>
             <h1 style={title}>Agenda de Captação</h1>
-
             <p style={subtitle}>
-              Seguros a captar, vencimentos noutras companhias e contactos
-              programados.
+              Regista oportunidades fora da carteira e agenda contacto 1 mês
+              antes do vencimento.
             </p>
           </div>
+        </header>
 
-          <button style={button} onClick={createOpportunity}>
-            + Nova captação
-          </button>
-        </div>
+        <section style={formCard}>
+          <h2>Nova oportunidade</h2>
+
+          <form style={form} onSubmit={createOpportunity}>
+            <label style={label}>NIF do cliente</label>
+
+            <div style={nifRow}>
+              <input
+                style={input}
+                value={clientNif}
+                onChange={(e) => setClientNif(e.target.value)}
+                placeholder="NIF"
+              />
+
+              <button type="button" style={darkButton} onClick={searchClientByNif}>
+                Procurar
+              </button>
+            </div>
+
+            {clientFound && (
+              <p style={successText}>Cliente encontrado em carteira.</p>
+            )}
+
+            <label style={label}>Nome do cliente</label>
+            <input
+              style={input}
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="Nome do cliente"
+            />
+
+            <label style={label}>Contacto telefónico</label>
+            <input
+              style={input}
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              placeholder="Telefone"
+            />
+
+            <label style={label}>Oportunidade / seguro a captar</label>
+            <textarea
+              style={textarea}
+              value={opportunityText}
+              onChange={(e) => setOpportunityText(e.target.value)}
+              placeholder="Ex: Seguro automóvel na companhia X, cliente demonstrou interesse em transferir..."
+            />
+
+            <label style={label}>Data de vencimento da apólice na congénere</label>
+            <input
+              type="date"
+              style={input}
+              value={renewalDate}
+              onChange={(e) => setRenewalDate(e.target.value)}
+            />
+
+            <label style={label}>Data automática para contacto</label>
+            <input style={inputDisabled} value={contactDate || ""} readOnly />
+
+            <button style={button} disabled={saving}>
+              {saving ? "A guardar..." : "Guardar oportunidade"}
+            </button>
+          </form>
+        </section>
 
         <section style={statsGrid}>
           <StatCard title="A contactar" value={toContact.length} color="#dc2626" />
@@ -322,12 +417,7 @@ export default function Oportunidades({ opportunities }) {
   );
 }
 
-function OpportunityGrid({
-  items,
-  editOpportunity,
-  addProcedure,
-  updateStatus,
-}) {
+function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus }) {
   if (items.length === 0) {
     return <p style={muted}>Sem registos.</p>;
   }
@@ -335,37 +425,17 @@ function OpportunityGrid({
   return (
     <div style={grid}>
       {items.map((item) => (
-        <div key={item.id} style={card}>
-          <div style={cardTop}>
-            <h3>{item.name || "-"}</h3>
-
+        <div key={item.id} style={opportunityCard}>
+          <div style={topLine}>
+            <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
             <span style={statusBadge}>{item.status || "por contactar"}</span>
           </div>
 
-          <p>
-            <strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}
-          </p>
-
-          <p>
-            <strong>Telefone:</strong>{" "}
-            {item.client_phone || item.clients?.phone || "-"}
-          </p>
-
-          <p>
-            <strong>Seguro a captar:</strong> {item.insurance_type || "-"}
-          </p>
-
-          <p>
-            <strong>Companhia atual:</strong> {item.current_insurer || "-"}
-          </p>
-
-          <p>
-            <strong>Vencimento:</strong> {formatDate(item.renewal_date)}
-          </p>
-
-          <p>
-            <strong>Contactar em:</strong> {formatDate(item.contact_date)}
-          </p>
+          <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
+          <p><strong>Telefone:</strong> {item.client_phone || item.clients?.phone || "-"}</p>
+          <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
+          <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
+          <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
 
           {item.client_id && (
             <Link href={`/clientes/${item.client_id}`} style={clientLink}>
@@ -379,35 +449,23 @@ function OpportunityGrid({
           </div>
 
           <div style={buttonGroup}>
-            <button style={smallButton} onClick={() => editOpportunity(item)}>
+            <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
               Editar
             </button>
 
-            <button
-              style={{ ...smallButton, background: "#7c3aed" }}
-              onClick={() => addProcedure(item)}
-            >
+            <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
               + Procedimento
             </button>
 
-            <button
-              style={{ ...smallButton, background: "#2563eb" }}
-              onClick={() => updateStatus(item.id, "contactado")}
-            >
+            <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
               Contactado
             </button>
 
-            <button
-              style={{ ...smallButton, background: "#16a34a" }}
-              onClick={() => updateStatus(item.id, "ganho")}
-            >
+            <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
               Ganho
             </button>
 
-            <button
-              style={{ ...smallButton, background: "#dc2626" }}
-              onClick={() => updateStatus(item.id, "perdido")}
-            >
+            <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
               Perdido
             </button>
           </div>
@@ -448,9 +506,6 @@ const main = {
 };
 
 const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
   marginBottom: 30,
 };
 
@@ -464,13 +519,78 @@ const subtitle = {
   marginTop: 10,
 };
 
+const formCard = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const form = {
+  display: "grid",
+  gap: 12,
+  maxWidth: 720,
+};
+
+const label = {
+  fontSize: 13,
+  color: "#6b7280",
+  fontWeight: "bold",
+};
+
+const nifRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
+  gap: 10,
+};
+
+const input = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+};
+
+const inputDisabled = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#f3f4f6",
+  fontSize: 15,
+};
+
+const textarea = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  minHeight: 100,
+  fontSize: 15,
+  fontFamily: "Arial, sans-serif",
+};
+
 const button = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: 14,
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const darkButton = {
   background: "#111827",
   color: "white",
   border: "none",
-  padding: "12px 18px",
+  padding: "0 16px",
   borderRadius: 10,
   cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const successText = {
+  color: "#166534",
   fontWeight: "bold",
 };
 
@@ -478,7 +598,7 @@ const statsGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
   gap: 18,
-  marginBottom: 30,
+  marginBottom: 24,
 };
 
 const statCard = {
@@ -516,13 +636,13 @@ const grid = {
   gap: 18,
 };
 
-const card = {
+const opportunityCard = {
   background: "#f9fafb",
   padding: 20,
   borderRadius: 16,
 };
 
-const cardTop = {
+const topLine = {
   display: "flex",
   justifyContent: "space-between",
   gap: 12,
@@ -558,7 +678,7 @@ const procedureBox = {
 
 const procedureText = {
   whiteSpace: "pre-wrap",
-  fontFamily: "Arial",
+  fontFamily: "Arial, sans-serif",
   margin: "10px 0 0",
 };
 
@@ -570,7 +690,6 @@ const buttonGroup = {
 };
 
 const smallButton = {
-  background: "#111827",
   color: "white",
   border: "none",
   padding: "9px 12px",
