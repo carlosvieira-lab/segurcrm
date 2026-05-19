@@ -1,4 +1,4 @@
-import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -19,7 +19,14 @@ export async function getServerSideProps() {
   const { data: opportunities } =
     await supabase
       .from("opportunities")
-      .select("*")
+      .select(`
+        *,
+        clients (
+          id,
+          name,
+          nif
+        )
+      `)
       .order("created_at", {
         ascending: false,
       });
@@ -30,16 +37,6 @@ export async function getServerSideProps() {
         opportunities || [],
     },
   };
-}
-
-function formatEuro(value) {
-  return new Intl.NumberFormat(
-    "pt-PT",
-    {
-      style: "currency",
-      currency: "EUR",
-    }
-  ).format(Number(value || 0));
 }
 
 function formatDate(date) {
@@ -53,81 +50,40 @@ function formatDate(date) {
 export default function Oportunidades({
   opportunities,
 }) {
-  const [loading, setLoading] =
-    useState(false);
-
   async function createOpportunity() {
-    const name = prompt(
-      "Nome da oportunidade"
+    const title = prompt(
+      "Título da oportunidade"
     );
 
-    if (!name) return;
+    if (!title) return;
 
-    const contact_name = prompt(
-      "Nome do contacto"
+    const description = prompt(
+      "Descrição"
     );
 
-    const phone =
-      prompt("Telefone");
-
-    const email =
-      prompt("Email");
-
-    const branch =
-      prompt("Ramo");
-
-    const insurer =
-      prompt("Seguradora");
-
-    const premium = prompt(
-      "Prémio potencial (€)"
+    const branch = prompt(
+      "Ramo"
     );
 
-    const commission = prompt(
-      "Comissão potencial (€)"
+    const estimated_value = prompt(
+      "Valor estimado (€)"
     );
 
-    const priority = prompt(
-      "Prioridade (LOW, NORMAL, HIGH, URGENT)",
-      "NORMAL"
+    const status = prompt(
+      "Estado (ABERTA, EM NEGOCIAÇÃO, GANHA, PERDIDA)",
+      "ABERTA"
     );
-
-    const notes =
-      prompt("Notas");
-
-    const next_followup =
-      prompt(
-        "Próximo follow-up (AAAA-MM-DD)"
-      );
-
-    setLoading(true);
 
     const { error } =
       await supabase
         .from("opportunities")
         .insert({
-          name,
-          contact_name,
-          phone,
-          email,
+          title,
+          description,
           branch,
-          insurer,
-          premium: premium
-            ? String(
-                premium
-              ).replace(",", ".")
-            : null,
-          commission: commission
-            ? String(
-                commission
-              ).replace(",", ".")
-            : null,
-          priority,
-          notes,
-          next_followup,
+          estimated_value,
+          status,
         });
-
-    setLoading(false);
 
     if (error) {
       alert(error.message);
@@ -139,24 +95,21 @@ export default function Oportunidades({
 
   async function updateStatus(
     id,
-    status
+    currentStatus
   ) {
-    const updateData = {
-      status,
-    };
+    const status = prompt(
+      "Novo estado",
+      currentStatus
+    );
 
-    if (
-      status === "ganho" ||
-      status === "perdido"
-    ) {
-      updateData.closed_at =
-        new Date().toISOString();
-    }
+    if (!status) return;
 
     const { error } =
       await supabase
         .from("opportunities")
-        .update(updateData)
+        .update({
+          status,
+        })
         .eq("id", id);
 
     if (error) {
@@ -166,57 +119,6 @@ export default function Oportunidades({
 
     window.location.reload();
   }
-
-  const leads =
-    opportunities.filter(
-      (o) => o.status === "lead"
-    );
-
-  const proposals =
-    opportunities.filter(
-      (o) =>
-        o.status === "proposta"
-    );
-
-  const won =
-    opportunities.filter(
-      (o) => o.status === "ganho"
-    );
-
-  const lost =
-    opportunities.filter(
-      (o) => o.status === "perdido"
-    );
-
-  const openPremium =
-    opportunities
-      .filter(
-        (o) =>
-          o.status !== "ganho" &&
-          o.status !== "perdido"
-      )
-      .reduce(
-        (sum, o) =>
-          sum +
-          Number(o.premium || 0),
-        0
-      );
-
-  const openCommission =
-    opportunities
-      .filter(
-        (o) =>
-          o.status !== "ganho" &&
-          o.status !== "perdido"
-      )
-      .reduce(
-        (sum, o) =>
-          sum +
-          Number(
-            o.commission || 0
-          ),
-        0
-      );
 
   return (
     <div style={page}>
@@ -230,9 +132,8 @@ export default function Oportunidades({
             </h1>
 
             <p style={subtitle}>
-              Gestão comercial,
-              callbacks e pipeline
-              de vendas.
+              Gestão comercial simples
+              e objetiva.
             </p>
           </div>
 
@@ -241,355 +142,130 @@ export default function Oportunidades({
             onClick={
               createOpportunity
             }
-            disabled={loading}
           >
-            {loading
-              ? "A criar..."
-              : "+ Nova oportunidade"}
+            + Nova oportunidade
           </button>
         </div>
 
-        <section style={statsGrid}>
-          <StatCard
-            title="Leads"
-            value={leads.length}
-            color="#2563eb"
-          />
+        {opportunities.length ===
+        0 ? (
+          <div style={emptyCard}>
+            Sem oportunidades.
+          </div>
+        ) : (
+          <div style={grid}>
+            {opportunities.map(
+              (opportunity) => (
+                <div
+                  key={
+                    opportunity.id
+                  }
+                  style={card}
+                >
+                  <div
+                    style={top}
+                  >
+                    <h2>
+                      {
+                        opportunity.title
+                      }
+                    </h2>
 
-          <StatCard
-            title="Propostas"
-            value={
-              proposals.length
-            }
-            color="#7c3aed"
-          />
+                    <span
+                      style={
+                        badge
+                      }
+                    >
+                      {opportunity.status ||
+                        "ABERTA"}
+                    </span>
+                  </div>
 
-          <StatCard
-            title="Ganhos"
-            value={won.length}
-            color="#16a34a"
-          />
+                  <p>
+                    <strong>
+                      Cliente:
+                    </strong>{" "}
+                    {opportunity
+                      .clients
+                      ?.name ? (
+                      <Link
+                        href={`/clientes/${opportunity.clients.id}`}
+                        style={
+                          link
+                        }
+                      >
+                        {
+                          opportunity
+                            .clients
+                            .name
+                        }
+                      </Link>
+                    ) : (
+                      "-"
+                    )}
+                  </p>
 
-          <StatCard
-            title="Perdidos"
-            value={lost.length}
-            color="#dc2626"
-          />
+                  <p>
+                    <strong>
+                      Ramo:
+                    </strong>{" "}
+                    {opportunity.branch ||
+                      "-"}
+                  </p>
 
-          <StatCard
-            title="Prémio potencial"
-            value={formatEuro(
-              openPremium
+                  <p>
+                    <strong>
+                      Valor:
+                    </strong>{" "}
+                    {opportunity.estimated_value ||
+                      0}{" "}
+                    €
+                  </p>
+
+                  <p>
+                    <strong>
+                      Criada:
+                    </strong>{" "}
+                    {formatDate(
+                      opportunity.created_at
+                    )}
+                  </p>
+
+                  <p>
+                    <strong>
+                      Descrição:
+                    </strong>{" "}
+                    {opportunity.description ||
+                      "-"}
+                  </p>
+
+                  <div
+                    style={
+                      buttonRow
+                    }
+                  >
+                    <button
+                      style={
+                        smallButton
+                      }
+                      onClick={() =>
+                        updateStatus(
+                          opportunity.id,
+                          opportunity.status
+                        )
+                      }
+                    >
+                      Alterar estado
+                    </button>
+                  </div>
+                </div>
+              )
             )}
-            color="#f59e0b"
-          />
-
-          <StatCard
-            title="Comissão potencial"
-            value={formatEuro(
-              openCommission
-            )}
-            color="#0f766e"
-          />
-        </section>
-
-        <section style={board}>
-          <PipelineColumn
-            title="Leads"
-            color="#2563eb"
-            items={leads}
-            updateStatus={
-              updateStatus
-            }
-          />
-
-          <PipelineColumn
-            title="Propostas"
-            color="#7c3aed"
-            items={proposals}
-            updateStatus={
-              updateStatus
-            }
-          />
-
-          <PipelineColumn
-            title="Ganhos"
-            color="#16a34a"
-            items={won}
-            updateStatus={
-              updateStatus
-            }
-          />
-
-          <PipelineColumn
-            title="Perdidos"
-            color="#dc2626"
-            items={lost}
-            updateStatus={
-              updateStatus
-            }
-          />
-        </section>
+          </div>
+        )}
       </main>
     </div>
   );
-}
-
-function PipelineColumn({
-  title,
-  items,
-  color,
-  updateStatus,
-}) {
-  return (
-    <div style={column}>
-      <div
-        style={{
-          ...columnHeader,
-          borderTop: `6px solid ${color}`,
-        }}
-      >
-        <h2>{title}</h2>
-        <span>{items.length}</span>
-      </div>
-
-      <div style={columnBody}>
-        {items.length === 0 ? (
-          <p style={muted}>
-            Sem oportunidades.
-          </p>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              style={opportunityCard}
-            >
-              <div
-                style={
-                  opportunityTop
-                }
-              >
-                <h3>
-                  {item.name}
-                </h3>
-
-                <span
-                  style={{
-                    ...priorityBadge,
-                    background:
-                      getPriorityColor(
-                        item.priority
-                      ),
-                  }}
-                >
-                  {item.priority ||
-                    "NORMAL"}
-                </span>
-              </div>
-
-              <p>
-                <strong>
-                  Contacto:
-                </strong>{" "}
-                {item.contact_name ||
-                  "-"}
-              </p>
-
-              <p>
-                <strong>
-                  Telefone:
-                </strong>{" "}
-                {item.phone ||
-                  "-"}
-              </p>
-
-              <p>
-                <strong>
-                  Email:
-                </strong>{" "}
-                {item.email ||
-                  "-"}
-              </p>
-
-              <p>
-                <strong>
-                  Ramo:
-                </strong>{" "}
-                {item.branch ||
-                  "-"}
-              </p>
-
-              <p>
-                <strong>
-                  Seguradora:
-                </strong>{" "}
-                {item.insurer ||
-                  "-"}
-              </p>
-
-              <p>
-                <strong>
-                  Prémio:
-                </strong>{" "}
-                {formatEuro(
-                  item.premium
-                )}
-              </p>
-
-              <p>
-                <strong>
-                  Comissão:
-                </strong>{" "}
-                {formatEuro(
-                  item.commission
-                )}
-              </p>
-
-              <p>
-                <strong>
-                  Follow-up:
-                </strong>{" "}
-                {formatDate(
-                  item.next_followup
-                )}
-              </p>
-
-              <p>
-                <strong>
-                  Notas:
-                </strong>{" "}
-                {item.notes || "-"}
-              </p>
-
-              <div
-                style={
-                  actions
-                }
-              >
-                {item.status !==
-                  "lead" && (
-                  <button
-                    style={{
-                      ...smallButton,
-                      background:
-                        "#2563eb",
-                    }}
-                    onClick={() =>
-                      updateStatus(
-                        item.id,
-                        "lead"
-                      )
-                    }
-                  >
-                    Lead
-                  </button>
-                )}
-
-                {item.status !==
-                  "proposta" && (
-                  <button
-                    style={{
-                      ...smallButton,
-                      background:
-                        "#7c3aed",
-                    }}
-                    onClick={() =>
-                      updateStatus(
-                        item.id,
-                        "proposta"
-                      )
-                    }
-                  >
-                    Proposta
-                  </button>
-                )}
-
-                {item.status !==
-                  "ganho" && (
-                  <button
-                    style={{
-                      ...smallButton,
-                      background:
-                        "#16a34a",
-                    }}
-                    onClick={() =>
-                      updateStatus(
-                        item.id,
-                        "ganho"
-                      )
-                    }
-                  >
-                    Ganho
-                  </button>
-                )}
-
-                {item.status !==
-                  "perdido" && (
-                  <button
-                    style={{
-                      ...smallButton,
-                      background:
-                        "#dc2626",
-                    }}
-                    onClick={() =>
-                      updateStatus(
-                        item.id,
-                        "perdido"
-                      )
-                    }
-                  >
-                    Perdido
-                  </button>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  color,
-}) {
-  return (
-    <div style={statCard}>
-      <p style={cardLabel}>
-        {title}
-      </p>
-
-      <h2
-        style={{
-          ...cardValue,
-          color,
-        }}
-      >
-        {value}
-      </h2>
-    </div>
-  );
-}
-
-function getPriorityColor(
-  priority
-) {
-  const p = String(
-    priority || ""
-  ).toUpperCase();
-
-  if (p === "URGENT")
-    return "#dc2626";
-
-  if (p === "HIGH")
-    return "#ea580c";
-
-  if (p === "LOW")
-    return "#6b7280";
-
-  return "#2563eb";
 }
 
 const page = {
@@ -620,7 +296,6 @@ const title = {
 
 const subtitle = {
   color: "#6b7280",
-  marginTop: 10,
 };
 
 const button = {
@@ -633,69 +308,22 @@ const button = {
   fontWeight: "bold",
 };
 
-const statsGrid = {
+const grid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(220px, 1fr))",
+    "repeat(auto-fit, minmax(320px, 1fr))",
   gap: 18,
-  marginBottom: 30,
 };
 
-const statCard = {
+const card = {
   background: "white",
-  padding: 24,
+  padding: 22,
   borderRadius: 18,
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const cardLabel = {
-  color: "#6b7280",
-  margin: 0,
-};
-
-const cardValue = {
-  marginTop: 12,
-  fontSize: 30,
-};
-
-const board = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: 20,
-};
-
-const column = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 16,
-};
-
-const columnHeader = {
-  background: "white",
-  padding: 20,
-  borderRadius: 16,
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-};
-
-const columnBody = {
-  display: "grid",
-  gap: 16,
-};
-
-const opportunityCard = {
-  background: "white",
-  padding: 20,
-  borderRadius: 16,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const opportunityTop = {
+const top = {
   display: "flex",
   justifyContent:
     "space-between",
@@ -703,30 +331,40 @@ const opportunityTop = {
   marginBottom: 12,
 };
 
-const priorityBadge = {
-  color: "white",
+const badge = {
+  background: "#e5e7eb",
+  color: "#111827",
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
 };
 
-const actions = {
+const buttonRow = {
+  marginTop: 18,
   display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginTop: 16,
+  gap: 10,
 };
 
 const smallButton = {
+  background: "#2563eb",
   color: "white",
   border: "none",
-  padding: "8px 12px",
+  padding: "10px 14px",
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
 };
 
-const muted = {
-  color: "#6b7280",
+const emptyCard = {
+  background: "white",
+  padding: 30,
+  borderRadius: 18,
+  textAlign: "center",
+};
+
+const link = {
+  color: "#2563eb",
+  textDecoration: "none",
+  fontWeight: "bold",
 };
