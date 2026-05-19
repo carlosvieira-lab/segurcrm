@@ -68,10 +68,7 @@ export async function getServerSideProps({ params }) {
 
 function formatDate(date) {
   if (!date) return "-";
-
-  return new Intl.DateTimeFormat("pt-PT").format(
-    new Date(date)
-  );
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
 function calculateAge(date) {
@@ -80,161 +77,67 @@ function calculateAge(date) {
   const start = new Date(date);
   const today = new Date();
 
-  let years =
-    today.getFullYear() -
-    start.getFullYear();
-
-  const monthDiff =
-    today.getMonth() -
-    start.getMonth();
+  let years = today.getFullYear() - start.getFullYear();
+  const monthDiff = today.getMonth() - start.getMonth();
 
   if (
     monthDiff < 0 ||
-    (monthDiff === 0 &&
-      today.getDate() <
-        start.getDate())
+    (monthDiff === 0 && today.getDate() < start.getDate())
   ) {
     years--;
   }
 
+  if (years < 0 || Number.isNaN(years)) return "-";
+
   return `${years} anos`;
 }
 
-function calculateAnnualCommission(
-  policy
-) {
-  const commission = Number(
-    policy.commission_per_payment || 0
-  );
+function calculateAnnualCommission(policy) {
+  const commission = Number(policy.commission_per_payment || 0);
+  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
 
-  const frequency = String(
-    policy.payment_frequency || "anual"
-  ).toLowerCase();
-
-  if (frequency === "mensal")
-    return commission * 12;
-
-  if (frequency === "trimestral")
-    return commission * 4;
-
-  if (frequency === "semestral")
-    return commission * 2;
+  if (frequency === "mensal") return commission * 12;
+  if (frequency === "trimestral") return commission * 4;
+  if (frequency === "semestral") return commission * 2;
 
   return commission;
 }
 
-function clientRating(
-  policies,
-  totalCommission
-) {
+function clientRating(policies, totalCommission) {
   const count = policies.length;
 
-  if (
-    count >= 5 ||
-    totalCommission >= 150
-  )
-    return "TOP";
-
-  if (
-    count >= 4 ||
-    totalCommission >= 120
-  )
-    return "MUITO BOM";
-
-  if (
-    count >= 3 ||
-    totalCommission >= 100
-  )
-    return "BOM";
-
-  if (
-    count >= 2 ||
-    totalCommission >= 50
-  )
-    return "MÉDIO";
-
-  if (
-    count >= 1 ||
-    totalCommission >= 20
-  )
-    return "FRACO";
+  if (count >= 5 || totalCommission >= 150) return "TOP";
+  if (count >= 4 || totalCommission >= 120) return "MUITO BOM";
+  if (count >= 3 || totalCommission >= 100) return "BOM";
+  if (count >= 2 || totalCommission >= 50) return "MÉDIO";
+  if (count >= 1 || totalCommission >= 20) return "FRACO";
 
   return "SEM CARTEIRA";
 }
 
 function ratingStyle(rating) {
-  if (rating === "TOP") {
-    return {
-      background: "#dcfce7",
-      color: "#166534",
-    };
-  }
+  if (rating === "TOP") return { background: "#dcfce7", color: "#166534" };
+  if (rating === "MUITO BOM") return { background: "#dbeafe", color: "#1d4ed8" };
+  if (rating === "BOM") return { background: "#ede9fe", color: "#5b21b6" };
+  if (rating === "MÉDIO") return { background: "#fef3c7", color: "#92400e" };
+  if (rating === "FRACO") return { background: "#fee2e2", color: "#991b1b" };
 
-  if (rating === "MUITO BOM") {
-    return {
-      background: "#dbeafe",
-      color: "#1d4ed8",
-    };
-  }
-
-  if (rating === "BOM") {
-    return {
-      background: "#ede9fe",
-      color: "#5b21b6",
-    };
-  }
-
-  if (rating === "MÉDIO") {
-    return {
-      background: "#fef3c7",
-      color: "#92400e",
-    };
-  }
-
-  if (rating === "FRACO") {
-    return {
-      background: "#fee2e2",
-      color: "#991b1b",
-    };
-  }
-
-  return {
-    background: "#f3f4f6",
-    color: "#374151",
-  };
+  return { background: "#f3f4f6", color: "#374151" };
 }
 
-function InfoItem({
-  label,
-  value,
-}) {
+function InfoItem({ label, value }) {
   return (
     <div style={infoItem}>
-      <span style={infoLabel}>
-        {label}
-      </span>
-
-      <strong style={infoValue}>
-        {value || "-"}
-      </strong>
+      <span style={infoLabel}>{label}</span>
+      <strong style={infoValue}>{value || "-"}</strong>
     </div>
   );
 }
 
-export default function ClientePage({
-  client,
-  policies,
-  claims,
-}) {
-  const [
-    showPolicyForm,
-    setShowPolicyForm,
-  ] = useState(false);
+export default function ClientePage({ client, policies, claims }) {
+  const [showPolicyForm, setShowPolicyForm] = useState(false);
 
-  const [
-    policyData,
-    setPolicyData,
-  ] = useState({
+  const [policyData, setPolicyData] = useState({
     policy_number: "",
     branch: "Automóvel",
     license_plate: "",
@@ -248,71 +151,73 @@ export default function ClientePage({
   });
 
   if (!client) {
-    return (
-      <div>
-        Cliente não encontrado.
-      </div>
-    );
+    return <div>Cliente não encontrado.</div>;
   }
 
-  async function createPolicy() {
-    const response = await fetch(
-      "/api/create-policy",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          client_id: client.id,
-          ...policyData,
-        }),
-      }
-    );
+  async function addClientInteraction() {
+    const note = prompt("Nova interação com o cliente");
 
-    if (!response.ok) {
-      const error =
-        await response.json();
+    if (!note) return;
 
-      alert(
-        error.error ||
-          "Erro ao criar apólice"
-      );
+    const now = new Date().toLocaleString("pt-PT", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
 
+    const previous = client.interaction_notes || "";
+
+    const updatedNotes = previous
+      ? `${previous}\n\n${now} - ${note}`
+      : `${now} - ${note}`;
+
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        interaction_notes: updatedNotes,
+      })
+      .eq("id", client.id);
+
+    if (error) {
+      alert(error.message);
       return;
     }
 
     window.location.reload();
   }
 
-  const totalPremium =
-    policies.reduce(
-      (sum, policy) =>
-        sum +
-        Number(
-          policy.annual_premium || 0
-        ),
-      0
-    );
+  async function createPolicy() {
+    const response = await fetch("/api/create-policy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        client_id: client.id,
+        ...policyData,
+      }),
+    });
 
-  const totalCommission =
-    policies.reduce(
-      (sum, policy) =>
-        sum +
-        calculateAnnualCommission(
-          policy
-        ),
-      0
-    );
+    if (!response.ok) {
+      const error = await response.json();
+      alert(error.error || "Erro ao criar apólice");
+      return;
+    }
 
-  const rating = clientRating(
-    policies,
-    totalCommission
+    window.location.reload();
+  }
+
+  const totalPremium = policies.reduce(
+    (sum, policy) => sum + Number(policy.annual_premium || 0),
+    0
   );
 
-  const currentRatingStyle =
-    ratingStyle(rating);
+  const totalCommission = policies.reduce(
+    (sum, policy) => sum + calculateAnnualCommission(policy),
+    0
+  );
+
+  const rating = clientRating(policies, totalCommission);
+  const currentRatingStyle = ratingStyle(rating);
 
   return (
     <div style={page}>
@@ -321,212 +226,114 @@ export default function ClientePage({
       <main style={main}>
         <div style={header}>
           <div>
-            <h1 style={title}>
-              {client.name}
-            </h1>
-
-            <p style={subtitle}>
-              {client.nif ||
-                "Sem NIF"}
-            </p>
+            <h1 style={title}>{client.name}</h1>
+            <p style={subtitle}>{client.nif || "Sem NIF"}</p>
           </div>
 
-          <div
-            style={headerButtons}
-          >
-            <button
-              style={
-                editClientButton
-              }
-            >
-              Editar cliente
-            </button>
+          <div style={headerButtons}>
+            <button style={editClientButton}>Editar cliente</button>
 
             <button
               style={button}
-              onClick={() =>
-                setShowPolicyForm(
-                  !showPolicyForm
-                )
-              }
+              onClick={() => setShowPolicyForm(!showPolicyForm)}
             >
-              {showPolicyForm
-                ? "Fechar formulário"
-                : "+ Nova Apólice"}
+              {showPolicyForm ? "Fechar formulário" : "+ Nova Apólice"}
             </button>
           </div>
         </div>
 
         {showPolicyForm && (
-          <section
-            style={formCard}
-          >
-            <h2>
-              Nova Apólice
-            </h2>
+          <section style={formCard}>
+            <h2>Nova Apólice</h2>
 
             <div style={formGrid}>
               <div>
-                <label
-                  style={label}
-                >
-                  Nº Apólice
-                </label>
-
+                <label style={label}>Nº Apólice</label>
                 <input
                   style={input}
-                  value={
-                    policyData.policy_number
-                  }
+                  value={policyData.policy_number}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      policy_number:
-                        e.target
-                          .value,
+                      policy_number: e.target.value,
                     })
                   }
                 />
               </div>
 
               <div>
-                <label
-                  style={label}
-                >
-                  Ramo
-                </label>
-
+                <label style={label}>Ramo</label>
                 <select
                   style={input}
-                  value={
-                    policyData.branch
-                  }
+                  value={policyData.branch}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      branch:
-                        e.target
-                          .value,
+                      branch: e.target.value,
                     })
                   }
                 >
-                  {branchList.map(
-                    (branch) => (
-                      <option
-                        key={
-                          branch
-                        }
-                      >
-                        {branch}
-                      </option>
-                    )
-                  )}
+                  {branchList.map((branch) => (
+                    <option key={branch}>{branch}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label
-                  style={label}
-                >
-                  Matrícula
-                </label>
-
+                <label style={label}>Matrícula</label>
                 <input
                   style={input}
-                  value={
-                    policyData.license_plate
-                  }
+                  value={policyData.license_plate}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      license_plate:
-                        e.target
-                          .value,
+                      license_plate: e.target.value,
                     })
                   }
                 />
               </div>
 
               <div>
-                <label
-                  style={label}
-                >
-                  Seguradora
-                </label>
-
+                <label style={label}>Seguradora</label>
                 <select
                   style={input}
-                  value={
-                    policyData.insurer_name
-                  }
+                  value={policyData.insurer_name}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      insurer_name:
-                        e.target
-                          .value,
+                      insurer_name: e.target.value,
                     })
                   }
                 >
-                  {insurersList.map(
-                    (
-                      insurer
-                    ) => (
-                      <option
-                        key={
-                          insurer
-                        }
-                      >
-                        {
-                          insurer
-                        }
-                      </option>
-                    )
-                  )}
+                  {insurersList.map((insurer) => (
+                    <option key={insurer}>{insurer}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
-                <label
-                  style={label}
-                >
-                  Prémio anual
-                </label>
-
+                <label style={label}>Prémio anual</label>
                 <input
                   style={input}
-                  value={
-                    policyData.annual_premium
-                  }
+                  value={policyData.annual_premium}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      annual_premium:
-                        e.target
-                          .value,
+                      annual_premium: e.target.value,
                     })
                   }
                 />
               </div>
 
               <div>
-                <label
-                  style={label}
-                >
-                  Comissão pagamento
-                </label>
-
+                <label style={label}>Comissão pagamento</label>
                 <input
                   style={input}
-                  value={
-                    policyData.commission_per_payment
-                  }
+                  value={policyData.commission_per_payment}
                   onChange={(e) =>
                     setPolicyData({
                       ...policyData,
-                      commission_per_payment:
-                        e.target
-                          .value,
+                      commission_per_payment: e.target.value,
                     })
                   }
                 />
@@ -629,13 +436,9 @@ export default function ClientePage({
               </button>
 
               <button
-                style={
-                  cancelButton
-                }
+                style={cancelButton}
                 onClick={() =>
-                  setShowPolicyForm(
-                    false
-                  )
+                  setShowPolicyForm(false)
                 }
               >
                 Cancelar
@@ -644,18 +447,12 @@ export default function ClientePage({
           </section>
         )}
 
-        <section
-          style={clientInfoCard}
-        >
-          <h2
-            style={sectionTitle}
-          >
+        <section style={clientInfoCard}>
+          <h2 style={sectionTitle}>
             Dados do cliente
           </h2>
 
-          <div
-            style={clientInfoGrid}
-          >
+          <div style={clientInfoGrid}>
             <InfoItem
               label="Nome"
               value={client.name}
@@ -678,9 +475,7 @@ export default function ClientePage({
 
             <InfoItem
               label="Morada"
-              value={
-                client.address
-              }
+              value={client.address}
             />
 
             <InfoItem
@@ -690,9 +485,7 @@ export default function ClientePage({
 
             <InfoItem
               label="Código Postal"
-              value={
-                client.postal_code
-              }
+              value={client.postal_code}
             />
 
             <InfoItem
@@ -719,88 +512,44 @@ export default function ClientePage({
             />
           </div>
 
-          <div
-            style={clientStats}
-          >
+          <div style={clientStats}>
             <div style={statBox}>
-              <span
-                style={
-                  statLabel
-                }
-              >
+              <span style={statLabel}>
                 Apólices
               </span>
 
-              <strong
-                style={
-                  statValue
-                }
-              >
-                {
-                  policies.length
-                }
+              <strong style={statValue}>
+                {policies.length}
               </strong>
             </div>
 
             <div style={statBox}>
-              <span
-                style={
-                  statLabel
-                }
-              >
+              <span style={statLabel}>
                 Sinistros
               </span>
 
-              <strong
-                style={
-                  statValue
-                }
-              >
-                {
-                  claims.length
-                }
+              <strong style={statValue}>
+                {claims.length}
               </strong>
             </div>
 
             <div style={statBox}>
-              <span
-                style={
-                  statLabel
-                }
-              >
+              <span style={statLabel}>
                 Prémio anual
               </span>
 
-              <strong
-                style={
-                  statValue
-                }
-              >
-                {totalPremium.toFixed(
-                  2
-                )}{" "}
-                €
+              <strong style={statValue}>
+                {totalPremium.toFixed(2)} €
               </strong>
             </div>
 
             <div style={statBox}>
-              <span
-                style={
-                  statLabel
-                }
-              >
+              <span style={statLabel}>
                 Comissão anual
               </span>
 
-              <strong
-                style={
-                  statValue
-                }
-              >
-                {totalCommission.toFixed(
-                  2
-                )}{" "}
-                €
+              <strong style={statValue}>
+                {totalCommission.toFixed(2)} €
               </strong>
             </div>
 
@@ -830,109 +579,90 @@ export default function ClientePage({
                 {rating}
               </strong>
             </div>
+
+            <div style={interactionBox}>
+              <span style={statLabel}>
+                Interações
+              </span>
+
+              <pre style={interactionText}>
+                {client.interaction_notes ||
+                  "Sem interações registadas."}
+              </pre>
+
+              <button
+                style={interactionButton}
+                onClick={addClientInteraction}
+              >
+                + Registar interação
+              </button>
+            </div>
           </div>
         </section>
 
         <section style={card}>
           <h2>Apólices</h2>
 
-          {policies.length ===
-          0 ? (
-            <p>
-              Sem apólices.
-            </p>
+          {policies.length === 0 ? (
+            <p>Sem apólices.</p>
           ) : (
-            <div
-              style={
-                policiesGrid
-              }
-            >
-              {policies.map(
-                (policy) => (
-                  <div
-                    key={
-                      policy.id
-                    }
-                    style={
-                      policyCard
-                    }
-                  >
-                    <div
-                      style={
-                        policyTop
-                      }
-                    >
-                      <h3>
-                        {policy.branch ||
-                          "Sem ramo"}
-                      </h3>
+            <div style={policiesGrid}>
+              {policies.map((policy) => (
+                <div
+                  key={policy.id}
+                  style={policyCard}
+                >
+                  <div style={policyTop}>
+                    <h3>
+                      {policy.branch ||
+                        "Sem ramo"}
+                    </h3>
 
-                      <span
-                        style={
-                          badge
-                        }
-                      >
-                        {policy.status ||
-                          "ativa"}
-                      </span>
-                    </div>
-
-                    <p>
-                      <strong>
-                        Nº:
-                      </strong>{" "}
-                      {policy.policy_number ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Matrícula:
-                      </strong>{" "}
-                      {policy.license_plate ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Seguradora:
-                      </strong>{" "}
-                      {policy
-                        .insurers
-                        ?.name ||
-                        "-"}
-                    </p>
-
-                    <p>
-                      <strong>
-                        Prémio:
-                      </strong>{" "}
-                      {policy.annual_premium ||
-                        0}{" "}
-                      €
-                    </p>
-
-                    <p>
-                      <strong>
-                        Comissão anual:
-                      </strong>{" "}
-                      {calculateAnnualCommission(
-                        policy
-                      )}{" "}
-                      €
-                    </p>
-
-                    <p>
-                      <strong>
-                        Renovação:
-                      </strong>{" "}
-                      {formatDate(
-                        policy.renewal_date
-                      )}
-                    </p>
+                    <span style={badge}>
+                      {policy.status ||
+                        "ativa"}
+                    </span>
                   </div>
-                )
-              )}
+
+                  <p>
+                    <strong>Nº:</strong>{" "}
+                    {policy.policy_number ||
+                      "-"}
+                  </p>
+
+                  <p>
+                    <strong>Matrícula:</strong>{" "}
+                    {policy.license_plate ||
+                      "-"}
+                  </p>
+
+                  <p>
+                    <strong>Seguradora:</strong>{" "}
+                    {policy.insurers?.name ||
+                      "-"}
+                  </p>
+
+                  <p>
+                    <strong>Prémio:</strong>{" "}
+                    {policy.annual_premium ||
+                      0} €
+                  </p>
+
+                  <p>
+                    <strong>Comissão anual:</strong>{" "}
+                    {calculateAnnualCommission(
+                      policy
+                    )} €
+                  </p>
+
+                  <p>
+                    <strong>Renovação:</strong>{" "}
+                    {formatDate(
+                      policy.renewal_date
+                    )}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -945,8 +675,7 @@ const page = {
   display: "flex",
   minHeight: "100vh",
   background: "#f3f4f6",
-  fontFamily:
-    "Arial, sans-serif",
+  fontFamily: "Arial, sans-serif",
 };
 
 const main = {
@@ -956,8 +685,7 @@ const main = {
 
 const header = {
   display: "flex",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 30,
 };
@@ -1009,8 +737,6 @@ const formCard = {
   padding: 24,
   borderRadius: 18,
   marginBottom: 24,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const formGrid = {
@@ -1031,8 +757,7 @@ const input = {
   width: "100%",
   padding: 12,
   borderRadius: 10,
-  border:
-    "1px solid #d1d5db",
+  border: "1px solid #d1d5db",
 };
 
 const buttonRow = {
@@ -1100,6 +825,34 @@ const statValue = {
   color: "#2563eb",
 };
 
+const interactionBox = {
+  background: "white",
+  padding: 18,
+  borderRadius: 14,
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+};
+
+const interactionText = {
+  whiteSpace: "pre-wrap",
+  margin: 0,
+  fontSize: 13,
+  color: "#111827",
+  maxHeight: 180,
+  overflowY: "auto",
+};
+
+const interactionButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "10px 12px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
 const card = {
   background: "white",
   padding: 24,
@@ -1121,8 +874,7 @@ const policyCard = {
 
 const policyTop = {
   display: "flex",
-  justifyContent:
-    "space-between",
+  justifyContent: "space-between",
   alignItems: "center",
   marginBottom: 12,
 };
