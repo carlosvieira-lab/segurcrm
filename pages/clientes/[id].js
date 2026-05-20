@@ -199,7 +199,45 @@ export default function ClientePage({
 
     window.location.reload();
   }
+async function editPolicy(policy) {
+  alert("Editar apólice ainda vai ser reposto no próximo passo.");
+}
 
+async function updatePolicyStatus(policyId, status) {
+  const { error } = await supabase
+    .from("policies")
+    .update({
+      status,
+      cancelled_at: status === "anulada" ? new Date().toISOString() : null,
+    })
+    .eq("id", policyId);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  window.location.reload();
+}
+
+async function markPolicyPaid(policyId) {
+  const today = new Date().toISOString().split("T")[0];
+
+  const { error } = await supabase
+    .from("policies")
+    .update({
+      last_payment_date: today,
+      status: "ativa",
+    })
+    .eq("id", policyId);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  window.location.reload();
+}
   async function createPolicy() {
     const numero = prompt("Número da Apólice");
     if (!numero) return;
