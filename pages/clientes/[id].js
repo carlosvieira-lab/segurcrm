@@ -384,7 +384,66 @@ async function markPolicyPaid(policyId) {
             </button>
           </div>
         </div>
+{showPolicyForm && (
+  <div
+    style={{
+      background: "#f8fafc",
+      padding: 20,
+      borderRadius: 16,
+      marginBottom: 24,
+      border: "1px solid #dbeafe",
+    }}
+  >
+    <h3>Nova Apólice</h3>
 
+    <div style={{ display: "grid", gap: 12 }}>
+      <input
+        placeholder="Número da Apólice"
+        value={policyData.policy_number}
+        onChange={(e) =>
+          setPolicyData({
+            ...policyData,
+            policy_number: e.target.value,
+          })
+        }
+      />
+
+      <select
+        value={policyData.insurer_name}
+        onChange={(e) =>
+          setPolicyData({
+            ...policyData,
+            insurer_name: e.target.value,
+          })
+        }
+      >
+        {insurersList.map((insurer) => (
+          <option key={insurer} value={insurer}>
+            {insurer}
+          </option>
+        ))}
+      </select>
+
+      <select
+        value={policyData.branch}
+        onChange={(e) =>
+          setPolicyData({
+            ...policyData,
+            branch: e.target.value,
+          })
+        }
+      >
+        {branchList.map((branch) => (
+          <option key={branch} value={branch}>
+            {branch}
+          </option>
+        ))}
+      </select>
+
+      <input
+        placeholder="Matrícula"
+        value={policyData.license_plate}
+        onChange={(e) =>
         <section style={clientInfoCard}>
           <h2 style={sectionTitle}>
             Dados do cliente
