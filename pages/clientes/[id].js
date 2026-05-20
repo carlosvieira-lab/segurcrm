@@ -582,7 +582,7 @@ async function markPolicyPaid(policyId) {
 
   <button
     style={{ ...smallButton, background: "#2563eb" }}
-  onClick={() => alert(policy.id)} 
+  onClick={() => markPolicyPaid(policy.id)}
   >
     Dar como pago
   </button>
