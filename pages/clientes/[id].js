@@ -221,22 +221,32 @@ async function updatePolicyStatus(policyId, status) {
 }
 
 async function markPolicyPaid(policyId) {
-  const today = new Date().toISOString().split("T")[0];
+  try {
+    const today = new Date()
+      .toISOString()
+      .split("T")[0];
 
-  const { error } = await supabase
-    .from("policies")
-    .update({
-      last_payment_date: today,
-      status: "ativa",
-    })
-    .eq("id", policyId);
+    const { data, error } = await supabase
+      .from("policies")
+      .update({
+        last_payment_date: today,
+      })
+      .eq("id", policyId)
+      .select();
 
-  if (error) {
-    alert(error.message);
-    return;
+    if (error) {
+      console.log(error);
+      alert(error.message);
+      return;
+    }
+
+    alert("Pagamento registado.");
+
+    window.location.reload();
+  } catch (err) {
+    console.log(err);
+    alert("Erro ao atualizar.");
   }
-
-  window.location.reload();
 }
   async function createPolicy() {
     const numero = prompt("Número da Apólice");
