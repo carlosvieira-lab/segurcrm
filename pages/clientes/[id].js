@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
 
 const supabaseUrl =
@@ -11,6 +12,27 @@ const supabaseKey =
   "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const insurersList = [
+  "Generali",
+  "Real Vida",
+  "Zurich",
+  "Ageas",
+  "Allianz",
+];
+
+const branchList = [
+  "Automóvel",
+  "Casa",
+  "Saude",
+  "Atcp",
+  "Atco",
+  "Mremp",
+  "Vida",
+  "RC",
+  "Financeiros",
+  "Viagem",
+  "Outros",
+];
 
 export async function getServerSideProps({ params }) {
   const { id } = params;
