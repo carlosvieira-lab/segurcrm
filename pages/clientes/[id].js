@@ -378,7 +378,7 @@ async function markPolicyPaid(policyId) {
 
             <button
               style={button}
-              onClick={createPolicy}
+             onClick={() => setShowPolicyForm(true)}
             >
               + Nova Apólice
             </button>
