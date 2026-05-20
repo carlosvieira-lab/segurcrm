@@ -221,8 +221,44 @@ export default function ClientePage({ client, policies, claims }) {
   }
 
   async function editPolicy(policy) {
-    alert("Editar apólice ainda vai ser reposto no próximo passo.");
-  }
+  setEditingPolicyId(policy.id);
+
+  setShowEditPolicyForm(true);
+
+  setShowPolicyForm(false);
+
+  setEditPolicyForm({
+    policy_number:
+      policy.policy_number || "",
+
+    branch:
+      policy.branch || "",
+
+    license_plate:
+      policy.license_plate || "",
+
+    insurer_name:
+      policy.insurers?.name || "",
+
+    annual_premium:
+      policy.annual_premium || "",
+
+    commission_per_payment:
+      policy.commission_per_payment || "",
+
+    payment_frequency:
+      policy.payment_frequency || "Mensal",
+
+    start_date:
+      policy.start_date || "",
+
+    renewal_date:
+      policy.renewal_date || "",
+
+    last_payment_date:
+      policy.last_payment_date || "",
+  });
+}
 
   async function updatePolicyStatus(policyId, status) {
     const { error } = await supabase
