@@ -149,6 +149,25 @@ export default function ClientePage({ client, policies, claims }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
 
   const [policyForm, setPolicyForm] = useState({
+    const [showEditPolicyForm, setShowEditPolicyForm] =
+  useState(false);
+
+const [editingPolicyId, setEditingPolicyId] =
+  useState(null);
+
+const [editPolicyForm, setEditPolicyForm] =
+  useState({
+    policy_number: "",
+    branch: "",
+    license_plate: "",
+    insurer_name: "",
+    annual_premium: "",
+    commission_per_payment: "",
+    payment_frequency: "Mensal",
+    start_date: "",
+    renewal_date: "",
+    last_payment_date: "",
+  });
     policy_number: "",
     branch: "",
     license_plate: "",
@@ -258,6 +277,38 @@ export default function ClientePage({ client, policies, claims }) {
     last_payment_date:
       policy.last_payment_date || "",
   });
+}
+async function updatePolicy(e) {
+  e.preventDefault();
+
+  const response = await fetch(
+    "/api/update-policy",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        policy_id:
+          editingPolicyId,
+
+        ...editPolicyForm,
+      }),
+    }
+  );
+
+  if (response.ok) {
+    window.location.reload();
+  } else {
+    const error =
+      await response.json();
+
+    alert(
+      error.error ||
+        "Erro ao atualizar apólice"
+    );
+  }
 }
 
   async function updatePolicyStatus(policyId, status) {
