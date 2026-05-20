@@ -148,27 +148,7 @@ function InfoItem({ label, value }) {
 export default function ClientePage({ client, policies, claims }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
 
-const [policyForm, setPolicyForm] = useState({
-  policy_number: "",
-  branch: "",
-  license_plate: "",
-  insurer_name: "",
-  annual_premium: "",
-  commission_per_payment: "",
-  payment_frequency: "Mensal",
-  start_date: "",
-  renewal_date: "",
-  last_payment_date: "",
-});
-
-const [showEditPolicyForm, setShowEditPolicyForm] =
-  useState(false);
-
-const [editingPolicyId, setEditingPolicyId] =
-  useState(null);
-
-const [editPolicyForm, setEditPolicyForm] =
-  useState({
+  const [policyForm, setPolicyForm] = useState({
     policy_number: "",
     branch: "",
     license_plate: "",
@@ -180,21 +160,11 @@ const [editPolicyForm, setEditPolicyForm] =
     renewal_date: "",
     last_payment_date: "",
   });
-  useState(null);
 
-const [editPolicyForm, setEditPolicyForm] =
-  useState({
-    policy_number: "",
-    branch: "",
-    license_plate: "",
-    insurer_name: "",
-    annual_premium: "",
-    commission_per_payment: "",
-    payment_frequency: "Mensal",
-    start_date: "",
-    renewal_date: "",
-    last_payment_date: "",
-  });
+  const [showEditPolicyForm, setShowEditPolicyForm] = useState(false);
+  const [editingPolicyId, setEditingPolicyId] = useState(null);
+
+  const [editPolicyForm, setEditPolicyForm] = useState({
     policy_number: "",
     branch: "",
     license_plate: "",
@@ -267,76 +237,59 @@ const [editPolicyForm, setEditPolicyForm] =
   }
 
   async function editPolicy(policy) {
-  setEditingPolicyId(policy.id);
+    setEditingPolicyId(policy.id);
+    setShowEditPolicyForm(true);
+    setShowPolicyForm(false);
 
-  setShowEditPolicyForm(true);
+    setEditPolicyForm({
+      policy_number: policy.policy_number || "",
+      branch: policy.branch || "",
+      license_plate: policy.license_plate || "",
+      insurer_name: policy.insurers?.name || "",
+      annual_premium: policy.annual_premium || "",
+      commission_per_payment: policy.commission_per_payment || "",
+      payment_frequency: policy.payment_frequency || "Mensal",
+      start_date: policy.start_date || "",
+      renewal_date: policy.renewal_date || "",
+      last_payment_date: policy.last_payment_date || "",
+    });
+  }
 
-  setShowPolicyForm(false);
+  async function updatePolicy(e) {
+    e.preventDefault();
 
-  setEditPolicyForm({
-    policy_number:
-      policy.policy_number || "",
+    if (!editingPolicyId) {
+      alert("Não foi possível identificar a apólice a editar.");
+      return;
+    }
 
-    branch:
-      policy.branch || "",
-
-    license_plate:
-      policy.license_plate || "",
-
-    insurer_name:
-      policy.insurers?.name || "",
-
-    annual_premium:
-      policy.annual_premium || "",
-
-    commission_per_payment:
-      policy.commission_per_payment || "",
-
-    payment_frequency:
-      policy.payment_frequency || "Mensal",
-
-    start_date:
-      policy.start_date || "",
-
-    renewal_date:
-      policy.renewal_date || "",
-
-    last_payment_date:
-      policy.last_payment_date || "",
-  });
-}
-async function updatePolicy(e) {
-  e.preventDefault();
-
-  const response = await fetch(
-    "/api/update-policy",
-    {
+    const response = await fetch("/api/update-policy", {
       method: "POST",
       headers: {
-        "Content-Type":
-          "application/json",
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        policy_id:
-          editingPolicyId,
-
-        ...editPolicyForm,
+        policy_id: editingPolicyId,
+        policy_number: editPolicyForm.policy_number,
+        branch: editPolicyForm.branch,
+        license_plate: editPolicyForm.license_plate,
+        insurer_name: editPolicyForm.insurer_name,
+        annual_premium: editPolicyForm.annual_premium,
+        commission_per_payment: editPolicyForm.commission_per_payment,
+        payment_frequency: editPolicyForm.payment_frequency,
+        start_date: editPolicyForm.start_date,
+        renewal_date: editPolicyForm.renewal_date,
+        last_payment_date: editPolicyForm.last_payment_date,
       }),
+    });
+
+    if (response.ok) {
+      window.location.reload();
+    } else {
+      const error = await response.json();
+      alert(error.error || "Erro ao atualizar apólice");
     }
-  );
-
-  if (response.ok) {
-    window.location.reload();
-  } else {
-    const error =
-      await response.json();
-
-    alert(
-      error.error ||
-        "Erro ao atualizar apólice"
-    );
   }
-}
 
   async function updatePolicyStatus(policyId, status) {
     const { error } = await supabase
@@ -612,6 +565,183 @@ async function updatePolicy(e) {
                   type="button"
                   style={cancelButton}
                   onClick={() => setShowPolicyForm(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {showEditPolicyForm && (
+          <section style={card}>
+            <h2>Editar Apólice</h2>
+
+            <form onSubmit={updatePolicy} style={formGrid}>
+              <input
+                style={input}
+                placeholder="Número da apólice"
+                value={editPolicyForm.policy_number}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    policy_number: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <select
+                style={input}
+                value={editPolicyForm.branch}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    branch: e.target.value,
+                  })
+                }
+                required
+              >
+                <option value="">Selecionar ramo</option>
+                {branchList.map((branch) => (
+                  <option key={branch} value={branch}>
+                    {branch}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                style={input}
+                placeholder="Matrícula"
+                value={editPolicyForm.license_plate}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    license_plate: e.target.value,
+                  })
+                }
+              />
+
+              <select
+                style={input}
+                value={editPolicyForm.insurer_name}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    insurer_name: e.target.value,
+                  })
+                }
+                required
+              >
+                <option value="">Selecionar seguradora</option>
+                {insurersList.map((insurer) => (
+                  <option key={insurer} value={insurer}>
+                    {insurer}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                style={input}
+                type="number"
+                step="0.01"
+                placeholder="Prémio comercial anual"
+                value={editPolicyForm.annual_premium}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    annual_premium: e.target.value,
+                  })
+                }
+              />
+
+              <input
+                style={input}
+                type="number"
+                step="0.01"
+                placeholder="Comissão por pagamento"
+                value={editPolicyForm.commission_per_payment}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    commission_per_payment: e.target.value,
+                  })
+                }
+              />
+
+              <select
+                style={input}
+                value={editPolicyForm.payment_frequency}
+                onChange={(e) =>
+                  setEditPolicyForm({
+                    ...editPolicyForm,
+                    payment_frequency: e.target.value,
+                  })
+                }
+              >
+                <option value="Mensal">Mensal</option>
+                <option value="Trimestral">Trimestral</option>
+                <option value="Semestral">Semestral</option>
+                <option value="Anual">Anual</option>
+              </select>
+
+              <label style={fieldLabel}>
+                Data início
+                <input
+                  style={input}
+                  type="date"
+                  value={editPolicyForm.start_date}
+                  onChange={(e) =>
+                    setEditPolicyForm({
+                      ...editPolicyForm,
+                      start_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label style={fieldLabel}>
+                Data renovação
+                <input
+                  style={input}
+                  type="date"
+                  value={editPolicyForm.renewal_date}
+                  onChange={(e) =>
+                    setEditPolicyForm({
+                      ...editPolicyForm,
+                      renewal_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label style={fieldLabel}>
+                Último pagamento
+                <input
+                  style={input}
+                  type="date"
+                  value={editPolicyForm.last_payment_date}
+                  onChange={(e) =>
+                    setEditPolicyForm({
+                      ...editPolicyForm,
+                      last_payment_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <div style={formButtons}>
+                <button type="submit" style={button}>
+                  Guardar alterações
+                </button>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => {
+                    setShowEditPolicyForm(false);
+                    setEditingPolicyId(null);
+                  }}
                 >
                   Cancelar
                 </button>
