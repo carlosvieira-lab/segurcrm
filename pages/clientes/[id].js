@@ -574,7 +574,7 @@ async function markPolicyPaid(policyId) {
             </div>
           </div>
         </section>
-
+)}
         <section style={card}>
           <h2>Apólices</h2>
 
