@@ -148,11 +148,38 @@ function InfoItem({ label, value }) {
 export default function ClientePage({ client, policies, claims }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
 
-  const [policyForm, setPolicyForm] = useState({
-    const [showEditPolicyForm, setShowEditPolicyForm] =
+const [policyForm, setPolicyForm] = useState({
+  policy_number: "",
+  branch: "",
+  license_plate: "",
+  insurer_name: "",
+  annual_premium: "",
+  commission_per_payment: "",
+  payment_frequency: "Mensal",
+  start_date: "",
+  renewal_date: "",
+  last_payment_date: "",
+});
+
+const [showEditPolicyForm, setShowEditPolicyForm] =
   useState(false);
 
 const [editingPolicyId, setEditingPolicyId] =
+  useState(null);
+
+const [editPolicyForm, setEditPolicyForm] =
+  useState({
+    policy_number: "",
+    branch: "",
+    license_plate: "",
+    insurer_name: "",
+    annual_premium: "",
+    commission_per_payment: "",
+    payment_frequency: "Mensal",
+    start_date: "",
+    renewal_date: "",
+    last_payment_date: "",
+  });
   useState(null);
 
 const [editPolicyForm, setEditPolicyForm] =
