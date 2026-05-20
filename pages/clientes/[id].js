@@ -240,7 +240,12 @@ export default function ClientePage({ client, policies, claims }) {
     setEditingPolicyId(policy.id);
     setShowEditPolicyForm(true);
     setShowPolicyForm(false);
-
+setTimeout(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, 100);
     setEditPolicyForm({
       policy_number: policy.policy_number || "",
       branch: policy.branch || "",
