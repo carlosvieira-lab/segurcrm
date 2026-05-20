@@ -320,7 +320,7 @@ export default function ClientePage({ client, policies, claims }) {
     setShowPolicyForm(false);
     window.location.reload();
   }
-  async function editPolicy(policy) {
+    async function editPolicy(policy) {
     const numero = prompt("Número da Apólice", policy.policy_number || "");
     if (numero === null) return;
 
