@@ -520,6 +520,35 @@ export default function ClientePage({
                       policy.renewal_date
                     )}
                   </p>
+                    <div style={buttonGroup}>
+  <button
+    style={editButton}
+    onClick={() => editPolicy(policy)}
+  >
+    Editar
+  </button>
+
+  <button
+    style={{ ...smallButton, background: "#16a34a" }}
+    onClick={() => updatePolicyStatus(policy.id, "ativa")}
+  >
+    Em vigor
+  </button>
+
+  <button
+    style={{ ...smallButton, background: "#dc2626" }}
+    onClick={() => updatePolicyStatus(policy.id, "anulada")}
+  >
+    Anular
+  </button>
+
+  <button
+    style={{ ...smallButton, background: "#2563eb" }}
+    onClick={() => markPolicyPaid(policy.id)}
+  >
+    Dar como pago
+  </button>
+</div>
                 </div>
               ))}
             </div>
@@ -749,5 +778,31 @@ const claimCard = {
   padding: 18,
   borderRadius: 14,
   textDecoration: "none",
+ 
   color: "#111827",
+};
+const editButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const smallButton = {
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const buttonGroup = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 16,
 };
