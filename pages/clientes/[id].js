@@ -210,6 +210,12 @@ export default function ClientePage({ client, policies, claims }) {
     if (iban === null) return;
 
     const notes = prompt("Observações", client.notes || "");
+    const interactions = prompt(
+  "Histórico de interações",
+  client.interactions || ""
+);
+
+if (interactions === null) return;
     if (notes === null) return;
 
     const { error } = await supabase
@@ -225,6 +231,7 @@ export default function ClientePage({ client, policies, claims }) {
         birth_date,
         iban,
         notes,
+        interactions,
       })
       .eq("id", client.id);
 
