@@ -1057,7 +1057,24 @@ setTimeout(() => {
           ) : (
             <div style={policiesGrid}>
               {policies.map((policy) => (
-                <div key={policy.id} style={policyCard}>
+                <div
+  key={policy.id}
+  style={{
+    ...policyCard,
+    background:
+      policy.status === "anulada"
+        ? "#fee2e2"
+        : "#f9fafb",
+    border:
+      policy.status === "anulada"
+        ? "2px solid #dc2626"
+        : "none",
+    opacity:
+      policy.status === "anulada"
+        ? 0.9
+        : 1,
+  }}
+>
                   <div style={policyTop}>
                     <h3>{policy.branch || "Sem ramo"}</h3>
                     <span style={badge}>{policy.status || "ativa"}</span>
