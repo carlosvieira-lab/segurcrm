@@ -368,6 +368,7 @@ setTimeout(() => {
   }
 
   async function createPolicy(e) {
+   alert("create policy disparou"); 
     e.preventDefault();
 
     const response = await fetch("/api/create-policy", {
