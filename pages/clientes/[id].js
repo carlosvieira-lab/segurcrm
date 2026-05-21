@@ -372,7 +372,7 @@ setTimeout(() => {
     e.preventDefault();
 
     const response = await fetch("/api/create-policy", {
-      method: "POST",
+            method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
@@ -390,7 +390,9 @@ setTimeout(() => {
         last_payment_date: policyForm.last_payment_date,
       }),
     });
+const data = await response.json();
 
+alert(JSON.stringify(data));
     if (response.ok) {
       window.location.reload();
     } else {
