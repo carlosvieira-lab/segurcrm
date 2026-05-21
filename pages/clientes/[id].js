@@ -418,17 +418,25 @@ setTimeout(() => {
     window.location.reload();
   }
 
-  const totalPremium = policies.reduce(
-    (sum, policy) => sum + Number(policy.annual_premium || 0),
-    0
-  );
+  const activePolicies = policies.filter(
+  (policy) => policy.status !== "anulada"
+);
 
-  const totalCommission = policies.reduce(
-    (sum, policy) => sum + calculateAnnualCommission(policy),
-    0
-  );
+const cancelledPolicies = policies.filter(
+  (policy) => policy.status === "anulada"
+);
 
-  const rating = clientRating(policies, totalCommission);
+const totalPremium = activePolicies.reduce(
+  (sum, policy) => sum + Number(policy.annual_premium || 0),
+  0
+);
+
+const totalCommission = activePolicies.reduce(
+  (sum, policy) => sum + calculateAnnualCommission(policy),
+  0
+);
+
+const rating = clientRating(activePolicies, totalCommission);
 
   return (
     <div style={page}>
