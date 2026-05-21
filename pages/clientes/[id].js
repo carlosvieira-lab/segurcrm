@@ -14,7 +14,7 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const insurersList = [
-  "TRANQUILIDADE",
+  "GENERALI",
   "REAL VIDA",
   "ZURICH",
   "AGEAS",
