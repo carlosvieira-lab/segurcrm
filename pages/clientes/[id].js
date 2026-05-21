@@ -164,7 +164,7 @@ export default function ClientePage({ client, policies, claims }) {
   const [showEditPolicyForm, setShowEditPolicyForm] = useState(false);
   const [editingPolicyId, setEditingPolicyId] = useState(null);
 
- const [editPolicyForm, setEditPolicyForm] = useState({
+const [editPolicyForm, setEditPolicyForm] = useState({
   policy_number: "",
   branch: "",
   license_plate: "",
@@ -177,7 +177,8 @@ export default function ClientePage({ client, policies, claims }) {
   last_payment_date: "",
 });
 
-const [showEditClientForm, setShowEditClientForm] = useState(false);
+const [showEditClientForm, setShowEditClientForm] =
+  useState(false);
 
 const [clientForm, setClientForm] = useState({
   name: client.name || "",
@@ -192,33 +193,6 @@ const [clientForm, setClientForm] = useState({
   notes: client.notes || "",
   interactions: client.interactions || "",
 });
-
-const [clientForm, setClientForm] = useState({
-  name: client.name || "",
-  nif: client.nif || "",
-  phone: client.phone || "",
-  email: client.email || "",
-  address: client.address || "",
-  city: client.city || "",
-  postal_code: client.postal_code || "",
-  birth_date: client.birth_date || "",
-  iban: client.iban || "",
-  notes: client.notes || "",
-  interactions: client.interactions || "",
-});
-    policy_number: "",
-    branch: "",
-    license_plate: "",
-    insurer_name: "",
-    annual_premium: "",
-    commission_per_payment: "",
-    payment_frequency: "Mensal",
-    start_date: "",
-    renewal_date: "",
-    last_payment_date: "",
-  });
-
-  if (!client) {
     return <p>Cliente não encontrado.</p>;
   }
 
