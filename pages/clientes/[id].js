@@ -260,23 +260,64 @@ setTimeout(() => {
   }
 
   async function updatePolicy(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
 
-    const response = await fetch("/api/update-policy", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        policy_id: editingPolicyId,
-        ...editPolicyForm,
-      }),
-    });
+    if (!editingPolicyId) {
+      alert("Não foi possível identificar a apólice.");
+      return;
+    }
 
-    const data = await response.json();
+    let insurerId = null;
 
-    if (!response.ok) {
-      alert(data.error || "Erro ao atualizar apólice");
+    if (editPolicyForm.insurer_name) {
+      const { data: insurer, error: insurerError } = await supabase
+        .from("insurers")
+        .select("id")
+        .eq("name", editPolicyForm.insurer_name)
+        .maybeSingle();
+
+      if (insurerError) {
+        alert(insurerError.message);
+        return;
+      }
+
+      insurerId = insurer?.id || null;
+    }
+
+    const cleanNumber = (value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      return Number(String(value).replace(",", "."));
+    };
+
+    const cleanDate = (value) => {
+      return value === "" ? null : value;
+    };
+
+    const updateData = {
+      policy_number: editPolicyForm.policy_number,
+      branch: editPolicyForm.branch,
+      license_plate: editPolicyForm.license_plate,
+      annual_premium: cleanNumber(editPolicyForm.annual_premium),
+      commission_per_payment: cleanNumber(editPolicyForm.commission_per_payment),
+      payment_frequency: editPolicyForm.payment_frequency,
+      start_date: cleanDate(editPolicyForm.start_date),
+      renewal_date: cleanDate(editPolicyForm.renewal_date),
+      last_payment_date: cleanDate(editPolicyForm.last_payment_date),
+    };
+
+    if (insurerId) {
+      updateData.insurer_id = insurerId;
+    }
+
+    const { error } = await supabase
+      .from("policies")
+      .update(updateData)
+      .eq("id", editingPolicyId);
+
+    if (error) {
+      alert(error.message);
       return;
     }
 
