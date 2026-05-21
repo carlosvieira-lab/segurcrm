@@ -401,7 +401,185 @@ setTimeout(() => {
             </button>
           </div>
         </div>
+{showEditClientForm && (
+  <section
+    style={{
+      ...card,
+      background:
+        "linear-gradient(135deg, #dbeafe, #eff6ff)",
+      border: "1px solid #bfdbfe",
+    }}
+  >
+    <h2>Editar Cliente</h2>
 
+    <form
+      onSubmit={saveClient}
+      style={formGrid}
+    >
+      <input
+        style={input}
+        placeholder="Nome"
+        value={clientForm.name}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            name: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="NIF"
+        value={clientForm.nif}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            nif: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="Telefone"
+        value={clientForm.phone}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            phone: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="Email"
+        value={clientForm.email}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            email: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="Morada"
+        value={clientForm.address}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            address: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="Cidade"
+        value={clientForm.city}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            city: e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="Código Postal"
+        value={clientForm.postal_code}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            postal_code:
+              e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        type="date"
+        value={clientForm.birth_date}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            birth_date:
+              e.target.value,
+          })
+        }
+      />
+
+      <input
+        style={input}
+        placeholder="IBAN"
+        value={clientForm.iban}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            iban: e.target.value,
+          })
+        }
+      />
+
+      <textarea
+        style={{
+          ...input,
+          minHeight: 100,
+          gridColumn: "1 / -1",
+        }}
+        placeholder="Observações"
+        value={clientForm.notes}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            notes: e.target.value,
+          })
+        }
+      />
+
+      <textarea
+        style={{
+          ...input,
+          minHeight: 140,
+          gridColumn: "1 / -1",
+        }}
+        placeholder="Histórico interações"
+        value={clientForm.interactions}
+        onChange={(e) =>
+          setClientForm({
+            ...clientForm,
+            interactions:
+              e.target.value,
+          })
+        }
+      />
+
+      <div style={formButtons}>
+        <button
+          type="submit"
+          style={button}
+        >
+          Guardar Cliente
+        </button>
+
+        <button
+          type="button"
+          style={cancelButton}
+          onClick={() =>
+            setShowEditClientForm(false)
+          }
+        >
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </section>
+)}
         {showPolicyForm && (
           <section style={card}>
             <h2>Nova Apólice</h2>
