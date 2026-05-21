@@ -260,6 +260,7 @@ setTimeout(() => {
   }
 
  async function updatePolicy(e) {
+   alert("clicou guardar");
   e.preventDefault();
 
   const response = await fetch("/api/update-policy", {
