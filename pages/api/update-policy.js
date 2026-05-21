@@ -1,9 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -27,19 +27,13 @@ export default async function handler(req, res) {
       last_payment_date,
     } = req.body;
 
-    if (!policy_id) {
-      return res.status(400).json({
-        error: "ID da apólice em falta",
-      });
-    }
-
     let insurerId = null;
 
     if (insurer_name) {
       const { data: insurer } = await supabase
         .from("insurers")
         .select("id")
-        .eq("name", insurer_name)
+        .ilike("name", insurer_name)
         .single();
 
       insurerId = insurer?.id || null;
@@ -55,9 +49,9 @@ export default async function handler(req, res) {
         annual_premium,
         commission_per_payment,
         payment_frequency,
-        start_date: start_date || null,
-        renewal_date: renewal_date || null,
-        last_payment_date: last_payment_date || null,
+        start_date,
+        renewal_date,
+        last_payment_date,
       })
       .eq("id", policy_id);
 
@@ -72,7 +66,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     return res.status(500).json({
-      error: "Erro ao atualizar apólice",
+      error: err.message,
     });
   }
 }
