@@ -776,7 +776,7 @@ setTimeout(() => {
             <InfoItem label="Data nascimento" value={formatDate(client.birth_date)} />
             <InfoItem label="IBAN" value={client.iban} />
             <InfoItem label="Observações" value={client.notes} />
-          <InfoItem
+          
   
           </div>
 <div
