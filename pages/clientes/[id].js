@@ -259,41 +259,29 @@ setTimeout(() => {
     });
   }
 
-  async function updatePolicy(e) {
-    e.preventDefault();
+ async function updatePolicy(e) {
+  e.preventDefault();
 
-    if (!editingPolicyId) {
-      alert("Não foi possível identificar a apólice a editar.");
-      return;
-    }
+  const response = await fetch("/api/update-policy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      policy_id: editingPolicyId,
+      ...editPolicyForm,
+    }),
+  });
 
-    const response = await fetch("/api/update-policy", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        policy_id: editingPolicyId,
-        policy_number: editPolicyForm.policy_number,
-        branch: editPolicyForm.branch,
-        license_plate: editPolicyForm.license_plate,
-        insurer_name: editPolicyForm.insurer_name,
-        annual_premium: editPolicyForm.annual_premium,
-        commission_per_payment: editPolicyForm.commission_per_payment,
-        payment_frequency: editPolicyForm.payment_frequency,
-        start_date: editPolicyForm.start_date,
-        renewal_date: editPolicyForm.renewal_date,
-        last_payment_date: editPolicyForm.last_payment_date,
-      }),
-    });
+  const data = await response.json();
 
-    if (response.ok) {
-      window.location.reload();
-    } else {
-      const error = await response.json();
-      alert(error.error || "Erro ao atualizar apólice");
-    }
+  if (!response.ok) {
+    alert(data.error || "Erro ao atualizar apólice");
+    return;
   }
+
+  window.location.reload();
+} 
 
   async function updatePolicyStatus(policyId, status) {
     const { error } = await supabase
