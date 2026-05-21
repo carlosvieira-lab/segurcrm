@@ -259,53 +259,29 @@ setTimeout(() => {
     });
   }
 
- async function updatePolicy(e) {
-async function updatePolicy(e) {
-  e.preventDefault();
+  async function updatePolicy(e) {
+    e.preventDefault();
 
-  const response = await fetch("/api/update-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      policy_id: editingPolicyId,
-      ...editPolicyForm,
-    }),
-  });
+    const response = await fetch("/api/update-policy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy_id: editingPolicyId,
+        ...editPolicyForm,
+      }),
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok) {
-    alert(data.error || "Erro ao atualizar apólice");
-    return;
+    if (!response.ok) {
+      alert(data.error || "Erro ao atualizar apólice");
+      return;
+    }
+
+    window.location.reload();
   }
-
-  window.location.reload();
-}
-  e.preventDefault();
-
-  const response = await fetch("/api/update-policy", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      policy_id: editingPolicyId,
-      ...editPolicyForm,
-    }),
-  });
-
-  const data = await response.json();
-
- alert(JSON.stringify(data));
-
-if (!response.ok) {
-  return;
-}
-
-  window.location.reload();
-} 
 
   async function updatePolicyStatus(policyId, status) {
     const { error } = await supabase
@@ -1336,4 +1312,3 @@ const cancelButton = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
-};
