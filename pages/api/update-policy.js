@@ -39,9 +39,23 @@ export default async function handler(req, res) {
       insurerId = insurer?.id || null;
     }
 
-    const { error } = await supabase
-      .from("policies")
-      .update({
+   const { data: updatedPolicy, error } = await supabase
+  .from("policies")
+  .update({
+    policy_number,
+    branch,
+    license_plate,
+    insurer_id: insurerId,
+    annual_premium,
+    commission_per_payment,
+    payment_frequency,
+    start_date,
+    renewal_date,
+    last_payment_date,
+  })
+  .eq("id", policy_id)
+  .select()
+  .single();
         policy_number,
         branch,
         license_plate,
@@ -62,8 +76,9 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      success: true,
-    });
+  success: true,
+  updatedPolicy,
+});
   } catch (err) {
     return res.status(500).json({
       error: err.message,
