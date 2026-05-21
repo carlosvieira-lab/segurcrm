@@ -727,13 +727,9 @@ setTimeout(() => {
               </label>
 
               <div style={formButtons}>
-                <button
-  type="button"
-  style={button}
-  onClick={updatePolicy}
->
-  Guardar alterações
-</button>
+                <button type="submit" style={button}>
+                  Guardar apólice
+                </button>
 
                 <button
                   type="button"
@@ -905,7 +901,11 @@ setTimeout(() => {
               </label>
 
               <div style={formButtons}>
-                <button type="submit" style={button}>
+                <button
+                  type="button"
+                  style={button}
+                  onClick={updatePolicy}
+                >
                   Guardar alterações
                 </button>
 
