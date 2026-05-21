@@ -276,10 +276,11 @@ setTimeout(() => {
 
   const data = await response.json();
 
-  if (!response.ok) {
-    alert(data.error || "Erro ao atualizar apólice");
-    return;
-  }
+ alert(JSON.stringify(data));
+
+if (!response.ok) {
+  return;
+}
 
   window.location.reload();
 } 
