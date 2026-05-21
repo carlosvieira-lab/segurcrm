@@ -1,4 +1,4 @@
-import { useState } from "react";
+mport { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -62,6 +62,16 @@ export default function Tarefas({ tasks }) {
   const [priorityFilter, setPriorityFilter] = useState("TODAS");
   const [categoryFilter, setCategoryFilter] = useState("TODAS");
 
+  const [showTaskForm, setShowTaskForm] = useState(false);
+
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    description: "",
+    category: "ADMINISTRATIVA",
+    priority: "NORMAL",
+    due_date: "",
+  });
+
   const openTasks = tasks.filter((t) => t.status !== "concluida");
 
   const normalTasks = openTasks.filter(
@@ -102,31 +112,21 @@ export default function Tarefas({ tasks }) {
     );
   }
 
-  async function createTask() {
-    const title = prompt("Título da tarefa");
-    if (!title) return;
+  async function createTask(e) {
+    e.preventDefault();
 
-    const description = prompt("Descrição");
-
-    const category = prompt(
-      "Categoria: ADMINISTRATIVA ou COMERCIAL",
-      "ADMINISTRATIVA"
-    );
-
-    const priority = prompt(
-      "Prioridade: NORMAL, URGENTE ou MUITO URGENTE",
-      "NORMAL"
-    );
-
-    const due_date = prompt("Data limite (AAAA-MM-DD)");
+    if (!taskForm.title.trim()) {
+      alert("Indica o título da tarefa.");
+      return;
+    }
 
     const { error } = await supabase.from("tasks").insert({
-      title,
-      description,
-      category: normalizeCategory(category),
-      priority: normalizePriority(priority),
+      title: taskForm.title,
+      description: taskForm.description,
+      category: normalizeCategory(taskForm.category),
+      priority: normalizePriority(taskForm.priority),
       status: "aberta",
-      due_date: due_date || null,
+      due_date: taskForm.due_date || null,
     });
 
     if (error) {
@@ -166,10 +166,111 @@ export default function Tarefas({ tasks }) {
             </p>
           </div>
 
-          <button style={button} onClick={createTask}>
+          <button style={button} onClick={() => setShowTaskForm(true)}>
             + Nova tarefa
           </button>
         </header>
+
+        {showTaskForm && (
+          <section
+            style={{
+              ...card,
+              background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
+              border: "1px solid #bfdbfe",
+            }}
+          >
+            <h2>Nova Tarefa</h2>
+
+            <form onSubmit={createTask} style={formGrid}>
+              <input
+                style={input}
+                placeholder="Título da tarefa"
+                value={taskForm.title}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    title: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <select
+                style={input}
+                value={taskForm.category}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    category: e.target.value,
+                  })
+                }
+              >
+                <option value="ADMINISTRATIVA">Administrativa</option>
+                <option value="COMERCIAL">Comercial</option>
+              </select>
+
+              <select
+                style={input}
+                value={taskForm.priority}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    priority: e.target.value,
+                  })
+                }
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="URGENTE">Urgente</option>
+                <option value="MUITO URGENTE">Muito urgente</option>
+              </select>
+
+              <label style={fieldLabel}>
+                Data limite
+                <input
+                  style={input}
+                  type="date"
+                  value={taskForm.due_date}
+                  onChange={(e) =>
+                    setTaskForm({
+                      ...taskForm,
+                      due_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <textarea
+                style={{
+                  ...input,
+                  minHeight: 120,
+                  gridColumn: "1 / -1",
+                }}
+                placeholder="Descrição"
+                value={taskForm.description}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    description: e.target.value,
+                  })
+                }
+              />
+
+              <div style={formButtons}>
+                <button type="submit" style={button}>
+                  Guardar tarefa
+                </button>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => setShowTaskForm(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
 
         <section style={card}>
           <h2>Prioridade</h2>
@@ -544,6 +645,45 @@ const link = {
   color: "#2563eb",
   fontWeight: "bold",
   textDecoration: "none",
+};
+
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+};
+
+const input = {
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 14,
+  width: "100%",
+  boxSizing: "border-box",
+};
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  color: "#374151",
+  fontSize: 13,
+};
+
+const formButtons = {
+  display: "flex",
+  gap: 12,
+  gridColumn: "1 / -1",
+};
+
+const cancelButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const muted = {
