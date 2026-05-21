@@ -27,6 +27,12 @@ export default async function handler(req, res) {
       last_payment_date,
     } = req.body;
 
+    if (!policy_id) {
+      return res.status(400).json({
+        error: "ID da apólice em falta",
+      });
+    }
+
     let insurerId = null;
 
     if (insurer_name) {
@@ -39,23 +45,9 @@ export default async function handler(req, res) {
       insurerId = insurer?.id || null;
     }
 
-   const { data: updatedPolicy, error } = await supabase
-  .from("policies")
-  .update({
-    policy_number,
-    branch,
-    license_plate,
-    insurer_id: insurerId,
-    annual_premium,
-    commission_per_payment,
-    payment_frequency,
-    start_date,
-    renewal_date,
-    last_payment_date,
-  })
-  .eq("id", policy_id)
-  .select()
-  .single();
+    const { data: updatedPolicy, error } = await supabase
+      .from("policies")
+      .update({
         policy_number,
         branch,
         license_plate,
@@ -67,7 +59,9 @@ export default async function handler(req, res) {
         renewal_date,
         last_payment_date,
       })
-      .eq("id", policy_id);
+      .eq("id", policy_id)
+      .select()
+      .single();
 
     if (error) {
       return res.status(500).json({
@@ -76,9 +70,9 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-  success: true,
-  updatedPolicy,
-});
+      success: true,
+      updatedPolicy,
+    });
   } catch (err) {
     return res.status(500).json({
       error: err.message,
