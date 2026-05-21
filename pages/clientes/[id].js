@@ -1312,3 +1312,4 @@ const cancelButton = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
+};
