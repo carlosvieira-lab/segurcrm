@@ -165,6 +165,22 @@ export default function ClientePage({ client, policies, claims }) {
   const [editingPolicyId, setEditingPolicyId] = useState(null);
 
   const [editPolicyForm, setEditPolicyForm] = useState({
+    const [showEditClientForm, setShowEditClientForm] =
+  useState(false);
+
+const [clientForm, setClientForm] = useState({
+  name: client.name || "",
+  nif: client.nif || "",
+  phone: client.phone || "",
+  email: client.email || "",
+  address: client.address || "",
+  city: client.city || "",
+  postal_code: client.postal_code || "",
+  birth_date: client.birth_date || "",
+  iban: client.iban || "",
+  notes: client.notes || "",
+  interactions: client.interactions || "",
+});
     policy_number: "",
     branch: "",
     license_plate: "",
@@ -181,68 +197,43 @@ export default function ClientePage({ client, policies, claims }) {
     return <p>Cliente não encontrado.</p>;
   }
 
-  async function editClient() {
-    const name = prompt("Nome", client.name || "");
-    if (name === null) return;
+ async function editClient() {
+  setShowEditClientForm(true);
 
-    const nif = prompt("NIF", client.nif || "");
-    if (nif === null) return;
+  setTimeout(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, 100);
+}
+async function saveClient(e) {
+  e.preventDefault();
 
-    const phone = prompt("Telefone", client.phone || "");
-    if (phone === null) return;
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      name: clientForm.name,
+      nif: clientForm.nif,
+      phone: clientForm.phone,
+      email: clientForm.email,
+      address: clientForm.address,
+      city: clientForm.city,
+      postal_code: clientForm.postal_code,
+      birth_date: clientForm.birth_date,
+      iban: clientForm.iban,
+      notes: clientForm.notes,
+      interactions: clientForm.interactions,
+    })
+    .eq("id", client.id);
 
-    const email = prompt("Email", client.email || "");
-    if (email === null) return;
-
-    const address = prompt("Morada", client.address || "");
-    if (address === null) return;
-
-    const city = prompt("Cidade", client.city || "");
-    if (city === null) return;
-
-    const postal_code = prompt("Código Postal", client.postal_code || "");
-    if (postal_code === null) return;
-
-    const birth_date = prompt("Data nascimento", client.birth_date || "");
-    if (birth_date === null) return;
-
-    const iban = prompt("IBAN", client.iban || "");
-    if (iban === null) return;
-
-    const notes = prompt("Observações", client.notes || "");
-    const interactions = prompt(
-  "Histórico de interações",
-  client.interactions || ""
-);
-
-if (interactions === null) return;
-    if (notes === null) return;
-
-    const { error } = await supabase
-      .from("clients")
-      .update({
-        name,
-        nif,
-        phone,
-        email,
-        address,
-        city,
-        postal_code,
-        birth_date,
-        iban,
-        notes,
-        interactions,
-      })
-      .eq("id", client.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    window.location.reload();
+  if (error) {
+    alert(error.message);
+    return;
   }
 
+  window.location.reload();
+}
   async function editPolicy(policy) {
     setEditingPolicyId(policy.id);
     setShowEditPolicyForm(true);
