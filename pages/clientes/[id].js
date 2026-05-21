@@ -1027,9 +1027,18 @@ const rating = clientRating(activePolicies, totalCommission);
 </div>
           <div style={clientStats}>
             <div style={statBox}>
-              <span style={statLabel}>Apólices</span>
-              <strong style={statValue}>{policies.length}</strong>
-            </div>
+  <span style={statLabel}>Apólices em vigor</span>
+  <strong style={statValue}>
+    {activePolicies.length}
+  </strong>
+</div>
+
+<div style={statBox}>
+  <span style={statLabel}>Apólices anuladas</span>
+  <strong style={statValue}>
+    {cancelledPolicies.length}
+  </strong>
+</div>
 
             <div style={statBox}>
               <span style={statLabel}>Sinistros</span>
