@@ -91,6 +91,7 @@ export default async function handler(req, res) {
       client_id,
       policy_number,
       branch,
+      license_plate,
       insurer_id,
 
       annual_premium:
