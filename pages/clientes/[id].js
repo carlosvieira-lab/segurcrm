@@ -181,18 +181,20 @@ const [showEditClientForm, setShowEditClientForm] =
   useState(false);
 
 const [clientForm, setClientForm] = useState({
-  name: client.name || "",
-  nif: client.nif || "",
-  phone: client.phone || "",
-  email: client.email || "",
-  address: client.address || "",
-  city: client.city || "",
-  postal_code: client.postal_code || "",
-  birth_date: client.birth_date || "",
-  iban: client.iban || "",
-  notes: client.notes || "",
-  interactions: client.interactions || "",
+  name: client?.name || "",
+  nif: client?.nif || "",
+  phone: client?.phone || "",
+  email: client?.email || "",
+  address: client?.address || "",
+  city: client?.city || "",
+  postal_code: client?.postal_code || "",
+  birth_date: client?.birth_date || "",
+  iban: client?.iban || "",
+  notes: client?.notes || "",
+  interactions: client?.interactions || "",
 });
+
+  if (!client) {
     return <p>Cliente não encontrado.</p>;
   }
 
