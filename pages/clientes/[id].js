@@ -260,7 +260,10 @@ setTimeout(() => {
   }
 
  async function updatePolicy(e) {
-   alert("clicou guardar");
+ alert(JSON.stringify({
+  policy_id: editingPolicyId,
+  ...editPolicyForm,
+}));
   e.preventDefault();
 
   const response = await fetch("/api/update-policy", {
