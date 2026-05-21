@@ -368,37 +368,54 @@ setTimeout(() => {
   }
 
   async function createPolicy(e) {
-   alert("create policy disparou"); 
     e.preventDefault();
 
-    const response = await fetch("/api/create-policy", {
-            method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        client_id: client.id,
-        policy_number: policyForm.policy_number,
-        branch: policyForm.branch,
-        license_plate: policyForm.license_plate,
-        insurer_name: policyForm.insurer_name,
-        annual_premium: policyForm.annual_premium,
-        commission_per_payment: policyForm.commission_per_payment,
-        payment_frequency: policyForm.payment_frequency,
-        start_date: policyForm.start_date,
-        renewal_date: policyForm.renewal_date,
-        last_payment_date: policyForm.last_payment_date,
-      }),
-    });
-const data = await response.json();
+    let insurerId = null;
 
-alert(JSON.stringify(data));
-    if (response.ok) {
-      window.location.reload();
-    } else {
-      const error = await response.json();
-      alert(error.error || "Erro ao criar apólice");
+    if (policyForm.insurer_name) {
+      const { data: insurer, error: insurerError } = await supabase
+        .from("insurers")
+        .select("id")
+        .eq("name", policyForm.insurer_name)
+        .maybeSingle();
+
+      if (insurerError) {
+        alert(insurerError.message);
+        return;
+      }
+
+      insurerId = insurer?.id || null;
     }
+
+    const cleanNumber = (value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      return Number(String(value).replace(",", "."));
+    };
+
+    const cleanDate = (value) => {
+      return value === "" ? null : value;
+    };
+
+    const { error } = await supabase.from("policies").insert({
+      client_id: client.id,
+      policy_number: policyForm.policy_number,
+      branch: policyForm.branch,
+      license_plate: policyForm.license_plate,
+      insurer_id: insurerId,
+      annual_premium: cleanNumber(policyForm.annual_premium),
+      commission_per_payment: cleanNumber(policyForm.commission_per_payment),
+      payment_frequency: policyForm.payment_frequency,
+      start_date: cleanDate(policyForm.start_date),
+      renewal_date: cleanDate(policyForm.renewal_date),
+      last_payment_date: cleanDate(policyForm.last_payment_date),
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
   }
 
   const totalPremium = policies.reduce(
