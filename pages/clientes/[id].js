@@ -260,10 +260,29 @@ setTimeout(() => {
   }
 
  async function updatePolicy(e) {
- alert(JSON.stringify({
-  policy_id: editingPolicyId,
-  ...editPolicyForm,
-}));
+async function updatePolicy(e) {
+  e.preventDefault();
+
+  const response = await fetch("/api/update-policy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      policy_id: editingPolicyId,
+      ...editPolicyForm,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    alert(data.error || "Erro ao atualizar apólice");
+    return;
+  }
+
+  window.location.reload();
+}
   e.preventDefault();
 
   const response = await fetch("/api/update-policy", {
