@@ -777,11 +777,23 @@ setTimeout(() => {
             <InfoItem label="IBAN" value={client.iban} />
             <InfoItem label="Observações" value={client.notes} />
           <InfoItem
-  label="Histórico Interações"
-  value={client.interactions}
-/>
+  
           </div>
+<div
+  style={{
+    background: "white",
+    padding: 16,
+    borderRadius: 14,
+    marginTop: 20,
+    whiteSpace: "pre-wrap",
+  }}
+>
+  <strong>Histórico Interações</strong>
 
+  <div style={{ marginTop: 10 }}>
+    {client.interactions || "Sem interações registadas."}
+  </div>
+</div>
           <div style={clientStats}>
             <div style={statBox}>
               <span style={statLabel}>Apólices</span>
