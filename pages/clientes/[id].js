@@ -189,6 +189,8 @@ const [clientForm, setClientForm] = useState({
   city: client?.city || "",
   postal_code: client?.postal_code || "",
   birth_date: client?.birth_date || "",
+  driving_license_start_date:
+  client?.driving_license_start_date || "",
   iban: client?.iban || "",
   notes: client?.notes || "",
   interactions: client?.interactions || "",
@@ -222,6 +224,8 @@ async function saveClient(e) {
       city: clientForm.city,
       postal_code: clientForm.postal_code,
       birth_date: clientForm.birth_date,
+      driving_license_start_date:
+  clientForm.driving_license_start_date,
       iban: clientForm.iban,
       notes: clientForm.notes,
       interactions: clientForm.interactions,
@@ -562,7 +566,19 @@ const rating = clientRating(activePolicies, totalCommission);
       <input
         style={input}
         type="date"
-        value={clientForm.birth_date}
+        value={clientForm.birth_date
+<input
+  style={input}
+  type="date"
+  value={clientForm.driving_license_start_date}
+  onChange={(e) =>
+    setClientForm({
+      ...clientForm,
+      driving_license_start_date:
+        e.target.value,
+    })
+  }
+/>
         onChange={(e) =>
           setClientForm({
             ...clientForm,
