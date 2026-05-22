@@ -97,6 +97,20 @@ export async function getServerSideProps() {
           today
     );
 
+  const todayDate = new Date();
+
+  const birthdaysToday =
+    (clients || []).filter((client) => {
+      if (!client.birth_date) return false;
+
+      const birthDate = new Date(client.birth_date);
+
+      return (
+        birthDate.getDate() === todayDate.getDate() &&
+        birthDate.getMonth() === todayDate.getMonth()
+      );
+    });
+
   return {
     props: {
       totalClients:
@@ -111,8 +125,36 @@ export async function getServerSideProps() {
         renewal30.length,
       opportunitiesAlert:
         opportunitiesAlert.length,
+      birthdaysToday:
+        birthdaysToday || [],
     },
   };
+}
+
+function calculateAge(date) {
+  if (!date) return "-";
+
+  const today = new Date();
+  const birthDate = new Date(date);
+
+  let age =
+    today.getFullYear() -
+    birthDate.getFullYear();
+
+  const monthDifference =
+    today.getMonth() -
+    birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 &&
+      today.getDate() <
+        birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  return age;
 }
 
 export default function Dashboard({
@@ -122,6 +164,7 @@ export default function Dashboard({
   todayTasks,
   renewal30,
   opportunitiesAlert,
+  birthdaysToday,
 }) {
   return (
     <div style={page}>
@@ -187,242 +230,35 @@ export default function Dashboard({
           </Link>
         )}
 
-        <section style={grid}>
-          <Card
-            title="Clientes"
-            value={
-              totalClients
-            }
-            color="#2563eb"
-          />
+        {birthdaysToday.length >
+          0 && (
+          <div style={birthdayCard}>
+            <h2 style={birthdayTitle}>
+              🎂 Aniversários de hoje
+            </h2>
 
-          <Card
-            title="Apólices"
-            value={
-              totalPolicies
-            }
-            color="#0f766e"
-          />
+            <div style={birthdayList}>
+              {birthdaysToday.map(
+                (client) => (
+                  <Link
+                    key={client.id}
+                    href={`/clientes/${client.id}`}
+                    style={birthdayItem}
+                  >
+                    <strong>
+                      {client.name ||
+                        "Cliente sem nome"}
+                    </strong>
 
-          <Card
-            title="Tarefas vencidas"
-            value={
-              overdueTasks
-            }
-            color="#dc2626"
-          />
-
-          <Card
-            title="Tarefas hoje"
-            value={
-              todayTasks
-            }
-            color="#7c3aed"
-          />
-
-          <Card
-            title="Renovações 30 dias"
-            value={
-              renewal30
-            }
-            color="#f59e0b"
-          />
-
-          <Card
-            title="Contactos comerciais"
-            value={
-              opportunitiesAlert
-            }
-            color="#111827"
-          />
-        </section>
-
-        <section style={quickGrid}>
-          <QuickLink
-            href="/clientes"
-            title="Clientes"
-            desc="Consultar carteira"
-          />
-
-          <QuickLink
-            href="/apolices"
-            title="Apólices"
-            desc="Gestão de apólices"
-          />
-
-          <QuickLink
-            href="/tarefas"
-            title="Tarefas"
-            desc="Agenda operacional"
-          />
-
-          <QuickLink
-            href="/oportunidades"
-            title="Agenda de Captação"
-            desc="Contactos comerciais"
-          />
-
-          <QuickLink
-            href="/renovacoes"
-            title="Renovações"
-            desc="Controlo de vencimentos"
-          />
-
-          <QuickLink
-            href="/financeiro"
-            title="Financeiro"
-            desc="Comissões e cobranças"
-          />
-        </section>
-      </main>
-    </div>
-  );
-}
-
-function Card({
-  title,
-  value,
-  color,
-}) {
-  return (
-    <div
-      style={{
-        ...card,
-        borderTop: `6px solid ${color}`,
-      }}
-    >
-      <p style={cardLabel}>
-        {title}
-      </p>
-
-      <h2
-        style={{
-          ...cardValue,
-          color,
-        }}
-      >
-        {value}
-      </h2>
-    </div>
-  );
-}
-
-function QuickLink({
-  href,
-  title,
-  desc,
-}) {
-  return (
-    <Link
-      href={href}
-      style={quickCard}
-    >
-      <h3>{title}</h3>
-      <p>{desc}</p>
-    </Link>
-  );
-}
-
-const page = {
-  display: "flex",
-  minHeight: "100vh",
-  background: "#f3f4f6",
-  fontFamily:
-    "Arial, sans-serif",
-};
-
-const main = {
-  flex: 1,
-  padding: 40,
-};
-
-const header = {
-  marginBottom: 30,
-};
-
-const title = {
-  fontSize: 42,
-  margin: 0,
-};
-
-const subtitle = {
-  color: "#6b7280",
-  marginTop: 10,
-};
-
-const alertCard = {
-  background:
-    "linear-gradient(135deg,#fee2e2,#fecaca)",
-  border:
-    "2px solid #dc2626",
-  borderRadius: 18,
-  padding: 24,
-  marginBottom: 30,
-  display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems: "center",
-  textDecoration: "none",
-  color: "#111827",
-};
-
-const alertTitle = {
-  margin: 0,
-  color: "#991b1b",
-};
-
-const alertText = {
-  marginTop: 10,
-};
-
-const alertButton = {
-  background: "#dc2626",
-  color: "white",
-  padding:
-    "12px 18px",
-  borderRadius: 10,
-  fontWeight: "bold",
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 18,
-  marginBottom: 30,
-};
-
-const card = {
-  background: "white",
-  padding: 24,
-  borderRadius: 18,
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const cardLabel = {
-  color: "#6b7280",
-  margin: 0,
-};
-
-const cardValue = {
-  marginTop: 12,
-  fontSize: 34,
-};
-
-const quickGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: 18,
-};
-
-const quickCard = {
-  background: "white",
-  padding: 22,
-  borderRadius: 18,
-  textDecoration: "none",
-  color: "#111827",
-  boxShadow:
-    "0 1px 4px rgba(0,0,0,0.08)",
-};
+                    <span>
+                      {calculateAge(
+                        client.birth_date
+                      )}{" "}
+                      anos
+                    </span>
+                  </Link>
+                )
+              )}
+            </div>
+          </div>
+        )}
