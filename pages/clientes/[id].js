@@ -70,7 +70,31 @@ function formatDate(date) {
   if (!date) return "-";
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
+function calculateAge(date) {
+  if (!date) return "-";
 
+  const today = new Date();
+  const birthDate = new Date(date);
+
+  let age =
+    today.getFullYear() -
+    birthDate.getFullYear();
+
+  const monthDifference =
+    today.getMonth() -
+    birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 &&
+      today.getDate() <
+        birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  return age;
+}
 function calculateAnnualCommission(policy) {
   const commission = Number(policy.commission_per_payment || 0);
   const frequency = String(policy.payment_frequency || "anual").toLowerCase();
