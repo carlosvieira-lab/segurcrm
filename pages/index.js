@@ -262,3 +262,274 @@ export default function Dashboard({
             </div>
           </div>
         )}
+
+        <section style={grid}>
+          <Card
+            title="Clientes"
+            value={
+              totalClients
+            }
+            color="#2563eb"
+          />
+
+          <Card
+            title="Apólices"
+            value={
+              totalPolicies
+            }
+            color="#0f766e"
+          />
+
+          <Card
+            title="Tarefas vencidas"
+            value={
+              overdueTasks
+            }
+            color="#dc2626"
+          />
+
+          <Card
+            title="Tarefas hoje"
+            value={
+              todayTasks
+            }
+            color="#7c3aed"
+          />
+
+          <Card
+            title="Renovações 30 dias"
+            value={
+              renewal30
+            }
+            color="#f59e0b"
+          />
+
+          <Card
+            title="Contactos comerciais"
+            value={
+              opportunitiesAlert
+            }
+            color="#111827"
+          />
+        </section>
+
+        <section style={quickGrid}>
+          <QuickLink
+            href="/clientes"
+            title="Clientes"
+            desc="Consultar carteira"
+          />
+
+          <QuickLink
+            href="/apolices"
+            title="Apólices"
+            desc="Gestão de apólices"
+          />
+
+          <QuickLink
+            href="/tarefas"
+            title="Tarefas"
+            desc="Agenda operacional"
+          />
+
+          <QuickLink
+            href="/oportunidades"
+            title="Agenda de Captação"
+            desc="Contactos comerciais"
+          />
+
+          <QuickLink
+            href="/renovacoes"
+            title="Renovações"
+            desc="Controlo de vencimentos"
+          />
+
+          <QuickLink
+            href="/financeiro"
+            title="Financeiro"
+            desc="Comissões e cobranças"
+          />
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function Card({
+  title,
+  value,
+  color,
+}) {
+  return (
+    <div
+      style={{
+        ...card,
+        borderTop: `6px solid ${color}`,
+      }}
+    >
+      <p style={cardLabel}>
+        {title}
+      </p>
+
+      <h2
+        style={{
+          ...cardValue,
+          color,
+        }}
+      >
+        {value}
+      </h2>
+    </div>
+  );
+}
+
+function QuickLink({
+  href,
+  title,
+  desc,
+}) {
+  return (
+    <Link
+      href={href}
+      style={quickCard}
+    >
+      <h3>{title}</h3>
+      <p>{desc}</p>
+    </Link>
+  );
+}
+
+const page = {
+  display: "flex",
+  minHeight: "100vh",
+  background: "#f3f4f6",
+  fontFamily:
+    "Arial, sans-serif",
+};
+
+const main = {
+  flex: 1,
+  padding: 40,
+};
+
+const header = {
+  marginBottom: 30,
+};
+
+const title = {
+  fontSize: 42,
+  margin: 0,
+};
+
+const subtitle = {
+  color: "#6b7280",
+  marginTop: 10,
+};
+
+const alertCard = {
+  background:
+    "linear-gradient(135deg,#fee2e2,#fecaca)",
+  border:
+    "2px solid #dc2626",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  textDecoration: "none",
+  color: "#111827",
+};
+
+const alertTitle = {
+  margin: 0,
+  color: "#991b1b",
+};
+
+const alertText = {
+  marginTop: 10,
+};
+
+const alertButton = {
+  background: "#dc2626",
+  color: "white",
+  padding:
+    "12px 18px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const birthdayCard = {
+  background:
+    "linear-gradient(135deg,#fef3c7,#fde68a)",
+  border: "2px solid #f59e0b",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+};
+
+const birthdayTitle = {
+  margin: 0,
+  color: "#92400e",
+};
+
+const birthdayList = {
+  marginTop: 18,
+  display: "grid",
+  gap: 12,
+};
+
+const birthdayItem = {
+  background: "rgba(255,255,255,0.7)",
+  padding: 14,
+  borderRadius: 12,
+  textDecoration: "none",
+  color: "#111827",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 18,
+  marginBottom: 30,
+};
+
+const card = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const cardLabel = {
+  color: "#6b7280",
+  margin: 0,
+};
+
+const cardValue = {
+  marginTop: 12,
+  fontSize: 34,
+};
+
+const quickGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 18,
+};
+
+const quickCard = {
+  background: "white",
+  padding: 22,
+  borderRadius: 18,
+  textDecoration: "none",
+  color: "#111827",
+  boxShadow:
+    "0 1px 4px rgba(0,0,0,0.08)",
+};
