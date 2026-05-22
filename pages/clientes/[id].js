@@ -1049,7 +1049,14 @@ const rating = clientRating(activePolicies, totalCommission);
             <InfoItem label="Morada" value={client.address} />
             <InfoItem label="Cidade" value={client.city} />
             <InfoItem label="Código Postal" value={client.postal_code} />
-            <InfoItem label="Data nascimento" value={formatDate(client.birth_date)} />
+           <InfoItem
+  label="Data nascimento"
+  value={`${formatDate(
+    client.birth_date
+  )} · ${calculateAge(
+    client.birth_date
+  )} anos`}
+/>
 
             <InfoItem
               label="Carta de condução"
