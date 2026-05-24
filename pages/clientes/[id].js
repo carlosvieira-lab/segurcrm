@@ -144,6 +144,20 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
+function calculateCommissionPercentage(policy) {
+  const premium = Number(policy.annual_premium || 0);
+
+  if (premium <= 0) return "0.0";
+
+  const commission =
+    calculateAnnualCommission(policy);
+
+  return (
+    (commission / premium) *
+    100
+  ).toFixed(1);
+}
+
 function clientRating(policies, totalCommission) {
   const count = policies.length;
 
@@ -1208,8 +1222,21 @@ const rating = clientRating(activePolicies, totalCommission);
   }}
 >
                   <div style={policyTop}>
-                    <h3>{policy.branch || "Sem ramo"}</h3>
-                    <span style={badge}>{policy.status || "ativa"}</span>
+                    <div>
+                      <h3 style={{ margin: 0 }}>
+                        {policy.branch || "Sem ramo"}
+                      </h3>
+
+                      <div style={policyBadges}>
+                        <span style={badge}>
+                          {policy.status || "ativa"}
+                        </span>
+
+                        <span style={commissionBadge}>
+                          Comissão {calculateCommissionPercentage(policy)}%
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
                   <p>
@@ -1452,6 +1479,22 @@ const badge = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
+};
+
+const commissionBadge = {
+  background: "#dbeafe",
+  color: "#1d4ed8",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const policyBadges = {
+  display: "flex",
+  gap: 8,
+  marginTop: 8,
+  flexWrap: "wrap",
 };
 
 const claimsGrid = {
