@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -111,12 +111,21 @@ export async function getServerSideProps() {
       );
     });
 
+  const policyRatio =
+    clients?.length > 0
+      ? (
+          (policies?.length || 0) /
+          clients.length
+        ).toFixed(2)
+      : "0.00";
+
   return {
     props: {
       totalClients:
         clients?.length || 0,
       totalPolicies:
         policies?.length || 0,
+      policyRatio,
       overdueTasks:
         overdueTasks.length,
       todayTasks:
@@ -160,6 +169,7 @@ function calculateAge(date) {
 export default function Dashboard({
   totalClients,
   totalPolicies,
+  policyRatio,
   overdueTasks,
   todayTasks,
   renewal30,
@@ -278,6 +288,14 @@ export default function Dashboard({
               totalPolicies
             }
             color="#0f766e"
+          />
+
+          <Card
+            title="Rácio apólices/cliente"
+            value={
+              policyRatio
+            }
+            color="#0891b2"
           />
 
           <Card
@@ -553,5 +571,4 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
 
