@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "next/router";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -31,6 +32,10 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
+function todayIso() {
+  return new Date().toISOString().split("T")[0];
+}
+
 function normalizePriority(priority) {
   const p = String(priority || "NORMAL").toUpperCase().trim();
 
@@ -59,6 +64,9 @@ function normalizeCategory(category) {
 }
 
 export default function Tarefas({ tasks }) {
+  const router = useRouter();
+  const dashboardFilter = router.query.filtro || "";
+
   const [priorityFilter, setPriorityFilter] = useState("TODAS");
   const [categoryFilter, setCategoryFilter] = useState("TODAS");
 
@@ -73,6 +81,16 @@ export default function Tarefas({ tasks }) {
   });
 
   const openTasks = tasks.filter((t) => t.status !== "concluida");
+
+  const today = todayIso();
+
+  const overdueTasks = openTasks.filter(
+    (t) => t.due_date && t.due_date < today
+  );
+
+  const todayTasks = openTasks.filter(
+    (t) => t.due_date === today
+  );
 
   const normalTasks = openTasks.filter(
     (t) => normalizePriority(t.priority) === "NORMAL"
@@ -111,6 +129,25 @@ export default function Tarefas({ tasks }) {
       (t) => normalizeCategory(t.category) === categoryFilter
     );
   }
+
+  if (dashboardFilter === "vencidas") {
+    filteredTasks = filteredTasks.filter(
+      (t) => t.due_date && t.due_date < today
+    );
+  }
+
+  if (dashboardFilter === "hoje") {
+    filteredTasks = filteredTasks.filter(
+      (t) => t.due_date === today
+    );
+  }
+
+  const filteredTitle =
+    dashboardFilter === "vencidas"
+      ? "Tarefas vencidas"
+      : dashboardFilter === "hoje"
+      ? "Tarefas para hoje"
+      : "Tarefas filtradas";
 
   async function createTask(e) {
     e.preventDefault();
@@ -273,6 +310,36 @@ export default function Tarefas({ tasks }) {
         )}
 
         <section style={card}>
+          <h2>Vista rápida</h2>
+
+          <div style={statsGrid}>
+            <FilterCard
+              title="Todas abertas"
+              value={openTasks.length}
+              active={!dashboardFilter}
+              color="#111827"
+              onClick={() => router.push("/tarefas")}
+            />
+
+            <FilterCard
+              title="Vencidas"
+              value={overdueTasks.length}
+              active={dashboardFilter === "vencidas"}
+              color="#dc2626"
+              onClick={() => router.push("/tarefas?filtro=vencidas")}
+            />
+
+            <FilterCard
+              title="Hoje"
+              value={todayTasks.length}
+              active={dashboardFilter === "hoje"}
+              color="#7c3aed"
+              onClick={() => router.push("/tarefas?filtro=hoje")}
+            />
+          </div>
+        </section>
+
+        <section style={card}>
           <h2>Prioridade</h2>
 
           <div style={statsGrid}>
@@ -349,7 +416,7 @@ export default function Tarefas({ tasks }) {
         </section>
 
         <section style={card}>
-          <h2>Tarefas filtradas: {filteredTasks.length}</h2>
+          <h2>{filteredTitle}: {filteredTasks.length}</h2>
 
           {filteredTasks.length === 0 ? (
             <p style={muted}>Sem tarefas nesta seleção.</p>
