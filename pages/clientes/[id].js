@@ -1180,7 +1180,9 @@ const rating = clientRating(activePolicies, totalCommission);
 
                   <p>
                     <strong>Comissão anual:</strong>{" "}
-                    {calculateAnnualCommission(policy)} €
+                   {Number(
+  calculateAnnualCommission(policy)
+).toFixed(2)} €
                   </p>
 
                   <p>
