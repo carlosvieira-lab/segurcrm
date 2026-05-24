@@ -111,11 +111,31 @@ export async function getServerSideProps() {
       );
     });
 
+  const activePolicies =
+    (policies || []).filter(
+      (policy) =>
+        policy.status !== "anulada"
+    );
+
+  const activeClientIds =
+    new Set(
+      activePolicies
+        .map((policy) => policy.client_id)
+        .filter(Boolean)
+    );
+
+  const activeClients =
+    activeClientIds.size;
+
+  const potentialClients =
+    (clients?.length || 0) -
+    activeClients;
+
   const policyRatio =
-    clients?.length > 0
+    activeClients > 0
       ? (
-          (policies?.length || 0) /
-          clients.length
+          activePolicies.length /
+          activeClients
         ).toFixed(2)
       : "0.00";
 
@@ -125,6 +145,10 @@ export async function getServerSideProps() {
         clients?.length || 0,
       totalPolicies:
         policies?.length || 0,
+      activeClients,
+      potentialClients,
+      activePolicies:
+        activePolicies.length,
       policyRatio,
       overdueTasks:
         overdueTasks.length,
@@ -169,6 +193,9 @@ function calculateAge(date) {
 export default function Dashboard({
   totalClients,
   totalPolicies,
+  activeClients,
+  potentialClients,
+  activePolicies,
   policyRatio,
   overdueTasks,
   todayTasks,
@@ -275,17 +302,25 @@ export default function Dashboard({
 
         <section style={grid}>
           <Card
-            title="Clientes"
+            title="Clientes em vigor"
             value={
-              totalClients
+              activeClients
             }
             color="#2563eb"
           />
 
           <Card
-            title="Apólices"
+            title="Clientes potenciais"
             value={
-              totalPolicies
+              potentialClients
+            }
+            color="#f59e0b"
+          />
+
+          <Card
+            title="Apólices em vigor"
+            value={
+              activePolicies
             }
             color="#0f766e"
           />
@@ -543,6 +578,10 @@ const card = {
   borderRadius: 18,
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
+  minHeight: 130,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
 };
 
 const cardLabel = {
@@ -571,4 +610,5 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
 
