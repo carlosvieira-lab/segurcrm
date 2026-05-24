@@ -75,9 +75,9 @@ export default function Renovacoes({ policies }) {
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Cobranças e Renovações</h1>
+            <h1 style={title}>Controlo de Cobranças</h1>
             <p style={subtitle}>
-              Controlo por próxima cobrança, fracionamento e estado da apólice.
+              Controlo operacional por próxima cobrança prevista.
             </p>
           </div>
         </header>
@@ -151,10 +151,10 @@ function RenewalSection({ title, description, policies, badgeColor }) {
                 <p><strong>Cliente:</strong> {policy.clients?.name || "-"}</p>
                 <p><strong>Seguradora:</strong> {policy.insurers?.name || "-"}</p>
                 <p><strong>Apólice:</strong> {policy.policy_number || "-"}</p>
+                <p><strong>Matrícula:</strong> {policy.license_plate || "-"}</p>
                 <p><strong>Prémio anual:</strong> {Number(policy.annual_premium || 0).toFixed(2)} €</p>
                 <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
-                <p><strong>Último pagamento:</strong> {formatDate(policy.last_payment_date)}</p>
-                <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
+                                <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
                 <p><strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}</p>
               </div>
             );
@@ -282,4 +282,3 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
 };
-
