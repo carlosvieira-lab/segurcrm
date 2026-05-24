@@ -520,7 +520,6 @@ setTimeout(() => {
       start_date: cleanDate(policyForm.start_date),
       renewal_date: renewalDate,
       next_payment_date: nextPaymentDate,
-      last_payment_date: cleanDate(policyForm.last_payment_date),
     });
 
     if (error) {
@@ -886,21 +885,6 @@ const rating = clientRating(activePolicies, totalCommission);
                     setPolicyForm({
                       ...policyForm,
                       start_date: e.target.value,
-                    })
-                  }
-                />
-              </label>
-
-              <label style={fieldLabel}>
-                Último pagamento
-                <input
-                  style={input}
-                  type="date"
-                  value={policyForm.last_payment_date}
-                  onChange={(e) =>
-                    setPolicyForm({
-                      ...policyForm,
-                      last_payment_date: e.target.value,
                     })
                   }
                 />
