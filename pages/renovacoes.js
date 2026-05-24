@@ -46,6 +46,29 @@ function formatDate(date) {
   return new Date(date).toLocaleDateString("pt-PT");
 }
 
+function addMonths(date, months) {
+  const newDate = new Date(date);
+  const originalDay = newDate.getDate();
+
+  newDate.setMonth(newDate.getMonth() + months);
+
+  if (newDate.getDate() < originalDay) {
+    newDate.setDate(0);
+  }
+
+  return newDate;
+}
+
+function getPaymentIntervalMonths(frequency) {
+  const value = String(frequency || "Mensal").toLowerCase();
+
+  if (value === "trimestral") return 3;
+  if (value === "semestral") return 6;
+  if (value === "anual") return 12;
+
+  return 1;
+}
+
 function getPriority(policy) {
   const days = daysUntil(policy.next_payment_date);
 
@@ -67,6 +90,42 @@ export default function Renovacoes({ policies }) {
     futuras: policies.filter((p) => getPriority(p) === "futuras"),
     semData: policies.filter((p) => getPriority(p) === "semData"),
   };
+
+  async function markPaymentPaid(policy) {
+    const baseDate =
+      policy.next_payment_date ||
+      policy.start_date ||
+      new Date().toISOString().split("T")[0];
+
+    const monthsToAdd =
+      getPaymentIntervalMonths(policy.payment_frequency);
+
+    const nextPaymentDate = addMonths(
+      baseDate,
+      monthsToAdd
+    )
+      .toISOString()
+      .split("T")[0];
+
+    const today = new Date()
+      .toISOString()
+      .split("T")[0];
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        last_payment_date: today,
+        next_payment_date: nextPaymentDate,
+      })
+      .eq("id", policy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
 
   return (
     <div style={page}>
@@ -156,6 +215,13 @@ function RenewalSection({ title, description, policies, badgeColor }) {
                 <p><strong>Fracionamento:</strong> {policy.payment_frequency || "anual"}</p>
                                 <p><strong>Próxima cobrança:</strong> {formatDate(policy.next_payment_date)}</p>
                 <p><strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}</p>
+
+                <button
+                  style={paymentButton}
+                  onClick={() => markPaymentPaid(policy)}
+                >
+                  Marcar como pago
+                </button>
               </div>
             );
           })}
@@ -282,3 +348,16 @@ const statusBadge = {
   fontSize: 12,
   fontWeight: "bold",
 };
+
+const paymentButton = {
+  marginTop: 12,
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+  width: "100%",
+};
+
