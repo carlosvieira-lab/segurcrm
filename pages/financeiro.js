@@ -53,6 +53,69 @@ export default function Financeiro({ policies }) {
     0
   );
 
+  const vidaBranches = [
+    "vida",
+    "aps",
+    "viagem",
+  ];
+
+  const vidaPolicies =
+    activePolicies.filter((p) =>
+      vidaBranches.includes(
+        String(p.branch || "")
+          .toLowerCase()
+          .trim()
+      )
+    );
+
+  const naoVidaPolicies =
+    activePolicies.filter(
+      (p) =>
+        !vidaBranches.includes(
+          String(p.branch || "")
+            .toLowerCase()
+            .trim()
+        )
+    );
+
+  const vidaPremium =
+    vidaPolicies.reduce(
+      (sum, p) =>
+        sum +
+        Number(
+          p.annual_premium || 0
+        ),
+      0
+    );
+
+  const naoVidaPremium =
+    naoVidaPolicies.reduce(
+      (sum, p) =>
+        sum +
+        Number(
+          p.annual_premium || 0
+        ),
+      0
+    );
+
+  const vidaPercentage =
+    activePremium > 0
+      ? (
+          (vidaPremium /
+            activePremium) *
+          100
+        ).toFixed(1)
+      : "0.0";
+
+  const naoVidaPercentage =
+    activePremium > 0
+      ? (
+          (naoVidaPremium /
+            activePremium) *
+          100
+        ).toFixed(1)
+      : "0.0";
+
   const cancelledPremium = cancelledPolicies.reduce(
     (sum, p) => sum + Number(p.annual_premium || 0),
     0
@@ -135,6 +198,18 @@ export default function Financeiro({ policies }) {
             title="Prémio comercial em vigor"
             value={formatEuro(activePremium)}
             color="#16a34a"
+          />
+
+          <StatCard
+            title="Prémio comercial em vigor N VIDA"
+            value={`${formatEuro(naoVidaPremium)} · ${naoVidaPercentage}%`}
+            color="#0891b2"
+          />
+
+          <StatCard
+            title="Prémio comercial em vigor VIDA"
+            value={`${formatEuro(vidaPremium)} · ${vidaPercentage}%`}
+            color="#7c3aed"
           />
 
           <StatCard
@@ -297,9 +372,10 @@ const statsGrid = {
 
 const statCard = {
   background: "white",
-  padding: 24,
+  padding: 20,
   borderRadius: 18,
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  minHeight: 120,
 };
 
 const cardLabel = {
