@@ -95,6 +95,44 @@ function calculateAge(date) {
 
   return age;
 }
+function addMonths(date, months) {
+  const newDate = new Date(date);
+  const originalDay = newDate.getDate();
+
+  newDate.setMonth(newDate.getMonth() + months);
+
+  if (newDate.getDate() < originalDay) {
+    newDate.setDate(0);
+  }
+
+  return newDate;
+}
+
+function getPaymentIntervalMonths(frequency) {
+  const value = String(frequency || "Mensal").toLowerCase();
+
+  if (value === "trimestral") return 3;
+  if (value === "semestral") return 6;
+  if (value === "anual") return 12;
+
+  return 1;
+}
+
+function calculateInitialNextPaymentDate(startDate, frequency) {
+  if (!startDate) return null;
+
+  const today = new Date();
+  let nextDate = new Date(startDate);
+
+  const monthsToAdd = getPaymentIntervalMonths(frequency);
+
+  while (nextDate <= today) {
+    nextDate = addMonths(nextDate, monthsToAdd);
+  }
+
+  return nextDate.toISOString().split("T")[0];
+}
+
 function calculateAnnualCommission(policy) {
   const commission = Number(policy.commission_per_payment || 0);
   const frequency = String(policy.payment_frequency || "anual").toLowerCase();
@@ -373,17 +411,34 @@ setTimeout(() => {
     window.location.reload();
   }
 
-  async function markPolicyPaid(policyId) {
+  async function markPolicyPaid(policy) {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const baseDate =
+        policy.next_payment_date ||
+        policy.start_date ||
+        new Date().toISOString().split("T")[0];
+
+      const monthsToAdd =
+        getPaymentIntervalMonths(policy.payment_frequency);
+
+      const nextDate = addMonths(
+        baseDate,
+        monthsToAdd
+      )
+        .toISOString()
+        .split("T")[0];
+
+      const today = new Date()
+        .toISOString()
+        .split("T")[0];
 
       const { error } = await supabase
         .from("policies")
         .update({
           last_payment_date: today,
+          next_payment_date: nextDate,
         })
-        .eq("id", policyId)
-        .select();
+        .eq("id", policy.id);
 
       if (error) {
         console.log(error);
@@ -391,11 +446,10 @@ setTimeout(() => {
         return;
       }
 
-      alert("Pagamento registado.");
       window.location.reload();
     } catch (err) {
       console.log(err);
-      alert("Erro ao atualizar.");
+      alert("Erro ao atualizar pagamento.");
     }
   }
 
@@ -448,6 +502,12 @@ setTimeout(() => {
         .split("T")[0];
     }
 
+    const nextPaymentDate =
+      calculateInitialNextPaymentDate(
+        policyForm.start_date,
+        policyForm.payment_frequency
+      );
+
     const { error } = await supabase.from("policies").insert({
       client_id: client.id,
       policy_number: policyForm.policy_number,
@@ -459,6 +519,7 @@ setTimeout(() => {
       payment_frequency: policyForm.payment_frequency,
       start_date: cleanDate(policyForm.start_date),
       renewal_date: renewalDate,
+      next_payment_date: nextPaymentDate,
       last_payment_date: cleanDate(policyForm.last_payment_date),
     });
 
@@ -1180,13 +1241,16 @@ const rating = clientRating(activePolicies, totalCommission);
 
                   <p>
                     <strong>Comissão anual:</strong>{" "}
-                   {Number(
-  calculateAnnualCommission(policy)
-).toFixed(2)} €
+                    {calculateAnnualCommission(policy)} €
                   </p>
 
                   <p>
-                    <strong>Renovação:</strong> {formatDate(policy.renewal_date)}
+                    <strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}
+                  </p>
+
+                  <p>
+                    <strong>Próximo pagamento:</strong>{" "}
+                    {formatDate(policy.next_payment_date)}
                   </p>
 
                   <div style={buttonGroup}>
@@ -1210,9 +1274,9 @@ const rating = clientRating(activePolicies, totalCommission);
 
                     <button
                       style={{ ...smallButton, background: "#2563eb" }}
-                      onClick={() => markPolicyPaid(policy.id)}
+                      onClick={() => markPolicyPaid(policy)}
                     >
-                      Dar como pago
+                      Marcar pagamento recebido
                     </button>
                   </div>
                 </div>
