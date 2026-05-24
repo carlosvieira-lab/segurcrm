@@ -428,6 +428,21 @@ setTimeout(() => {
       return value === "" ? null : value;
     };
 
+    const renewalDate =
+      policyForm.start_date
+        ? new Date(
+            new Date(
+              policyForm.start_date
+            ).setFullYear(
+              new Date(
+                policyForm.start_date
+              ).getFullYear() + 1
+            )
+          )
+            .toISOString()
+            .split("T")[0]
+        : null;
+
     const { error } = await supabase.from("policies").insert({
       client_id: client.id,
       policy_number: policyForm.policy_number,
@@ -438,7 +453,7 @@ setTimeout(() => {
       commission_per_payment: cleanNumber(policyForm.commission_per_payment),
       payment_frequency: policyForm.payment_frequency,
       start_date: cleanDate(policyForm.start_date),
-      renewal_date: cleanDate(policyForm.renewal_date),
+      renewal_date: renewalDate,
       last_payment_date: cleanDate(policyForm.last_payment_date),
     });
 
@@ -805,21 +820,6 @@ const rating = clientRating(activePolicies, totalCommission);
                     setPolicyForm({
                       ...policyForm,
                       start_date: e.target.value,
-                    })
-                  }
-                />
-              </label>
-
-              <label style={fieldLabel}>
-                Data renovação
-                <input
-                  style={input}
-                  type="date"
-                  value={policyForm.renewal_date}
-                  onChange={(e) =>
-                    setPolicyForm({
-                      ...policyForm,
-                      renewal_date: e.target.value,
                     })
                   }
                 />
