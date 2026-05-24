@@ -286,6 +286,7 @@ export default function Dashboard({
               overdueTasks
             }
             color="#dc2626"
+            href="/tarefas?filtro=vencidas"
           />
 
           <Card
@@ -294,6 +295,7 @@ export default function Dashboard({
               todayTasks
             }
             color="#7c3aed"
+            href="/tarefas?filtro=hoje"
           />
 
           <Card
@@ -359,14 +361,10 @@ function Card({
   title,
   value,
   color,
+  href,
 }) {
-  return (
-    <div
-      style={{
-        ...card,
-        borderTop: `6px solid ${color}`,
-      }}
-    >
+  const content = (
+    <>
       <p style={cardLabel}>
         {title}
       </p>
@@ -379,6 +377,28 @@ function Card({
       >
         {value}
       </h2>
+    </>
+  );
+
+  const cardStyle = {
+    ...card,
+    borderTop: `6px solid ${color}`,
+    textDecoration: "none",
+    color: "#111827",
+    cursor: href ? "pointer" : "default",
+  };
+
+  if (href) {
+    return (
+      <Link href={href} style={cardStyle}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div style={cardStyle}>
+      {content}
     </div>
   );
 }
@@ -533,3 +553,5 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
+
