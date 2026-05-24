@@ -419,14 +419,17 @@ setTimeout(() => {
         new Date().toISOString().split("T")[0];
 
       const monthsToAdd =
-        getPaymentIntervalMonths(policy.payment_frequency);
+        getPaymentIntervalMonths(
+          policy.payment_frequency
+        );
 
-      const nextDate = addMonths(
-        baseDate,
-        monthsToAdd
-      )
-        .toISOString()
-        .split("T")[0];
+      const nextPaymentDate =
+        addMonths(
+          baseDate,
+          monthsToAdd
+        )
+          .toISOString()
+          .split("T")[0];
 
       const today = new Date()
         .toISOString()
@@ -436,12 +439,12 @@ setTimeout(() => {
         .from("policies")
         .update({
           last_payment_date: today,
-          next_payment_date: nextDate,
+          next_payment_date:
+            nextPaymentDate,
         })
         .eq("id", policy.id);
 
       if (error) {
-        console.log(error);
         alert(error.message);
         return;
       }
@@ -449,7 +452,9 @@ setTimeout(() => {
       window.location.reload();
     } catch (err) {
       console.log(err);
-      alert("Erro ao atualizar pagamento.");
+      alert(
+        "Erro ao atualizar pagamento."
+      );
     }
   }
 
@@ -1524,6 +1529,6 @@ const cancelButton = {
   border: "none",
   padding: "12px 18px",
   borderRadius: 10,
-  cursor: "pointer",
+   cursor: "pointer",
   fontWeight: "bold",
 };
