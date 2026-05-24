@@ -116,6 +116,24 @@ export default function Financeiro({ policies }) {
         ).toFixed(1)
       : "0.0";
 
+  const vidaPolicyPercentage =
+    activePolicies.length > 0
+      ? (
+          (vidaPolicies.length /
+            activePolicies.length) *
+          100
+        ).toFixed(1)
+      : "0.0";
+
+  const naoVidaPolicyPercentage =
+    activePolicies.length > 0
+      ? (
+          (naoVidaPolicies.length /
+            activePolicies.length) *
+          100
+        ).toFixed(1)
+      : "0.0";
+
   const cancelledPremium = cancelledPolicies.reduce(
     (sum, p) => sum + Number(p.annual_premium || 0),
     0
@@ -210,6 +228,18 @@ export default function Financeiro({ policies }) {
             title="Prémio comercial em vigor VIDA"
             value={`${formatEuro(vidaPremium)} · ${vidaPercentage}%`}
             color="#7c3aed"
+          />
+
+          <StatCard
+            title="Apólices em vigor N VIDA"
+            value={`${naoVidaPolicies.length} · ${naoVidaPolicyPercentage}%`}
+            color="#0f766e"
+          />
+
+          <StatCard
+            title="Apólices em vigor VIDA"
+            value={`${vidaPolicies.length} · ${vidaPolicyPercentage}%`}
+            color="#9333ea"
           />
 
           <StatCard
@@ -372,10 +402,10 @@ const statsGrid = {
 
 const statCard = {
   background: "white",
-  padding: 20,
+  padding: 18,
   borderRadius: 18,
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-  minHeight: 120,
+  minHeight: 115,
 };
 
 const cardLabel = {
@@ -384,7 +414,7 @@ const cardLabel = {
 };
 
 const cardValue = {
-  fontSize: 28,
+  fontSize: 24,
   marginTop: 12,
 };
 
