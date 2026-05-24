@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+mport { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
@@ -109,6 +109,93 @@ export default function Apolices({ policies }) {
     }
   });
 
+  const allYearsSet = new Set();
+
+  policies.forEach((policy) => {
+    const startYear = Number(
+      getYear(
+        policy.start_date ||
+          policy.created_at
+      )
+    );
+
+    if (!isNaN(startYear)) {
+      allYearsSet.add(startYear);
+    }
+
+    if (policy.cancelled_at) {
+      const cancelledYear = Number(
+        getYear(
+          policy.cancelled_at
+        )
+      );
+
+      if (!isNaN(cancelledYear)) {
+        allYearsSet.add(
+          cancelledYear
+        );
+      }
+    }
+  });
+
+  const sortedYears =
+    Array.from(allYearsSet)
+      .filter((y) => !isNaN(y))
+      .sort((a, b) => a - b);
+
+  const portfolioEvolution =
+    sortedYears.map((year) => {
+      const activeUntilYear =
+        policies.filter((policy) => {
+          const startYear =
+            Number(
+              getYear(
+                policy.start_date ||
+                  policy.created_at
+              )
+            );
+
+          const cancelledYear =
+            policy.cancelled_at
+              ? Number(
+                  getYear(
+                    policy.cancelled_at
+                  )
+                )
+              : null;
+
+          const started =
+            startYear <= year;
+
+          const stillActive =
+            !cancelledYear ||
+            cancelledYear > year;
+
+          return (
+            started &&
+            stillActive
+          );
+        });
+
+      const totalPremium =
+        activeUntilYear.reduce(
+          (sum, policy) =>
+            sum +
+            Number(
+              policy.annual_premium ||
+                0
+            ),
+          0
+        );
+
+      return {
+        year,
+        premium: totalPremium,
+        policies:
+          activeUntilYear.length,
+      };
+    });
+
   const years = Object.keys(yearlyStats).sort((a, b) => Number(b) - Number(a));
 
   return (
@@ -163,6 +250,68 @@ export default function Apolices({ policies }) {
                     <span style={redText}>{formatEuro(item.cancelledPremium)}</span>
                     <strong style={netPremium >= 0 ? greenText : redText}>
                       {netCount} / {formatEuro(netPremium)}
+                    </strong>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section style={panel}>
+          <h2>Evolução da carteira viva</h2>
+
+          {portfolioEvolution.length === 0 ? (
+            <p style={muted}>Sem dados disponíveis.</p>
+          ) : (
+            <div style={table}>
+              <div style={tableHeaderEvolution}>
+                <span>Ano</span>
+                <span>Apólices vivas</span>
+                <span>Carteira viva</span>
+                <span>Crescimento</span>
+              </div>
+
+              {portfolioEvolution.map((item, index) => {
+                const previous =
+                  index > 0
+                    ? portfolioEvolution[index - 1]
+                    : null;
+
+                const growth =
+                  previous
+                    ? item.premium -
+                      previous.premium
+                    : item.premium;
+
+                return (
+                  <div
+                    key={item.year}
+                    style={tableRowEvolution}
+                  >
+                    <strong>
+                      {item.year}
+                    </strong>
+
+                    <span style={greenText}>
+                      {item.policies}
+                    </span>
+
+                    <strong style={greenText}>
+                      {formatEuro(item.premium)}
+                    </strong>
+
+                    <strong
+                      style={
+                        growth >= 0
+                          ? greenText
+                          : redText
+                      }
+                    >
+                      {growth >= 0
+                        ? "+"
+                        : ""}
+                      {formatEuro(growth)}
                     </strong>
                   </div>
                 );
@@ -349,6 +498,27 @@ const redText = {
   fontWeight: "bold",
 };
 
+const tableHeaderEvolution = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.2fr 1.5fr 1.5fr",
+  gap: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  background: "#ecfeff",
+  color: "#0f172a",
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const tableRowEvolution = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.2fr 1.5fr 1.5fr",
+  gap: 12,
+  alignItems: "center",
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+};
+
 const compactList = {
   display: "grid",
   gap: 10,
@@ -379,4 +549,3 @@ const badge = {
   fontSize: 12,
   fontWeight: "bold",
 };
-
