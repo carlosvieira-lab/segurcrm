@@ -56,6 +56,7 @@ export default function Apolices({ policies }) {
 
   const insurerStats = {};
   const yearlyStats = {};
+  const yearlyInsurerStats = {};
 
   policies.forEach((policy) => {
     const insurer = policy.insurers?.name || "Sem seguradora";
@@ -92,6 +93,20 @@ export default function Apolices({ policies }) {
     yearlyStats[startYear].newCount += 1;
     yearlyStats[startYear].newPremium += premium;
 
+    if (!yearlyInsurerStats[startYear]) {
+      yearlyInsurerStats[startYear] = {};
+    }
+
+    if (!yearlyInsurerStats[startYear][insurer]) {
+      yearlyInsurerStats[startYear][insurer] = {
+        count: 0,
+        premium: 0,
+      };
+    }
+
+    yearlyInsurerStats[startYear][insurer].count += 1;
+    yearlyInsurerStats[startYear][insurer].premium += premium;
+
     if (policy.cancelled_at) {
       const cancelledYear = getYear(policy.cancelled_at);
 
@@ -108,93 +123,6 @@ export default function Apolices({ policies }) {
       yearlyStats[cancelledYear].cancelledPremium += premium;
     }
   });
-
-  const allYearsSet = new Set();
-
-  policies.forEach((policy) => {
-    const startYear = Number(
-      getYear(
-        policy.start_date ||
-          policy.created_at
-      )
-    );
-
-    if (!isNaN(startYear)) {
-      allYearsSet.add(startYear);
-    }
-
-    if (policy.cancelled_at) {
-      const cancelledYear = Number(
-        getYear(
-          policy.cancelled_at
-        )
-      );
-
-      if (!isNaN(cancelledYear)) {
-        allYearsSet.add(
-          cancelledYear
-        );
-      }
-    }
-  });
-
-  const sortedYears =
-    Array.from(allYearsSet)
-      .filter((y) => !isNaN(y))
-      .sort((a, b) => a - b);
-
-  const portfolioEvolution =
-    sortedYears.map((year) => {
-      const activeUntilYear =
-        policies.filter((policy) => {
-          const startYear =
-            Number(
-              getYear(
-                policy.start_date ||
-                  policy.created_at
-              )
-            );
-
-          const cancelledYear =
-            policy.cancelled_at
-              ? Number(
-                  getYear(
-                    policy.cancelled_at
-                  )
-                )
-              : null;
-
-          const started =
-            startYear <= year;
-
-          const stillActive =
-            !cancelledYear ||
-            cancelledYear > year;
-
-          return (
-            started &&
-            stillActive
-          );
-        });
-
-      const totalPremium =
-        activeUntilYear.reduce(
-          (sum, policy) =>
-            sum +
-            Number(
-              policy.annual_premium ||
-                0
-            ),
-          0
-        );
-
-      return {
-        year,
-        premium: totalPremium,
-        policies:
-          activeUntilYear.length,
-      };
-    });
 
   const years = Object.keys(yearlyStats).sort((a, b) => Number(b) - Number(a));
 
@@ -259,60 +187,84 @@ export default function Apolices({ policies }) {
         </section>
 
         <section style={panel}>
-          <h2>Evolução da carteira viva</h2>
+          <h2>Produção anual por seguradora</h2>
 
-          {portfolioEvolution.length === 0 ? (
+          {years.length === 0 ? (
             <p style={muted}>Sem dados disponíveis.</p>
           ) : (
-            <div style={table}>
-              <div style={tableHeaderEvolution}>
-                <span>Ano</span>
-                <span>Apólices vivas</span>
-                <span>Carteira viva</span>
-                <span>Crescimento</span>
-              </div>
+            <div style={{ display: "grid", gap: 24 }}>
+              {years.map((year) => {
+                const insurers =
+                  yearlyInsurerStats[year] || {};
 
-              {portfolioEvolution.map((item, index) => {
-                const previous =
-                  index > 0
-                    ? portfolioEvolution[index - 1]
-                    : null;
-
-                const growth =
-                  previous
-                    ? item.premium -
-                      previous.premium
-                    : item.premium;
+                const totalYearPremium =
+                  Object.values(insurers).reduce(
+                    (sum, item) =>
+                      sum + item.premium,
+                    0
+                  );
 
                 return (
                   <div
-                    key={item.year}
-                    style={tableRowEvolution}
+                    key={year}
+                    style={yearBlock}
                   >
-                    <strong>
-                      {item.year}
-                    </strong>
+                    <h3 style={yearTitle}>
+                      {year}
+                    </h3>
 
-                    <span style={greenText}>
-                      {item.policies}
-                    </span>
+                    <div style={table}>
+                      <div style={tableHeaderInsurers}>
+                        <span>Seguradora</span>
+                        <span>Apólices</span>
+                        <span>Prémio</span>
+                        <span>% Produção</span>
+                      </div>
 
-                    <strong style={greenText}>
-                      {formatEuro(item.premium)}
-                    </strong>
+                      {Object.entries(insurers)
+                        .sort(
+                          (a, b) =>
+                            b[1].premium -
+                            a[1].premium
+                        )
+                        .map(
+                          ([insurer, item]) => {
+                            const percentage =
+                              totalYearPremium > 0
+                                ? (
+                                    (item.premium /
+                                      totalYearPremium) *
+                                    100
+                                  ).toFixed(1)
+                                : "0.0";
 
-                    <strong
-                      style={
-                        growth >= 0
-                          ? greenText
-                          : redText
-                      }
-                    >
-                      {growth >= 0
-                        ? "+"
-                        : ""}
-                      {formatEuro(growth)}
-                    </strong>
+                            return (
+                              <div
+                                key={insurer}
+                                style={tableRowInsurers}
+                              >
+                                <strong>
+                                  {insurer}
+                                </strong>
+
+                                <span style={greenText}>
+                                  {item.count}
+                                </span>
+
+                                <strong style={greenText}>
+                                  {formatEuro(
+                                    item.premium
+                                  )}
+                                </strong>
+
+                                <strong style={blueText}>
+                                  {percentage}%
+                                </strong>
+                              </div>
+                            );
+                          }
+                        )}
+                    </div>
                   </div>
                 );
               })}
@@ -493,26 +445,42 @@ const greenText = {
   fontWeight: "bold",
 };
 
+const blueText = {
+  color: "#2563eb",
+  fontWeight: "bold",
+};
+
 const redText = {
   color: "#dc2626",
   fontWeight: "bold",
 };
 
-const tableHeaderEvolution = {
+const yearBlock = {
+  background: "#f9fafb",
+  borderRadius: 16,
+  padding: 18,
+};
+
+const yearTitle = {
+  marginTop: 0,
+  marginBottom: 16,
+};
+
+const tableHeaderInsurers = {
   display: "grid",
-  gridTemplateColumns: "1fr 1.2fr 1.5fr 1.5fr",
+  gridTemplateColumns: "1.5fr 1fr 1.4fr 1fr",
   gap: 12,
   padding: "12px 14px",
   borderRadius: 12,
-  background: "#ecfeff",
-  color: "#0f172a",
+  background: "#eff6ff",
+  color: "#1e3a8a",
   fontWeight: "bold",
   fontSize: 14,
 };
 
-const tableRowEvolution = {
+const tableRowInsurers = {
   display: "grid",
-  gridTemplateColumns: "1fr 1.2fr 1.5fr 1.5fr",
+  gridTemplateColumns: "1.5fr 1fr 1.4fr 1fr",
   gap: 12,
   alignItems: "center",
   padding: "14px",
@@ -549,3 +517,4 @@ const badge = {
   fontSize: 12,
   fontWeight: "bold",
 };
+
