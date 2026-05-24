@@ -80,6 +80,17 @@ export default function Tarefas({ tasks }) {
     due_date: "",
   });
 
+  const [showEditTaskForm, setShowEditTaskForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+
+  const [editTaskForm, setEditTaskForm] = useState({
+    title: "",
+    description: "",
+    category: "ADMINISTRATIVA",
+    priority: "NORMAL",
+    due_date: "",
+  });
+
   const openTasks = tasks.filter((t) => t.status !== "concluida");
 
   const today = todayIso();
@@ -165,6 +176,59 @@ export default function Tarefas({ tasks }) {
       status: "aberta",
       due_date: taskForm.due_date || null,
     });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  function editTask(task) {
+    setEditingTaskId(task.id);
+    setShowEditTaskForm(true);
+    setShowTaskForm(false);
+
+    setEditTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      category: normalizeCategory(task.category),
+      priority: normalizePriority(task.priority),
+      due_date: task.due_date || "",
+    });
+
+    setTimeout(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }, 100);
+  }
+
+  async function saveTask(e) {
+    e.preventDefault();
+
+    if (!editingTaskId) {
+      alert("Não foi possível identificar a tarefa.");
+      return;
+    }
+
+    if (!editTaskForm.title.trim()) {
+      alert("Indica o título da tarefa.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        title: editTaskForm.title,
+        description: editTaskForm.description,
+        category: normalizeCategory(editTaskForm.category),
+        priority: normalizePriority(editTaskForm.priority),
+        due_date: editTaskForm.due_date || null,
+      })
+      .eq("id", editingTaskId);
 
     if (error) {
       alert(error.message);
@@ -301,6 +365,110 @@ export default function Tarefas({ tasks }) {
                   type="button"
                   style={cancelButton}
                   onClick={() => setShowTaskForm(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        {showEditTaskForm && (
+          <section
+            style={{
+              ...card,
+              background: "linear-gradient(135deg, #fef3c7, #fffbeb)",
+              border: "1px solid #f59e0b",
+            }}
+          >
+            <h2>Editar Tarefa</h2>
+
+            <form onSubmit={saveTask} style={formGrid}>
+              <input
+                style={input}
+                placeholder="Título da tarefa"
+                value={editTaskForm.title}
+                onChange={(e) =>
+                  setEditTaskForm({
+                    ...editTaskForm,
+                    title: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <select
+                style={input}
+                value={editTaskForm.category}
+                onChange={(e) =>
+                  setEditTaskForm({
+                    ...editTaskForm,
+                    category: e.target.value,
+                  })
+                }
+              >
+                <option value="ADMINISTRATIVA">Administrativa</option>
+                <option value="COMERCIAL">Comercial</option>
+              </select>
+
+              <select
+                style={input}
+                value={editTaskForm.priority}
+                onChange={(e) =>
+                  setEditTaskForm({
+                    ...editTaskForm,
+                    priority: e.target.value,
+                  })
+                }
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="URGENTE">Urgente</option>
+                <option value="MUITO URGENTE">Muito urgente</option>
+              </select>
+
+              <label style={fieldLabel}>
+                Data limite
+                <input
+                  style={input}
+                  type="date"
+                  value={editTaskForm.due_date}
+                  onChange={(e) =>
+                    setEditTaskForm({
+                      ...editTaskForm,
+                      due_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <textarea
+                style={{
+                  ...input,
+                  minHeight: 120,
+                  gridColumn: "1 / -1",
+                }}
+                placeholder="Descrição"
+                value={editTaskForm.description}
+                onChange={(e) =>
+                  setEditTaskForm({
+                    ...editTaskForm,
+                    description: e.target.value,
+                  })
+                }
+              />
+
+              <div style={formButtons}>
+                <button type="submit" style={button}>
+                  Guardar alterações
+                </button>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => {
+                    setShowEditTaskForm(false);
+                    setEditingTaskId(null);
+                  }}
                 >
                   Cancelar
                 </button>
@@ -492,6 +660,13 @@ export default function Tarefas({ tasks }) {
                           Abrir cliente
                         </Link>
                       )}
+
+                      <button
+                        style={{ ...smallButton, background: "#2563eb" }}
+                        onClick={() => editTask(task)}
+                      >
+                        Editar
+                      </button>
 
                       <button
                         style={{ ...smallButton, background: "#16a34a" }}
