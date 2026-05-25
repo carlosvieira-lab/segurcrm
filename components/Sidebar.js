@@ -32,6 +32,7 @@ export default function Sidebar({ active }) {
           <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
           <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
           <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
+    <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
           <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
           <MenuItem href="/oportunidades" label="Oportunidades" active={active === "oportunidades"} />
           <MenuItem href="/sinistros" label="Sinistros" active={active === "sinistros"} />
