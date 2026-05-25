@@ -13,6 +13,10 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("*");
+
   const { data: policies } = await supabase
     .from("policies")
     .select(`
@@ -22,6 +26,7 @@ export async function getServerSideProps() {
 
   return {
     props: {
+      clients: clients || [],
       policies: policies || [],
     },
   };
@@ -32,6 +37,33 @@ function formatEuro(value) {
     style: "currency",
     currency: "EUR",
   }).format(Number(value || 0));
+}
+
+function buildClientsWithoutHomeInsuranceReport(clients, policies) {
+  const clientsWithHomeInsurance = new Set();
+
+  policies
+    .filter((policy) => policy.status !== "anulada")
+    .forEach((policy) => {
+      const branch = String(policy.branch || "")
+        .toLowerCase()
+        .trim();
+
+      if (branch === "casa" && policy.client_id) {
+        clientsWithHomeInsurance.add(policy.client_id);
+      }
+    });
+
+  return clients
+    .filter((client) => !clientsWithHomeInsurance.has(client.id))
+    .map((client) => ({
+      id: client.id,
+      name: client.name || "Sem nome",
+      nif: client.nif || "-",
+      phone: client.phone || "-",
+      email: client.email || "-",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function buildTopClientsReport(policies) {
@@ -66,10 +98,16 @@ function buildTopClientsReport(policies) {
     .slice(0, 10);
 }
 
-export default function Relatorios({ policies }) {
+export default function Relatorios({ clients, policies }) {
   const [selectedReport, setSelectedReport] = useState(null);
 
   const topClients = buildTopClientsReport(policies);
+
+  const clientsWithoutHomeInsurance =
+    buildClientsWithoutHomeInsuranceReport(
+      clients,
+      policies
+    );
 
   function exportTopClientsCsv() {
     const header = [
@@ -122,6 +160,51 @@ export default function Relatorios({ policies }) {
     window.print();
   }
 
+  function exportClientsWithoutHomeCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsWithoutHomeInsurance.map((client) => [
+      client.name,
+      client.nif,
+      client.phone,
+      client.email,
+    ]);
+
+    const csvContent = [header, ...rows]
+      .map((row) =>
+        row
+          .map((cell) =>
+            `"${String(cell).replace(/"/g, '""')}"`
+          )
+          .join(";")
+      )
+      .join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.setAttribute(
+      "download",
+      "clientes_sem_seguro_casa.csv"
+    );
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div style={page}>
       <Sidebar active="relatorios" />
@@ -152,6 +235,28 @@ export default function Relatorios({ policies }) {
 
             <p style={reportText}>
               Clientes com maior prémio comercial total em vigor.
+            </p>
+
+            <strong style={reportAction}>
+              Abrir relatório
+            </strong>
+          </button>
+
+          <button
+            style={{
+              ...reportCard,
+              borderTop: "6px solid #f59e0b",
+            }}
+            onClick={() =>
+              setSelectedReport("semCasa")
+            }
+          >
+            <h2 style={reportTitle}>
+              Clientes sem seguro da casa
+            </h2>
+
+            <p style={reportText}>
+              Lista de clientes que não têm apólice CASA em vigor.
             </p>
 
             <strong style={reportAction}>
@@ -228,6 +333,76 @@ export default function Relatorios({ policies }) {
                     <strong style={premiumValue}>
                       {formatEuro(client.premium)}
                     </strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {selectedReport === "semCasa" && (
+          <section style={panel}>
+            <div style={reportHeader}>
+              <div>
+                <h2 style={panelTitle}>
+                  Clientes sem seguro da casa
+                </h2>
+
+                <p style={muted}>
+                  Considera clientes que não têm nenhuma apólice CASA em vigor.
+                </p>
+              </div>
+
+              <div style={buttonGroup}>
+                <button
+                  style={secondaryButton}
+                  onClick={printTopClientsPdf}
+                >
+                  Gerar PDF
+                </button>
+
+                <button
+                  style={button}
+                  onClick={exportClientsWithoutHomeCsv}
+                >
+                  Exportar Excel
+                </button>
+              </div>
+            </div>
+
+            {clientsWithoutHomeInsurance.length === 0 ? (
+              <p style={muted}>
+                Todos os clientes têm seguro da casa em vigor.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderHome}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Telefone</span>
+                  <span>Email</span>
+                </div>
+
+                {clientsWithoutHomeInsurance.map((client) => (
+                  <div
+                    key={client.id}
+                    style={tableRowHome}
+                  >
+                    <strong>
+                      {client.name}
+                    </strong>
+
+                    <span>
+                      {client.nif}
+                    </span>
+
+                    <span>
+                      {client.phone}
+                    </span>
+
+                    <span>
+                      {client.email}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -365,6 +540,26 @@ const tableHeader = {
 const tableRow = {
   display: "grid",
   gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+};
+
+const tableHeaderHome = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.6fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const tableRowHome = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.6fr",
   gap: 12,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
