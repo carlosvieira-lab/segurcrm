@@ -66,6 +66,34 @@ function buildClientsWithoutHomeInsuranceReport(clients, policies) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+
+function buildClientsWithoutHealthInsuranceReport(clients, policies) {
+  const clientsWithHealthInsurance = new Set();
+
+  policies
+    .filter((policy) => policy.status !== "anulada")
+    .forEach((policy) => {
+      const branch = String(policy.branch || "")
+        .toLowerCase()
+        .trim();
+
+      if (branch === "saude" && policy.client_id) {
+        clientsWithHealthInsurance.add(policy.client_id);
+      }
+    });
+
+  return clients
+    .filter((client) => !clientsWithHealthInsurance.has(client.id))
+    .map((client) => ({
+      id: client.id,
+      name: client.name || "Sem nome",
+      nif: client.nif || "-",
+      phone: client.phone || "-",
+      email: client.email || "-",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function buildTopClientsReport(policies) {
   const activePolicies = policies.filter(
     (policy) => policy.status !== "anulada"
@@ -105,6 +133,12 @@ export default function Relatorios({ clients, policies }) {
 
   const clientsWithoutHomeInsurance =
     buildClientsWithoutHomeInsuranceReport(
+      clients,
+      policies
+    );
+
+  const clientsWithoutHealthInsurance =
+    buildClientsWithoutHealthInsuranceReport(
       clients,
       policies
     );
@@ -158,6 +192,52 @@ export default function Relatorios({ clients, policies }) {
 
   function printTopClientsPdf() {
     window.print();
+  }
+
+
+  function exportClientsWithoutHealthCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsWithoutHealthInsurance.map((client) => [
+      client.name,
+      client.nif,
+      client.phone,
+      client.email,
+    ]);
+
+    const csvContent = [header, ...rows]
+      .map((row) =>
+        row
+          .map((cell) =>
+            `"${String(cell).replace(/"/g, '""')}"`
+          )
+          .join(";")
+      )
+      .join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.setAttribute(
+      "download",
+      "clientes_sem_seguro_saude.csv"
+    );
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   }
 
   function exportClientsWithoutHomeCsv() {
@@ -263,6 +343,28 @@ export default function Relatorios({ clients, policies }) {
               Abrir relatório
             </strong>
           </button>
+          <button
+            style={{
+              ...reportCard,
+              borderTop: "6px solid #16a34a",
+            }}
+            onClick={() =>
+              setSelectedReport("semSaude")
+            }
+          >
+            <h2 style={reportTitle}>
+              Clientes sem seguro de saúde
+            </h2>
+
+            <p style={reportText}>
+              Lista de clientes que não têm seguro de saúde em vigor.
+            </p>
+
+            <strong style={reportAction}>
+              Abrir relatório
+            </strong>
+          </button>
+
         </section>
 
         {selectedReport === "topClientes" && (
@@ -339,6 +441,78 @@ export default function Relatorios({ clients, policies }) {
             )}
           </section>
         )}
+
+
+        {selectedReport === "semSaude" && (
+          <section style={panel}>
+            <div style={reportHeader}>
+              <div>
+                <h2 style={panelTitle}>
+                  Clientes sem seguro de saúde
+                </h2>
+
+                <p style={muted}>
+                  Considera clientes sem nenhuma apólice SAÚDE em vigor.
+                </p>
+              </div>
+
+              <div style={buttonGroup}>
+                <button
+                  style={secondaryButton}
+                  onClick={printTopClientsPdf}
+                >
+                  Gerar PDF
+                </button>
+
+                <button
+                  style={button}
+                  onClick={exportClientsWithoutHealthCsv}
+                >
+                  Exportar Excel
+                </button>
+              </div>
+            </div>
+
+            {clientsWithoutHealthInsurance.length === 0 ? (
+              <p style={muted}>
+                Todos os clientes têm seguro de saúde em vigor.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderHome}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Telefone</span>
+                  <span>Email</span>
+                </div>
+
+                {clientsWithoutHealthInsurance.map((client) => (
+                  <div
+                    key={client.id}
+                    style={tableRowHome}
+                  >
+                    <strong>
+                      {client.name}
+                    </strong>
+
+                    <span>
+                      {client.nif}
+                    </span>
+
+                    <span>
+                      {client.phone}
+                    </span>
+
+                    <span>
+                      {client.email}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
 
         {selectedReport === "semCasa" && (
           <section style={panel}>
