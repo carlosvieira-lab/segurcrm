@@ -57,6 +57,7 @@ export default function Oportunidades({ opportunities }) {
   const [contactDate, setContactDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [clientFound, setClientFound] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
@@ -301,9 +302,20 @@ export default function Oportunidades({ opportunities }) {
     window.location.reload();
   }
 
+  const filtered = opportunities.filter((item) => {
+    const text = `
+      ${item.name || ""}
+      ${item.client_nif || ""}
+      ${item.client_phone || ""}
+      ${item.insurance_type || ""}
+    `.toLowerCase();
+
+    return text.includes(search.toLowerCase());
+  });
+
   const today = new Date().toISOString().split("T")[0];
 
-  const toContact = opportunities.filter(
+  const toContact = filtered.filter(
     (item) =>
       item.status !== "ganho" &&
       item.status !== "perdido" &&
@@ -311,7 +323,7 @@ export default function Oportunidades({ opportunities }) {
       item.contact_date <= today
   );
 
-  const future = opportunities.filter(
+  const future = filtered.filter(
     (item) =>
       item.status !== "ganho" &&
       item.status !== "perdido" &&
@@ -319,8 +331,8 @@ export default function Oportunidades({ opportunities }) {
       item.contact_date > today
   );
 
-  const won = opportunities.filter((item) => item.status === "ganho");
-  const lost = opportunities.filter((item) => item.status === "perdido");
+  const won = filtered.filter((item) => item.status === "ganho");
+  const lost = filtered.filter((item) => item.status === "perdido");
 
   return (
     <div style={page}>
@@ -336,6 +348,15 @@ export default function Oportunidades({ opportunities }) {
             </p>
           </div>
         </header>
+
+        <section style={searchCard}>
+          <input
+            style={searchInput}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Pesquisar cliente, NIF, telefone ou oportunidade..."
+          />
+        </section>
 
         <section style={formCard}>
           <h2>Nova oportunidade</h2>
@@ -548,6 +569,22 @@ const title = {
 const subtitle = {
   color: "#6b7280",
   marginTop: 10,
+};
+
+const searchCard = {
+  background: "white",
+  padding: 18,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const searchInput = {
+  width: "100%",
+  padding: 15,
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
 };
 
 const formCard = {
