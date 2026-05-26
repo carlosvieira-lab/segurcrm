@@ -1,4 +1,11 @@
-async function askAssistant() {
+import { useState } from "react";
+
+export default function AssistantPage() {
+  const [message, setMessage] = useState("");
+  const [reply, setReply] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function askAssistant() {
     if (!message.trim()) return;
 
     setLoading(true);
@@ -72,3 +79,4 @@ async function askAssistant() {
     </div>
   );
 }
+
