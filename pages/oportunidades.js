@@ -251,13 +251,44 @@ export default function Oportunidades({ opportunities }) {
 
   async function updateStatus(item, status) {
     const previous = item.procedure_notes || "";
-    const line = `${todayText()} - Estado alterado para ${status}`;
-    const next = previous ? `${previous}\n\n${line}` : line;
+
+    let nextStatus = status;
+    let nextRenewalDate = item.renewal_date;
+    let nextContactDate = item.contact_date;
+
+    let line = `${todayText()} - Estado alterado para ${status}`;
+
+    // RECICLAR OPORTUNIDADE NÃO CONCRETIZADA
+    if (status === "perdido") {
+      const renewal = new Date(item.renewal_date);
+      renewal.setFullYear(renewal.getFullYear() + 1);
+
+      const contact = new Date(item.contact_date);
+      contact.setFullYear(contact.getFullYear() + 1);
+
+      nextRenewalDate =
+        renewal.toISOString().split("T")[0];
+
+      nextContactDate =
+        contact.toISOString().split("T")[0];
+
+      nextStatus = "por contactar";
+
+      line =
+        `${todayText()} - Oportunidade não concretizada. ` +
+        `Novo contacto agendado para ${formatDate(nextContactDate)}`;
+    }
+
+    const next = previous
+      ? `${previous}\n\n${line}`
+      : line;
 
     const { error } = await supabase
       .from("opportunities")
       .update({
-        status,
+        status: nextStatus,
+        renewal_date: nextRenewalDate,
+        contact_date: nextContactDate,
         procedure_notes: next,
       })
       .eq("id", item.id);
