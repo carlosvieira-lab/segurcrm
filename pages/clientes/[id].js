@@ -1577,7 +1577,14 @@ const contactSummary = {
 };
 
 const communicationTextarea = {
-  ...input,
+  width: "100%",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+  minHeight: 130,
+  fontFamily: "Arial, sans-serif",
+};
   minHeight: 130,
   fontFamily: "Arial, sans-serif",
 };
