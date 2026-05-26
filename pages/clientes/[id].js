@@ -144,20 +144,6 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
-function calculateCommissionPercentage(policy) {
-  const premium = Number(policy.annual_premium || 0);
-
-  if (premium <= 0) return "0.0";
-
-  const commission =
-    calculateAnnualCommission(policy);
-
-  return (
-    (commission / premium) *
-    100
-  ).toFixed(1);
-}
-
 function clientRating(policies, totalCommission) {
   const count = policies.length;
 
@@ -274,9 +260,69 @@ const [clientForm, setClientForm] = useState({
   interactions: client?.interactions || "",
 });
 
+const [communicationMessage, setCommunicationMessage] =
+  useState("");
+
+const [emailSubject, setEmailSubject] =
+  useState("");
+
   if (!client) {
     return <p>Cliente não encontrado.</p>;
   }
+
+ function cleanPhoneNumber(phone) {
+  return String(phone || "")
+    .replace(/\D/g, "");
+}
+
+function openWhatsApp() {
+  const phone = cleanPhoneNumber(client.phone);
+
+  if (!phone) {
+    alert("Este cliente não tem telefone registado.");
+    return;
+  }
+
+  if (!communicationMessage.trim()) {
+    alert("Escreve a mensagem antes de abrir o WhatsApp.");
+    return;
+  }
+
+  const finalPhone = phone.startsWith("351")
+    ? phone
+    : `351${phone}`;
+
+  const url =
+    `https://wa.me/${finalPhone}?text=${encodeURIComponent(
+      communicationMessage
+    )}`;
+
+  window.open(url, "_blank");
+}
+
+function openEmail() {
+  if (!client.email) {
+    alert("Este cliente não tem email registado.");
+    return;
+  }
+
+  if (!communicationMessage.trim()) {
+    alert("Escreve a mensagem antes de abrir o email.");
+    return;
+  }
+
+  const subject =
+    emailSubject.trim() || "Contacto";
+
+  const url =
+    `mailto:${client.email}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(
+      communicationMessage
+    )}`;
+
+  window.location.href = url;
+}
 
  async function editClient() {
   setShowEditClientForm(true);
@@ -1195,6 +1241,78 @@ const rating = clientRating(activePolicies, totalCommission);
           </div>
         </section>
 
+        <section style={communicationCard}>
+          <h2 style={sectionTitle}>Comunicação com cliente</h2>
+
+          <div style={communicationGrid}>
+            <div>
+              <label style={fieldLabel}>
+                Assunto do email
+              </label>
+
+              <input
+                style={input}
+                value={emailSubject}
+                onChange={(e) =>
+                  setEmailSubject(e.target.value)
+                }
+                placeholder="Ex: Proposta seguro casa"
+              />
+            </div>
+
+            <div>
+              <label style={fieldLabel}>
+                Contactos
+              </label>
+
+              <div style={contactSummary}>
+                <span>
+                  <strong>Telefone:</strong>{" "}
+                  {client.phone || "-"}
+                </span>
+
+                <span>
+                  <strong>Email:</strong>{" "}
+                  {client.email || "-"}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={fieldLabel}>
+                Mensagem
+              </label>
+
+              <textarea
+                style={communicationTextarea}
+                value={communicationMessage}
+                onChange={(e) =>
+                  setCommunicationMessage(e.target.value)
+                }
+                placeholder="Escreve aqui a mensagem para enviar por WhatsApp ou email..."
+              />
+            </div>
+
+            <div style={communicationButtons}>
+              <button
+                type="button"
+                style={whatsappButton}
+                onClick={openWhatsApp}
+              >
+                Abrir WhatsApp
+              </button>
+
+              <button
+                type="button"
+                style={emailButton}
+                onClick={openEmail}
+              >
+                Abrir Email
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section style={card}>
           <h2>Apólices</h2>
 
@@ -1222,21 +1340,8 @@ const rating = clientRating(activePolicies, totalCommission);
   }}
 >
                   <div style={policyTop}>
-                    <div>
-                      <h3 style={{ margin: 0 }}>
-                        {policy.branch || "Sem ramo"}
-                      </h3>
-
-                      <div style={policyBadges}>
-                        <span style={badge}>
-                          {policy.status || "ativa"}
-                        </span>
-
-                        <span style={commissionBadge}>
-                          Comissão {calculateCommissionPercentage(policy)}%
-                        </span>
-                      </div>
-                    </div>
+                    <h3>{policy.branch || "Sem ramo"}</h3>
+                    <span style={badge}>{policy.status || "ativa"}</span>
                   </div>
 
                   <p>
@@ -1445,6 +1550,65 @@ const editClientButton = {
   fontWeight: "bold",
 };
 
+const communicationCard = {
+  background:
+    "linear-gradient(135deg, #ecfdf5, #f0fdf4)",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #bbf7d0",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const communicationGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 14,
+};
+
+const contactSummary = {
+  background: "white",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1fae5",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const communicationTextarea = {
+  ...input,
+  minHeight: 130,
+  fontFamily: "Arial, sans-serif",
+};
+
+const communicationButtons = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  gridColumn: "1 / -1",
+};
+
+const whatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const emailButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
 const card = {
   background: "white",
   padding: 24,
@@ -1479,22 +1643,6 @@ const badge = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
-};
-
-const commissionBadge = {
-  background: "#dbeafe",
-  color: "#1d4ed8",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const policyBadges = {
-  display: "flex",
-  gap: 8,
-  marginTop: 8,
-  flexWrap: "wrap",
 };
 
 const claimsGrid = {
@@ -1575,3 +1723,4 @@ const cancelButton = {
    cursor: "pointer",
   fontWeight: "bold",
 };
+ 
