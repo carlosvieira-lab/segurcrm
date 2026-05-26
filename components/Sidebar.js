@@ -27,6 +27,7 @@ export default function Sidebar({ active }) {
 
         <nav style={nav}>
           <MenuItem href="/" label="Dashboard" active={active === "dashboard"} />
+    <MenuItem href="/assistant" label="✨ IA" active={active === "assistant"} />
           <MenuItem href="/pesquisa" label="Pesquisa" active={active === "pesquisa"} />
           <MenuItem href="/clientes" label="Clientes" active={active === "clientes"} />
           <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
