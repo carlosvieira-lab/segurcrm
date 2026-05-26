@@ -18,13 +18,13 @@ export default function AssistantPage() {
 
       const data = await res.json();
 
-      if (data.success) {
+      if (data.reply) {
         setReply(data.reply);
       } else {
-        setReply(data.error || "Erro no assistente.");
+        setReply("Erro ao obter resposta.");
       }
-    } catch (error) {
-      setReply("Erro ao contactar o assistente.");
+    } catch (err) {
+      setReply("Erro na ligação à IA.");
     }
 
     setLoading(false);
@@ -33,13 +33,38 @@ export default function AssistantPage() {
   return (
     <div
       style={{
+        minHeight: "100vh",
+        background: "#f3f4f6",
         padding: 40,
         fontFamily: "Arial",
-        maxWidth: 800,
-        margin: "0 auto",
       }}
     >
-      <h1>Assistente IA</h1>
+      {/* BOTÃO VOLTAR */}
+      <button
+        onClick={() => (window.location.href = "/")}
+        style={{
+          marginBottom: 25,
+          background: "#2563eb",
+          color: "white",
+          border: "none",
+          padding: "12px 18px",
+          borderRadius: 10,
+          cursor: "pointer",
+          fontWeight: "bold",
+          fontSize: 16,
+        }}
+      >
+        ← Voltar ao Dashboard
+      </button>
+
+      <h1
+        style={{
+          fontSize: 48,
+          marginBottom: 30,
+        }}
+      >
+        Assistente IA
+      </h1>
 
       <textarea
         value={message}
@@ -47,25 +72,32 @@ export default function AssistantPage() {
         placeholder="Escreve aqui..."
         style={{
           width: "100%",
-          height: 140,
-          padding: 12,
-          fontSize: 16,
-          borderRadius: 8,
-          border: "1px solid #ccc",
+          maxWidth: 900,
+          height: 220,
+          padding: 20,
+          borderRadius: 12,
+          border: "1px solid #d1d5db",
+          fontSize: 18,
+          resize: "none",
+          background: "white",
         }}
       />
+
+      <br />
 
       <button
         onClick={askAssistant}
         disabled={loading}
         style={{
-          marginTop: 12,
-          padding: "12px 20px",
-          borderRadius: 8,
-          border: "none",
+          marginTop: 20,
           background: "#111827",
           color: "white",
+          border: "none",
+          padding: "14px 24px",
+          borderRadius: 10,
           cursor: "pointer",
+          fontWeight: "bold",
+          fontSize: 16,
         }}
       >
         {loading ? "A pensar..." : "Perguntar"}
@@ -74,13 +106,20 @@ export default function AssistantPage() {
       {reply && (
         <div
           style={{
-            marginTop: 24,
-            padding: 20,
-            borderRadius: 8,
-            background: "#f3f4f6",
+            marginTop: 30,
+            background: "white",
+            padding: 25,
+            borderRadius: 14,
+            maxWidth: 900,
+            border: "1px solid #e5e7eb",
+            lineHeight: 1.7,
+            fontSize: 18,
             whiteSpace: "pre-wrap",
           }}
         >
+          <strong>Resposta IA:</strong>
+          <br />
+          <br />
           {reply}
         </div>
       )}
