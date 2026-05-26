@@ -1550,72 +1550,6 @@ const editClientButton = {
   fontWeight: "bold",
 };
 
-const communicationCard = {
-  background:
-    "linear-gradient(135deg, #ecfdf5, #f0fdf4)",
-  padding: 24,
-  borderRadius: 18,
-  marginBottom: 24,
-  border: "1px solid #bbf7d0",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const communicationGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 14,
-};
-
-const contactSummary = {
-  background: "white",
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d1fae5",
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-};
-
-const communicationTextarea = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  fontSize: 15,
-  minHeight: 130,
-  fontFamily: "Arial, sans-serif",
-};
-  minHeight: 130,
-  fontFamily: "Arial, sans-serif",
-};
-
-const communicationButtons = {
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  gridColumn: "1 / -1",
-};
-
-const whatsappButton = {
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const emailButton = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
 const card = {
   background: "white",
   padding: 24,
@@ -1715,6 +1649,70 @@ const fieldLabel = {
   fontSize: 13,
 };
 
+const communicationCard = {
+  background:
+    "linear-gradient(135deg, #ecfdf5, #f0fdf4)",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #bbf7d0",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const communicationGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 14,
+};
+
+const contactSummary = {
+  background: "white",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1fae5",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const communicationTextarea = {
+  width: "100%",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+  boxSizing: "border-box",
+  minHeight: 130,
+  fontFamily: "Arial, sans-serif",
+};
+
+const communicationButtons = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  gridColumn: "1 / -1",
+};
+
+const whatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const emailButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
 const formButtons = {
   display: "flex",
   gap: 12,
@@ -1730,4 +1728,3 @@ const cancelButton = {
    cursor: "pointer",
   fontWeight: "bold",
 };
- 
