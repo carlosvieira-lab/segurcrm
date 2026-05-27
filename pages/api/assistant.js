@@ -1,9 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://accmdxprsetsqsrepflq.supabase.co";
+
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 function inclui(texto, palavras) {
   const t = String(texto || "").toLowerCase();
@@ -15,20 +20,26 @@ export default async function handler(req, res) {
     const message = req.query.message || "";
 
     if (!message) {
-      return res.status(400).json({
+      return res.status(200).json({
         success: false,
-        reply: "Mensagem não enviada.",
+        reply: "Escreve uma pergunta para o assistente.",
       });
     }
 
     const pergunta = message.toLowerCase();
 
+    // CLIENTES
     if (inclui(pergunta, ["clientes", "cliente"])) {
       const { count, error } = await supabase
         .from("clients")
         .select("*", { count: "exact", head: true });
 
-      if (error) throw error;
+      if (error) {
+        return res.status(200).json({
+          success: false,
+          reply: "Erro ao consultar clientes: " + error.message,
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -36,12 +47,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // APÓLICES
     if (inclui(pergunta, ["apólices", "apolices", "apólice", "apolice"])) {
       const { count, error } = await supabase
         .from("policies")
         .select("*", { count: "exact", head: true });
 
-      if (error) throw error;
+      if (error) {
+        return res.status(200).json({
+          success: false,
+          reply: "Erro ao consultar apólices: " + error.message,
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -49,12 +66,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // TAREFAS
     if (inclui(pergunta, ["tarefas", "tarefa"])) {
       const { count, error } = await supabase
         .from("tasks")
         .select("*", { count: "exact", head: true });
 
-      if (error) throw error;
+      if (error) {
+        return res.status(200).json({
+          success: false,
+          reply: "Erro ao consultar tarefas: " + error.message,
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -62,47 +85,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "És o assistente inteligente do SegurCRM da Loja de Seguros de Trajouce. Responde em português de Portugal, de forma curta e prática.",
-          },
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-        temperature: 0.3,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(500).json({
-        success: false,
-        reply: data?.error?.message || "Erro na OpenAI.",
-      });
-    }
-
+    // RESPOSTA DEFAULT
     return res.status(200).json({
       success: true,
-      reply: data.choices?.[0]?.message?.content || "Sem resposta da IA.",
+      reply:
+        "Ainda não sei responder a essa pergunta com dados do CRM. Para já posso consultar clientes, apólices e tarefas.",
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
-      reply: "Erro na ligação à IA.",
-      error: error.message,
+      reply: "Erro interno no assistente: " + error.message,
     });
   }
 }
