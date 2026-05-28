@@ -19,9 +19,15 @@ export async function getServerSideProps() {
     .select("*, clients(id, name, nif, phone)")
     .order("contact_date", { ascending: true });
 
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name, nif, phone")
+    .order("name", { ascending: true });
+
   return {
     props: {
       opportunities: opportunities || [],
+      clients: clients || [],
     },
   };
 }
@@ -45,10 +51,8 @@ function formatDate(date) {
 
 function addMonths(dateString, months) {
   if (!dateString) return "";
-
   const date = new Date(dateString);
   date.setMonth(date.getMonth() + months);
-
   return date.toISOString().split("T")[0];
 }
 
@@ -61,17 +65,12 @@ function todayText() {
 
 function buildWhatsappLink(phone) {
   const numbers = onlyNumbers(phone);
-
   if (!numbers) return "";
-
-  if (numbers.startsWith("351")) {
-    return `https://wa.me/${numbers}`;
-  }
-
+  if (numbers.startsWith("351")) return `https://wa.me/${numbers}`;
   return `https://wa.me/351${numbers}`;
 }
 
-export default function Oportunidades({ opportunities }) {
+export default function Oportunidades({ opportunities, clients }) {
   const [clientNif, setClientNif] = useState("");
   const [clientId, setClientId] = useState(null);
   const [clientName, setClientName] = useState("");
@@ -87,7 +86,23 @@ export default function Oportunidades({ opportunities }) {
     setContactDate(addMonths(renewalDate, -1));
   }, [renewalDate]);
 
+  function findClientLocal({ nif, phone, name }) {
+    const nifClean = onlyNumbers(nif);
+    const phoneClean = onlyNumbers(phone);
+    const nameClean = cleanText(name);
+
+    return (
+      clients.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
+      clients.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
+      clients.find((client) => nameClean && cleanText(client.name) === nameClean) ||
+      null
+    );
+  }
+
   async function findClient({ nif, phone, name }) {
+    const local = findClientLocal({ nif, phone, name });
+    if (local) return local;
+
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, nif, phone");
@@ -106,6 +121,14 @@ export default function Oportunidades({ opportunities }) {
     );
   }
 
+  function selectClient(client) {
+    setClientId(client.id);
+    setClientName(client.name || "");
+    setClientNif(client.nif || "");
+    setClientPhone(client.phone || "");
+    setClientFound(true);
+  }
+
   async function searchClientByNif() {
     if (!clientNif) return;
 
@@ -116,11 +139,7 @@ export default function Oportunidades({ opportunities }) {
     });
 
     if (found) {
-      setClientId(found.id);
-      setClientName(found.name || "");
-      setClientPhone(found.phone || "");
-      setClientNif(found.nif || clientNif);
-      setClientFound(true);
+      selectClient(found);
     } else {
       setClientId(null);
       setClientFound(false);
@@ -336,6 +355,7 @@ export default function Oportunidades({ opportunities }) {
   }
 
   const searchClean = cleanText(search);
+  const searchNumbers = onlyNumbers(search);
 
   const filtered = opportunities.filter((item) => {
     const text = cleanText(`
@@ -352,7 +372,18 @@ export default function Oportunidades({ opportunities }) {
       ${item.clients?.phone || ""}
     `);
 
-    return text.includes(searchClean);
+    const numbers = `
+      ${onlyNumbers(item.client_nif)}
+      ${onlyNumbers(item.client_phone)}
+      ${onlyNumbers(item.clients?.nif)}
+      ${onlyNumbers(item.clients?.phone)}
+    `;
+
+    return (
+      !searchClean ||
+      text.includes(searchClean) ||
+      (searchNumbers && numbers.includes(searchNumbers))
+    );
   });
 
   const today = new Date().toISOString().split("T")[0];
@@ -395,7 +426,7 @@ export default function Oportunidades({ opportunities }) {
             style={searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Pesquisar cliente, NIF, telefone, estado, oportunidade ou procedimento..."
+            placeholder="Filtrar oportunidades por cliente, NIF, telefone, estado, oportunidade ou procedimento..."
           />
         </section>
 
