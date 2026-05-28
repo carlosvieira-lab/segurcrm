@@ -26,6 +26,18 @@ export async function getServerSideProps() {
   };
 }
 
+function cleanText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
 function formatDate(date) {
   if (!date) return "-";
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
@@ -33,10 +45,8 @@ function formatDate(date) {
 
 function addMonths(dateString, months) {
   if (!dateString) return "";
-
   const date = new Date(dateString);
   date.setMonth(date.getMonth() + months);
-
   return date.toISOString().split("T")[0];
 }
 
@@ -63,25 +73,43 @@ export default function Oportunidades({ opportunities }) {
     setContactDate(addMonths(renewalDate, -1));
   }, [renewalDate]);
 
+  async function findClient({ nif, phone, name }) {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, name, nif, phone");
+
+    if (error || !data) return null;
+
+    const nifClean = onlyNumbers(nif);
+    const phoneClean = onlyNumbers(phone);
+    const nameClean = cleanText(name);
+
+    return (
+      data.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
+      data.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
+      data.find((client) => nameClean && cleanText(client.name) === nameClean) ||
+      null
+    );
+  }
+
   async function searchClientByNif() {
     if (!clientNif) return;
 
-    const { data } = await supabase
-      .from("clients")
-      .select("id, name, nif, phone")
-      .eq("nif", clientNif)
-      .maybeSingle();
+    const found = await findClient({
+      nif: clientNif,
+      phone: clientPhone,
+      name: clientName,
+    });
 
-    if (data) {
-      setClientId(data.id);
-      setClientName(data.name || "");
-      setClientPhone(data.phone || "");
+    if (found) {
+      setClientId(found.id);
+      setClientName(found.name || "");
+      setClientPhone(found.phone || "");
+      setClientNif(found.nif || clientNif);
       setClientFound(true);
     } else {
       setClientId(null);
       setClientFound(false);
-      setClientName("");
-      setClientPhone("");
       alert("Cliente não encontrado em carteira. Podes preencher manualmente.");
     }
   }
@@ -106,23 +134,39 @@ export default function Oportunidades({ opportunities }) {
 
     setSaving(true);
 
+    let finalClientId = clientId;
+    let finalClientName = clientName;
+    let finalClientNif = clientNif;
+    let finalClientPhone = clientPhone;
+
+    if (!finalClientId) {
+      const found = await findClient({
+        nif: clientNif,
+        phone: clientPhone,
+        name: clientName,
+      });
+
+      if (found) {
+        finalClientId = found.id;
+        finalClientName = found.name || clientName;
+        finalClientNif = found.nif || clientNif;
+        finalClientPhone = found.phone || clientPhone;
+      }
+    }
+
     const procedureText = `${todayText()} - Oportunidade criada: ${opportunityText}`;
 
-    const { data: opportunity, error } = await supabase
-      .from("opportunities")
-      .insert({
-        client_id: clientId,
-        client_nif: clientNif || null,
-        client_phone: clientPhone || null,
-        name: clientName,
-        insurance_type: opportunityText,
-        renewal_date: renewalDate,
-        contact_date: contactDate || null,
-        status: "por contactar",
-        procedure_notes: procedureText,
-      })
-      .select("id")
-      .single();
+    const { error } = await supabase.from("opportunities").insert({
+      client_id: finalClientId || null,
+      client_nif: finalClientNif || null,
+      client_phone: finalClientPhone || null,
+      name: finalClientName,
+      insurance_type: opportunityText,
+      renewal_date: renewalDate,
+      contact_date: contactDate || null,
+      status: "por contactar",
+      procedure_notes: procedureText,
+    });
 
     if (error) {
       setSaving(false);
@@ -131,8 +175,8 @@ export default function Oportunidades({ opportunities }) {
     }
 
     await supabase.from("tasks").insert({
-      client_id: clientId,
-      title: `Contactar ${clientName} para oportunidade`,
+      client_id: finalClientId || null,
+      title: `Contactar ${finalClientName} para oportunidade`,
       category: "COMERCIAL",
       priority: "NORMAL",
       status: "aberta",
@@ -142,21 +186,11 @@ export default function Oportunidades({ opportunities }) {
     });
 
     setSaving(false);
-
-    setClientNif("");
-    setClientId(null);
-    setClientName("");
-    setClientPhone("");
-    setOpportunityText("");
-    setRenewalDate("");
-    setContactDate("");
-    setClientFound(false);
-
     window.location.reload();
   }
 
   async function editOpportunity(item) {
-    const name = prompt("Nome do cliente", item.name || "");
+    const name = prompt("Nome do cliente", item.name || item.clients?.name || "");
     if (name === null) return;
 
     const client_nif = prompt("NIF", item.client_nif || item.clients?.nif || "");
@@ -192,25 +226,19 @@ export default function Oportunidades({ opportunities }) {
     );
     if (status === null) return;
 
-    let foundClient = null;
-
-    if (client_nif) {
-      const { data } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("nif", client_nif)
-        .maybeSingle();
-
-      foundClient = data;
-    }
+    const foundClient = await findClient({
+      nif: client_nif,
+      phone: client_phone,
+      name,
+    });
 
     const { error } = await supabase
       .from("opportunities")
       .update({
         client_id: foundClient?.id || item.client_id || null,
-        client_nif: client_nif || null,
-        client_phone: client_phone || null,
-        name,
+        client_nif: client_nif || foundClient?.nif || null,
+        client_phone: client_phone || foundClient?.phone || null,
+        name: name || foundClient?.name || "",
         insurance_type,
         renewal_date: renewal_date || null,
         contact_date: contact_date || null,
@@ -237,9 +265,7 @@ export default function Oportunidades({ opportunities }) {
 
     const { error } = await supabase
       .from("opportunities")
-      .update({
-        procedure_notes: next,
-      })
+      .update({ procedure_notes: next })
       .eq("id", item.id);
 
     if (error) {
@@ -259,20 +285,15 @@ export default function Oportunidades({ opportunities }) {
 
     let line = `${todayText()} - Estado alterado para ${status}`;
 
-    // RECICLAR OPORTUNIDADE NÃO CONCRETIZADA
     if (status === "perdido") {
       const renewal = new Date(item.renewal_date);
       renewal.setFullYear(renewal.getFullYear() + 1);
 
-      const contact = new Date(item.contact_date);
+      const contact = new Date(item.contact_date || item.renewal_date);
       contact.setFullYear(contact.getFullYear() + 1);
 
-      nextRenewalDate =
-        renewal.toISOString().split("T")[0];
-
-      nextContactDate =
-        contact.toISOString().split("T")[0];
-
+      nextRenewalDate = renewal.toISOString().split("T")[0];
+      nextContactDate = contact.toISOString().split("T")[0];
       nextStatus = "por contactar";
 
       line =
@@ -280,9 +301,7 @@ export default function Oportunidades({ opportunities }) {
         `Novo contacto agendado para ${formatDate(nextContactDate)}`;
     }
 
-    const next = previous
-      ? `${previous}\n\n${line}`
-      : line;
+    const next = previous ? `${previous}\n\n${line}` : line;
 
     const { error } = await supabase
       .from("opportunities")
@@ -302,15 +321,24 @@ export default function Oportunidades({ opportunities }) {
     window.location.reload();
   }
 
+  const searchClean = cleanText(search);
+
   const filtered = opportunities.filter((item) => {
-    const text = `
+    const text = cleanText(`
       ${item.name || ""}
       ${item.client_nif || ""}
       ${item.client_phone || ""}
       ${item.insurance_type || ""}
-    `.toLowerCase();
+      ${item.status || ""}
+      ${item.renewal_date || ""}
+      ${item.contact_date || ""}
+      ${item.procedure_notes || ""}
+      ${item.clients?.name || ""}
+      ${item.clients?.nif || ""}
+      ${item.clients?.phone || ""}
+    `);
 
-    return text.includes(search.toLowerCase());
+    return text.includes(searchClean);
   });
 
   const today = new Date().toISOString().split("T")[0];
@@ -343,8 +371,7 @@ export default function Oportunidades({ opportunities }) {
           <div>
             <h1 style={title}>Agenda de Captação</h1>
             <p style={subtitle}>
-              Regista oportunidades fora da carteira e agenda contacto 1 mês
-              antes do vencimento.
+              Regista oportunidades fora da carteira e agenda contacto 1 mês antes do vencimento.
             </p>
           </div>
         </header>
@@ -354,7 +381,7 @@ export default function Oportunidades({ opportunities }) {
             style={searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Pesquisar cliente, NIF, telefone ou oportunidade..."
+            placeholder="Pesquisar cliente, NIF, telefone, estado, oportunidade ou procedimento..."
           />
         </section>
 
@@ -378,7 +405,7 @@ export default function Oportunidades({ opportunities }) {
             </div>
 
             {clientFound && (
-              <p style={successText}>Cliente encontrado em carteira.</p>
+              <p style={successText}>Cliente encontrado e associado à oportunidade.</p>
             )}
 
             <label style={label}>Nome do cliente</label>
