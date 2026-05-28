@@ -45,8 +45,10 @@ function formatDate(date) {
 
 function addMonths(dateString, months) {
   if (!dateString) return "";
+
   const date = new Date(dateString);
   date.setMonth(date.getMonth() + months);
+
   return date.toISOString().split("T")[0];
 }
 
@@ -55,6 +57,18 @@ function todayText() {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+function buildWhatsappLink(phone) {
+  const numbers = onlyNumbers(phone);
+
+  if (!numbers) return "";
+
+  if (numbers.startsWith("351")) {
+    return `https://wa.me/${numbers}`;
+  }
+
+  return `https://wa.me/351${numbers}`;
 }
 
 export default function Oportunidades({ opportunities }) {
@@ -503,53 +517,71 @@ function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus })
 
   return (
     <div style={grid}>
-      {items.map((item) => (
-        <div key={item.id} style={opportunityCard}>
-          <div style={topLine}>
-            <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
-            <span style={statusBadge}>{item.status || "por contactar"}</span>
+      {items.map((item) => {
+        const phone = item.client_phone || item.clients?.phone || "";
+        const whatsappLink = buildWhatsappLink(phone);
+
+        return (
+          <div key={item.id} style={opportunityCard}>
+            <div style={topLine}>
+              <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
+              <span style={statusBadge}>{item.status || "por contactar"}</span>
+            </div>
+
+            <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
+            <p><strong>Telefone:</strong> {phone || "-"}</p>
+            <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
+            <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
+            <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
+
+            <div style={quickActions}>
+              {item.client_id && (
+                <Link href={`/clientes/${item.client_id}`} style={clientLink}>
+                  Abrir ficha do cliente
+                </Link>
+              )}
+
+              {whatsappLink && (
+                <a
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={whatsappButton}
+                >
+                  WhatsApp
+                </a>
+              )}
+            </div>
+
+            <div style={procedureBox}>
+              <strong>Procedimentos / cronologia</strong>
+              <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
+            </div>
+
+            <div style={buttonGroup}>
+              <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
+                Editar
+              </button>
+
+              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
+                + Procedimento
+              </button>
+
+              <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
+                Contactado
+              </button>
+
+              <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
+                Ganho
+              </button>
+
+              <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
+                Perdido
+              </button>
+            </div>
           </div>
-
-          <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
-          <p><strong>Telefone:</strong> {item.client_phone || item.clients?.phone || "-"}</p>
-          <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
-          <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
-          <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
-
-          {item.client_id && (
-            <Link href={`/clientes/${item.client_id}`} style={clientLink}>
-              Abrir ficha do cliente
-            </Link>
-          )}
-
-          <div style={procedureBox}>
-            <strong>Procedimentos / cronologia</strong>
-            <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
-          </div>
-
-          <div style={buttonGroup}>
-            <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
-              Editar
-            </button>
-
-            <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
-              + Procedimento
-            </button>
-
-            <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
-              Contactado
-            </button>
-
-            <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
-              Ganho
-            </button>
-
-            <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
-              Perdido
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -753,14 +785,30 @@ const statusBadge = {
   fontWeight: "bold",
 };
 
+const quickActions = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 10,
+};
+
 const clientLink = {
   background: "#0f766e",
   color: "white",
-  padding: "9px 12px",
+  padding: "10px 14px",
   borderRadius: 8,
   textDecoration: "none",
   display: "inline-block",
-  marginTop: 8,
+  fontWeight: "bold",
+};
+
+const whatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
   fontWeight: "bold",
 };
 
