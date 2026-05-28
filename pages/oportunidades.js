@@ -86,6 +86,33 @@ export default function Oportunidades({ opportunities, clients }) {
     setContactDate(addMonths(renewalDate, -1));
   }, [renewalDate]);
 
+  useEffect(() => {
+    const nifClean = onlyNumbers(clientNif);
+
+    if (nifClean.length < 8) {
+      setClientFound(false);
+      setClientId(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const found = findClientLocal({
+        nif: clientNif,
+        phone: "",
+        name: "",
+      });
+
+      if (found) {
+        selectClient(found);
+      } else {
+        setClientFound(false);
+        setClientId(null);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [clientNif]);
+
   function findClientLocal({ nif, phone, name }) {
     const nifClean = onlyNumbers(nif);
     const phoneClean = onlyNumbers(phone);
@@ -450,7 +477,7 @@ export default function Oportunidades({ opportunities, clients }) {
             </div>
 
             {clientFound && (
-              <p style={successText}>Cliente encontrado e associado à oportunidade.</p>
+              <p style={successText}>Cliente encontrado e dados preenchidos automaticamente.</p>
             )}
 
             <label style={label}>Nome do cliente</label>
