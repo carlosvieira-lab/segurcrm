@@ -1,4 +1,4 @@
-import { useState } from "react";
+mport { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -17,7 +17,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function getServerSideProps() {
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("*, clients(id, name, nif), policies(id, policy_number, branch, license_plate)")
+    .select("*, clients(id, name, nif, phone), policies(id, policy_number, branch, license_plate)")
     .order("created_at", { ascending: false });
 
   return {
@@ -34,6 +34,39 @@ function formatDate(date) {
 
 function todayIso() {
   return new Date().toISOString().split("T")[0];
+}
+
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function buildWhatsappLink(phone) {
+  const numbers = onlyNumbers(phone);
+
+  if (!numbers) return "";
+
+  if (numbers.startsWith("351")) {
+    return `https://wa.me/${numbers}`;
+  }
+
+  return `https://wa.me/351${numbers}`;
+}
+
+function extractPhoneFromDescription(description) {
+  const text = String(description || "");
+  const match = text.match(/Telemóvel cliente:\s*([^\n]+)/i);
+
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+
+  return "";
+}
+
+function removePhoneFromDescription(description) {
+  return String(description || "")
+    .replace(/\n?\n?Telemóvel cliente:\s*[^\n]+/i, "")
+    .trim();
 }
 
 function normalizePriority(priority) {
@@ -74,6 +107,7 @@ export default function Tarefas({ tasks }) {
 
   const [taskForm, setTaskForm] = useState({
     title: "",
+    client_phone: "",
     description: "",
     category: "ADMINISTRATIVA",
     priority: "NORMAL",
@@ -168,9 +202,18 @@ export default function Tarefas({ tasks }) {
       return;
     }
 
+    if (!onlyNumbers(taskForm.client_phone)) {
+      alert("Indica o telemóvel do cliente.");
+      return;
+    }
+
+    const descriptionWithPhone = taskForm.description
+      ? `${taskForm.description}\n\nTelemóvel cliente: ${taskForm.client_phone}`
+      : `Telemóvel cliente: ${taskForm.client_phone}`;
+
     const { error } = await supabase.from("tasks").insert({
       title: taskForm.title,
-      description: taskForm.description,
+      description: descriptionWithPhone,
       category: normalizeCategory(taskForm.category),
       priority: normalizePriority(taskForm.priority),
       status: "aberta",
@@ -291,6 +334,19 @@ export default function Tarefas({ tasks }) {
                   setTaskForm({
                     ...taskForm,
                     title: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <input
+                style={input}
+                placeholder="Telemóvel do cliente"
+                value={taskForm.client_phone}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    client_phone: e.target.value,
                   })
                 }
                 required
@@ -593,6 +649,13 @@ export default function Tarefas({ tasks }) {
               {filteredTasks.map((task) => {
                 const priority = normalizePriority(task.priority);
                 const category = normalizeCategory(task.category);
+                const taskPhone =
+                  task.clients?.phone ||
+                  extractPhoneFromDescription(task.description);
+                const whatsappLink = buildWhatsappLink(taskPhone);
+                const visibleDescription = removePhoneFromDescription(
+                  task.description
+                );
 
                 return (
                   <div key={task.id} style={taskCard}>
@@ -639,6 +702,10 @@ export default function Tarefas({ tasks }) {
                       )}
                     </p>
 
+                    <p>
+                      <strong>Telemóvel:</strong> {taskPhone || "-"}
+                    </p>
+
                     {task.policies && (
                       <p>
                         <strong>Apólice:</strong>{" "}
@@ -648,7 +715,7 @@ export default function Tarefas({ tasks }) {
                     )}
 
                     <p>
-                      <strong>Descrição:</strong> {task.description || "-"}
+                      <strong>Descrição:</strong> {visibleDescription || "-"}
                     </p>
 
                     <div style={buttonGroup}>
@@ -659,6 +726,17 @@ export default function Tarefas({ tasks }) {
                         >
                           Abrir cliente
                         </Link>
+                      )}
+
+                      {whatsappLink && (
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={whatsappTaskButton}
+                        >
+                          WhatsApp
+                        </a>
                       )}
 
                       <button
@@ -876,6 +954,15 @@ const smallButton = {
 
 const smallLinkButton = {
   background: "#111827",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 10,
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const whatsappTaskButton = {
+  background: "#16a34a",
   color: "white",
   padding: "10px 14px",
   borderRadius: 10,
