@@ -1320,7 +1320,35 @@ const rating = clientRating(activePolicies, totalCommission);
             <p>Sem apólices.</p>
           ) : (
             <div style={policiesGrid}>
-              {policies.map((policy) => (
+              {policies.map((policy) => {
+                const annualCommission = calculateAnnualCommission(policy);
+                const annualPremium = Number(policy.annual_premium || 0);
+                const commissionPercent =
+                  annualPremium > 0
+                    ? Number(((annualCommission / annualPremium) * 100).toFixed(1))
+                    : 0;
+
+                const commissionBadgeStyle = {
+                  ...commissionPercentBadge,
+                  background:
+                    commissionPercent >= 20
+                      ? "#dcfce7"
+                      : commissionPercent >= 15
+                      ? "#dbeafe"
+                      : commissionPercent >= 10
+                      ? "#fef3c7"
+                      : "#fee2e2",
+                  color:
+                    commissionPercent >= 20
+                      ? "#166534"
+                      : commissionPercent >= 15
+                      ? "#1d4ed8"
+                      : commissionPercent >= 10
+                      ? "#92400e"
+                      : "#991b1b",
+                };
+
+                return (
                 <div
   key={policy.id}
   style={{
@@ -1362,7 +1390,14 @@ const rating = clientRating(activePolicies, totalCommission);
 
                   <p>
                     <strong>Comissão anual:</strong>{" "}
-                    {calculateAnnualCommission(policy)} €
+                    {annualCommission.toFixed(2)} €
+                  </p>
+
+                  <p>
+                    <strong>Rácio comissão:</strong>{" "}
+                    <span style={commissionBadgeStyle}>
+                      {commissionPercent.toFixed(1)}%
+                    </span>
                   </p>
 
                   <p>
@@ -1401,7 +1436,8 @@ const rating = clientRating(activePolicies, totalCommission);
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -1581,6 +1617,14 @@ const badge = {
   background: "#e5e7eb",
   color: "#111827",
   padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const commissionPercentBadge = {
+  display: "inline-block",
+  padding: "4px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
