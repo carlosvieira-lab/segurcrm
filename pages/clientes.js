@@ -36,7 +36,6 @@ function cleanText(value) {
 
 export default function Clientes({ clients }) {
   const [search, setSearch] = useState("");
-  const [showCancelled, setShowCancelled] = useState(false);
 
   const [name, setName] = useState("");
   const [nif, setNif] = useState("");
@@ -48,12 +47,9 @@ export default function Clientes({ clients }) {
   const [birthDate, setBirthDate] = useState("");
   const [licenseDate, setLicenseDate] = useState("");
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  const activeClients = clients.filter((client) => client.status !== "anulado");
-  const cancelledClients = clients.filter((client) => client.status === "anulado");
-
-  const visibleClients = showCancelled ? clients : activeClients;
+  const visibleClients = clients.filter((client) => client.status !== "anulado");
 
   const filteredClients = useMemo(() => {
     const term = cleanText(search);
@@ -103,50 +99,35 @@ export default function Clientes({ clients }) {
     window.location.reload();
   }
 
-  async function cancelClient(client) {
-    const confirmed = window.confirm(
-      `Tens a certeza que queres anular o cliente "${client.name || "Sem nome"}" por erro?\n\nO cliente não será apagado da base de dados, apenas ficará com estado "anulado".`
+  async function deleteClient(client) {
+    const firstConfirm = window.confirm(
+      `Queres eliminar definitivamente o cliente "${client.name || "Sem nome"}"?\n\nEsta ação remove o cliente da base de dados.`
     );
 
-    if (!confirmed) return;
+    if (!firstConfirm) return;
 
-    setUpdatingId(client.id);
+    const secondConfirm = window.confirm(
+      "Confirma novamente: esta ação é definitiva e não pode ser anulada."
+    );
+
+    if (!secondConfirm) return;
+
+    setDeletingId(client.id);
 
     const { error } = await supabase
       .from("clients")
-      .update({
-        status: "anulado",
-      })
+      .delete()
       .eq("id", client.id);
 
     if (error) {
-      alert(error.message);
-      setUpdatingId(null);
-      return;
-    }
+      alert(
+        "Não foi possível eliminar este cliente.\n\n" +
+          "Pode ter apólices, tarefas, oportunidades ou outros registos associados.\n\n" +
+          "Erro: " +
+          error.message
+      );
 
-    window.location.reload();
-  }
-
-  async function reactivateClient(client) {
-    const confirmed = window.confirm(
-      `Queres reativar o cliente "${client.name || "Sem nome"}"?`
-    );
-
-    if (!confirmed) return;
-
-    setUpdatingId(client.id);
-
-    const { error } = await supabase
-      .from("clients")
-      .update({
-        status: "ativo",
-      })
-      .eq("id", client.id);
-
-    if (error) {
-      alert(error.message);
-      setUpdatingId(null);
+      setDeletingId(null);
       return;
     }
 
@@ -168,49 +149,32 @@ export default function Clientes({ clients }) {
         </header>
 
         <section style={stats}>
-          <StatCard title="Total de clientes" value={clients.length} />
+          <StatCard title="Total de clientes" value={visibleClients.length} />
 
           <StatCard
             title="Ativos"
-            value={activeClients.filter((c) => c.status === "ativo").length}
+            value={visibleClients.filter((c) => c.status === "ativo").length}
           />
 
           <StatCard
             title="Potenciais"
-            value={activeClients.filter((c) => c.status === "potencial").length}
-          />
-
-          <StatCard
-            title="Anulados"
-            value={cancelledClients.length}
+            value={visibleClients.filter((c) => c.status === "potencial").length}
           />
         </section>
 
         <section style={searchPanel}>
-          <div style={searchHeader}>
-            <div>
-              <label style={label}>Pesquisar cliente</label>
+          <label style={label}>Pesquisar cliente</label>
 
-              <input
-                placeholder="Escreve nome, apelido, NIF, telefone ou email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={searchInput}
-              />
+          <input
+            placeholder="Escreve nome, apelido, NIF, telefone ou email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={searchInput}
+          />
 
-              <p style={smallText}>
-                Resultados encontrados: {filteredClients.length}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowCancelled(!showCancelled)}
-              style={showCancelled ? secondaryButtonActive : secondaryButton}
-            >
-              {showCancelled ? "Ocultar anulados" : "Mostrar anulados"}
-            </button>
-          </div>
+          <p style={smallText}>
+            Resultados encontrados: {filteredClients.length}
+          </p>
         </section>
 
         <section style={grid}>
@@ -295,74 +259,49 @@ export default function Clientes({ clients }) {
           <div style={panel}>
             <h2>Lista de clientes</h2>
 
-            {!showCancelled && cancelledClients.length > 0 && (
-              <p style={warningText}>
-                Existem {cancelledClients.length} cliente(s) anulado(s). Usa “Mostrar anulados” para os consultar.
-              </p>
-            )}
-
             {filteredClients.length === 0 ? (
               <p style={muted}>Nenhum cliente encontrado.</p>
             ) : (
               <div style={list}>
-                {filteredClients.map((client) => {
-                  const isCancelled = client.status === "anulado";
+                {filteredClients.map((client) => (
+                  <div key={client.id} style={clientCard}>
+                    <div>
+                      <Link href={`/clientes/${client.id}`} style={clientName}>
+                        {client.name || "Sem nome"}
+                      </Link>
 
-                  return (
-                    <div
-                      key={client.id}
-                      style={{
-                        ...clientCard,
-                        ...(isCancelled ? cancelledClientCard : {}),
-                      }}
-                    >
-                      <div>
-                        <Link href={`/clientes/${client.id}`} style={clientName}>
-                          {client.name || "Sem nome"}
-                        </Link>
+                      <p style={smallText}>
+                        NIF: {client.nif || "-"} · Tel:{" "}
+                        {client.phone || "-"} · Email: {client.email || "-"}
+                      </p>
 
-                        <p style={smallText}>
-                          NIF: {client.nif || "-"} · Tel:{" "}
-                          {client.phone || "-"} · Email: {client.email || "-"}
-                        </p>
-
-                        <p style={smallText}>
-                          {client.city || "Sem cidade"}
-                        </p>
-                      </div>
-
-                      <div style={rightSide}>
-                        <span style={isCancelled ? cancelledStatusBadge : statusBadge}>
-                          {client.status || "ativo"}
-                        </span>
-
-                        <Link href={`/clientes/${client.id}`} style={openButton}>
-                          Abrir ficha
-                        </Link>
-
-                        {isCancelled ? (
-                          <button
-                            type="button"
-                            style={reactivateButton}
-                            onClick={() => reactivateClient(client)}
-                            disabled={updatingId === client.id}
-                          >
-                            {updatingId === client.id ? "A reativar..." : "Reativar"}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            style={cancelButton}
-                            onClick={() => cancelClient(client)}
-                            disabled={updatingId === client.id}
-                          >
-                            {updatingId === client.id ? "A anular..." : "Anular por erro"}
-                          </button>
-                        )}
-                      </div>
+                      <p style={smallText}>
+                        {client.city || "Sem cidade"}
+                      </p>
                     </div>
-                  );
-                })}
+
+                    <div style={rightSide}>
+                      <span style={statusBadge}>
+                        {client.status || "ativo"}
+                      </span>
+
+                      <Link href={`/clientes/${client.id}`} style={openButton}>
+                        Abrir ficha
+                      </Link>
+
+                      <button
+                        type="button"
+                        style={deleteButton}
+                        onClick={() => deleteClient(client)}
+                        disabled={deletingId === client.id}
+                      >
+                        {deletingId === client.id
+                          ? "A eliminar..."
+                          : "Eliminar por erro"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -409,7 +348,7 @@ const subtitle = {
 
 const stats = {
   display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
+  gridTemplateColumns: "repeat(3, 1fr)",
   gap: 16,
   marginBottom: 24,
 };
@@ -437,13 +376,6 @@ const searchPanel = {
   padding: 24,
   marginBottom: 24,
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const searchHeader = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto",
-  gap: 16,
-  alignItems: "end",
 };
 
 const searchInput = {
@@ -495,31 +427,8 @@ const button = {
   cursor: "pointer",
 };
 
-const secondaryButton = {
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "none",
-  background: "#111827",
-  color: "white",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const secondaryButtonActive = {
-  ...secondaryButton,
-  background: "#6b7280",
-};
-
 const muted = {
   color: "#6b7280",
-};
-
-const warningText = {
-  color: "#92400e",
-  background: "#fffbeb",
-  border: "1px solid #fde68a",
-  padding: 12,
-  borderRadius: 10,
 };
 
 const list = {
@@ -534,11 +443,6 @@ const clientCard = {
   border: "1px solid #e5e7eb",
   borderRadius: 14,
   padding: 16,
-};
-
-const cancelledClientCard = {
-  opacity: 0.72,
-  background: "#f9fafb",
 };
 
 const clientName = {
@@ -563,16 +467,6 @@ const statusBadge = {
   textAlign: "center",
 };
 
-const cancelledStatusBadge = {
-  background: "#fee2e2",
-  color: "#991b1b",
-  padding: "6px 12px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-  textAlign: "center",
-};
-
 const rightSide = {
   display: "grid",
   gap: 8,
@@ -589,19 +483,8 @@ const openButton = {
   fontWeight: "bold",
 };
 
-const cancelButton = {
+const deleteButton = {
   background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "8px 12px",
-  borderRadius: 8,
-  fontSize: 13,
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const reactivateButton = {
-  background: "#16a34a",
   color: "white",
   border: "none",
   padding: "8px 12px",
