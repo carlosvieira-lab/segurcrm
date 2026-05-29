@@ -17,7 +17,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function getServerSideProps() {
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("*, clients(id, name, nif), policies(id, policy_number, branch, license_plate)")
+    .select("*, clients(id, name, nif, phone), policies(id, policy_number, branch, license_plate)")
     .order("created_at", { ascending: false });
 
   return {
@@ -34,6 +34,43 @@ function formatDate(date) {
 
 function todayIso() {
   return new Date().toISOString().split("T")[0];
+}
+
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function buildWhatsappLink(phone) {
+  const numbers = onlyNumbers(phone);
+
+  if (!numbers) return "";
+
+  if (numbers.startsWith("351")) {
+    return `https://wa.me/${numbers}`;
+  }
+
+  return `https://wa.me/351${numbers}`;
+}
+
+function extractTaskPhone(task) {
+  const clientPhone = task.clients?.phone;
+
+  if (clientPhone) return clientPhone;
+
+  const description = String(task.description || "");
+  const match = description.match(/Telemóvel cliente:\s*([^\n]+)/i);
+
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+
+  return "";
+}
+
+function cleanDescription(description) {
+  return String(description || "")
+    .replace(/\n?\n?Telemóvel cliente:\s*[^\n]+/i, "")
+    .trim();
 }
 
 function normalizePriority(priority) {
@@ -74,6 +111,7 @@ export default function Tarefas({ tasks }) {
 
   const [taskForm, setTaskForm] = useState({
     title: "",
+    client_phone: "",
     description: "",
     category: "ADMINISTRATIVA",
     priority: "NORMAL",
@@ -85,6 +123,7 @@ export default function Tarefas({ tasks }) {
 
   const [editTaskForm, setEditTaskForm] = useState({
     title: "",
+    client_phone: "",
     description: "",
     category: "ADMINISTRATIVA",
     priority: "NORMAL",
@@ -168,9 +207,18 @@ export default function Tarefas({ tasks }) {
       return;
     }
 
+    if (!onlyNumbers(taskForm.client_phone)) {
+      alert("Indica o telemóvel do cliente.");
+      return;
+    }
+
+    const descriptionWithPhone = taskForm.description
+      ? `${taskForm.description}\n\nTelemóvel cliente: ${taskForm.client_phone}`
+      : `Telemóvel cliente: ${taskForm.client_phone}`;
+
     const { error } = await supabase.from("tasks").insert({
       title: taskForm.title,
-      description: taskForm.description,
+      description: descriptionWithPhone,
       category: normalizeCategory(taskForm.category),
       priority: normalizePriority(taskForm.priority),
       status: "aberta",
@@ -192,7 +240,8 @@ export default function Tarefas({ tasks }) {
 
     setEditTaskForm({
       title: task.title || "",
-      description: task.description || "",
+      client_phone: extractTaskPhone(task),
+      description: cleanDescription(task.description),
       category: normalizeCategory(task.category),
       priority: normalizePriority(task.priority),
       due_date: task.due_date || "",
@@ -219,11 +268,20 @@ export default function Tarefas({ tasks }) {
       return;
     }
 
+    if (!onlyNumbers(editTaskForm.client_phone)) {
+      alert("Indica o telemóvel do cliente.");
+      return;
+    }
+
+    const descriptionWithPhone = editTaskForm.description
+      ? `${editTaskForm.description}\n\nTelemóvel cliente: ${editTaskForm.client_phone}`
+      : `Telemóvel cliente: ${editTaskForm.client_phone}`;
+
     const { error } = await supabase
       .from("tasks")
       .update({
         title: editTaskForm.title,
-        description: editTaskForm.description,
+        description: descriptionWithPhone,
         category: normalizeCategory(editTaskForm.category),
         priority: normalizePriority(editTaskForm.priority),
         due_date: editTaskForm.due_date || null,
@@ -291,6 +349,19 @@ export default function Tarefas({ tasks }) {
                   setTaskForm({
                     ...taskForm,
                     title: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <input
+                style={input}
+                placeholder="Telemóvel do cliente"
+                value={taskForm.client_phone}
+                onChange={(e) =>
+                  setTaskForm({
+                    ...taskForm,
+                    client_phone: e.target.value,
                   })
                 }
                 required
@@ -392,6 +463,19 @@ export default function Tarefas({ tasks }) {
                   setEditTaskForm({
                     ...editTaskForm,
                     title: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <input
+                style={input}
+                placeholder="Telemóvel do cliente"
+                value={editTaskForm.client_phone}
+                onChange={(e) =>
+                  setEditTaskForm({
+                    ...editTaskForm,
+                    client_phone: e.target.value,
                   })
                 }
                 required
@@ -593,6 +677,9 @@ export default function Tarefas({ tasks }) {
               {filteredTasks.map((task) => {
                 const priority = normalizePriority(task.priority);
                 const category = normalizeCategory(task.category);
+                const taskPhone = extractTaskPhone(task);
+                const whatsappLink = buildWhatsappLink(taskPhone);
+                const visibleDescription = cleanDescription(task.description);
 
                 return (
                   <div key={task.id} style={taskCard}>
@@ -639,6 +726,10 @@ export default function Tarefas({ tasks }) {
                       )}
                     </p>
 
+                    <p>
+                      <strong>Telemóvel:</strong> {taskPhone || "-"}
+                    </p>
+
                     {task.policies && (
                       <p>
                         <strong>Apólice:</strong>{" "}
@@ -648,7 +739,7 @@ export default function Tarefas({ tasks }) {
                     )}
 
                     <p>
-                      <strong>Descrição:</strong> {task.description || "-"}
+                      <strong>Descrição:</strong> {visibleDescription || "-"}
                     </p>
 
                     <div style={buttonGroup}>
@@ -659,6 +750,17 @@ export default function Tarefas({ tasks }) {
                         >
                           Abrir cliente
                         </Link>
+                      )}
+
+                      {whatsappLink && (
+                        <a
+                          href={whatsappLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={whatsappTaskButton}
+                        >
+                          WhatsApp
+                        </a>
                       )}
 
                       <button
@@ -701,233 +803,3 @@ function FilterCard({ title, value, color, active, onClick }) {
     </button>
   );
 }
-
-function priorityStyle(priority) {
-  if (priority === "MUITO URGENTE") {
-    return {
-      background: "#fee2e2",
-      color: "#991b1b",
-    };
-  }
-
-  if (priority === "URGENTE") {
-    return {
-      background: "#fef3c7",
-      color: "#92400e",
-    };
-  }
-
-  return {
-    background: "#dbeafe",
-    color: "#1d4ed8",
-  };
-}
-
-function categoryStyle(category) {
-  if (category === "COMERCIAL") {
-    return {
-      background: "#ede9fe",
-      color: "#5b21b6",
-    };
-  }
-
-  if (category === "ADMINISTRATIVA") {
-    return {
-      background: "#ccfbf1",
-      color: "#0f766e",
-    };
-  }
-
-  if (category === "SEM CATEGORIA") {
-    return {
-      background: "#e5e7eb",
-      color: "#374151",
-    };
-  }
-
-  return {
-    background: "#e5e7eb",
-    color: "#374151",
-  };
-}
-
-const page = {
-  display: "flex",
-  minHeight: "100vh",
-  background: "#f3f4f6",
-  fontFamily: "Arial, sans-serif",
-};
-
-const main = {
-  flex: 1,
-  padding: 40,
-};
-
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: 30,
-};
-
-const title = {
-  fontSize: 42,
-  margin: 0,
-};
-
-const subtitle = {
-  color: "#6b7280",
-  marginTop: 10,
-};
-
-const button = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const statsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 18,
-};
-
-const statCard = {
-  background: "white",
-  padding: 24,
-  borderRadius: 18,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-  border: "none",
-  textAlign: "left",
-  cursor: "pointer",
-};
-
-const cardLabel = {
-  color: "#6b7280",
-  margin: 0,
-};
-
-const cardValue = {
-  marginTop: 12,
-  fontSize: 32,
-};
-
-const card = {
-  background: "white",
-  borderRadius: 18,
-  padding: 24,
-  marginBottom: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const taskGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: 16,
-};
-
-const taskCard = {
-  background: "#f9fafb",
-  padding: 18,
-  borderRadius: 14,
-};
-
-const taskTop = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-};
-
-const badgeRow = {
-  display: "flex",
-  gap: 6,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
-const badge = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-  whiteSpace: "nowrap",
-};
-
-const buttonGroup = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginTop: 16,
-};
-
-const smallButton = {
-  color: "white",
-  border: "none",
-  padding: "10px 14px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const smallLinkButton = {
-  background: "#111827",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 10,
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const link = {
-  color: "#2563eb",
-  fontWeight: "bold",
-  textDecoration: "none",
-};
-
-const formGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 14,
-};
-
-const input = {
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const fieldLabel = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  color: "#374151",
-  fontSize: 13,
-};
-
-const formButtons = {
-  display: "flex",
-  gap: 12,
-  gridColumn: "1 / -1",
-};
-
-const cancelButton = {
-  background: "#6b7280",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const muted = {
-  color: "#6b7280",
-};
