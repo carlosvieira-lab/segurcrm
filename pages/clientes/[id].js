@@ -631,6 +631,20 @@ const rating = clientRating(activePolicies, totalCommission);
               Editar cliente
             </button>
 
+            <Link
+              href={`/tarefas?cliente=${client.id}`}
+              style={taskShortcutButton}
+            >
+              + Nova tarefa
+            </Link>
+
+            <Link
+              href={`/oportunidades?cliente=${client.id}`}
+              style={opportunityShortcutButton}
+            >
+              + Nova oportunidade
+            </Link>
+
             <button style={button} onClick={() => setShowPolicyForm(true)}>
               + Nova Apólice
             </button>
@@ -1320,35 +1334,7 @@ const rating = clientRating(activePolicies, totalCommission);
             <p>Sem apólices.</p>
           ) : (
             <div style={policiesGrid}>
-              {policies.map((policy) => {
-                const annualCommission = calculateAnnualCommission(policy);
-                const annualPremium = Number(policy.annual_premium || 0);
-                const commissionPercent =
-                  annualPremium > 0
-                    ? Number(((annualCommission / annualPremium) * 100).toFixed(1))
-                    : 0;
-
-                const commissionBadgeStyle = {
-                  ...commissionPercentBadge,
-                  background:
-                    commissionPercent >= 20
-                      ? "#dcfce7"
-                      : commissionPercent >= 15
-                      ? "#dbeafe"
-                      : commissionPercent >= 10
-                      ? "#fef3c7"
-                      : "#fee2e2",
-                  color:
-                    commissionPercent >= 20
-                      ? "#166534"
-                      : commissionPercent >= 15
-                      ? "#1d4ed8"
-                      : commissionPercent >= 10
-                      ? "#92400e"
-                      : "#991b1b",
-                };
-
-                return (
+              {policies.map((policy) => (
                 <div
   key={policy.id}
   style={{
@@ -1390,14 +1376,7 @@ const rating = clientRating(activePolicies, totalCommission);
 
                   <p>
                     <strong>Comissão anual:</strong>{" "}
-                    {annualCommission.toFixed(2)} €
-                  </p>
-
-                  <p>
-                    <strong>Rácio comissão:</strong>{" "}
-                    <span style={commissionBadgeStyle}>
-                      {commissionPercent.toFixed(1)}%
-                    </span>
+                    {calculateAnnualCommission(policy)} €
                   </p>
 
                   <p>
@@ -1436,8 +1415,7 @@ const rating = clientRating(activePolicies, totalCommission);
                     </button>
                   </div>
                 </div>
-                );
-              })}
+              ))}
             </div>
           )}
         </section>
@@ -1586,6 +1564,30 @@ const editClientButton = {
   fontWeight: "bold",
 };
 
+const taskShortcutButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+  textDecoration: "none",
+  display: "inline-block",
+};
+
+const opportunityShortcutButton = {
+  background: "#0f766e",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+  textDecoration: "none",
+  display: "inline-block",
+};
+
 const card = {
   background: "white",
   padding: 24,
@@ -1617,14 +1619,6 @@ const badge = {
   background: "#e5e7eb",
   color: "#111827",
   padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: "bold",
-};
-
-const commissionPercentBadge = {
-  display: "inline-block",
-  padding: "4px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
