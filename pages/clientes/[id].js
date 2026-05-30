@@ -144,6 +144,26 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
+function getFrequencyMultiplier(frequency) {
+  const value = String(frequency || "anual").toLowerCase();
+
+  if (value === "mensal") return 12;
+  if (value === "trimestral") return 4;
+  if (value === "semestral") return 2;
+
+  return 1;
+}
+
+function calculateAnnualPremiumFromPayment(value, frequency) {
+  const premiumPerPayment = Number(String(value || 0).replace(",", "."));
+  return premiumPerPayment * getFrequencyMultiplier(frequency);
+}
+
+function calculatePremiumPerPayment(policy) {
+  const annualPremium = Number(policy.annual_premium || 0);
+  return annualPremium / getFrequencyMultiplier(policy.payment_frequency);
+}
+
 function clientRating(policies, totalCommission) {
   const count = policies.length;
 
@@ -380,7 +400,7 @@ setTimeout(() => {
       branch: policy.branch || "",
       license_plate: policy.license_plate || "",
       insurer_name: policy.insurers?.name || "",
-      annual_premium: policy.annual_premium || "",
+      annual_premium: calculatePremiumPerPayment(policy) || "",
       commission_per_payment: policy.commission_per_payment || "",
       payment_frequency: policy.payment_frequency || "Mensal",
       start_date: policy.start_date || "",
@@ -429,7 +449,7 @@ setTimeout(() => {
       policy_number: editPolicyForm.policy_number,
       branch: editPolicyForm.branch,
       license_plate: editPolicyForm.license_plate,
-      annual_premium: cleanNumber(editPolicyForm.annual_premium),
+      annual_premium: calculateAnnualPremiumFromPayment(editPolicyForm.annual_premium, editPolicyForm.payment_frequency),
       commission_per_payment: cleanNumber(editPolicyForm.commission_per_payment),
       payment_frequency: editPolicyForm.payment_frequency,
       start_date: cleanDate(editPolicyForm.start_date),
@@ -579,7 +599,7 @@ setTimeout(() => {
       branch: policyForm.branch,
       license_plate: policyForm.license_plate,
       insurer_id: insurerId,
-      annual_premium: cleanNumber(policyForm.annual_premium),
+      annual_premium: calculateAnnualPremiumFromPayment(policyForm.annual_premium, policyForm.payment_frequency),
       commission_per_payment: cleanNumber(policyForm.commission_per_payment),
       payment_frequency: policyForm.payment_frequency,
       start_date: cleanDate(policyForm.start_date),
@@ -914,7 +934,7 @@ const rating = clientRating(activePolicies, totalCommission);
                 style={input}
                 type="number"
                 step="0.01"
-                placeholder="Prémio comercial anual"
+                placeholder="Prémio comercial do período"
                 value={policyForm.annual_premium}
                 onChange={(e) =>
                   setPolicyForm({
@@ -1058,7 +1078,7 @@ const rating = clientRating(activePolicies, totalCommission);
                 style={input}
                 type="number"
                 step="0.01"
-                placeholder="Prémio comercial anual"
+                placeholder="Prémio comercial do período"
                 value={editPolicyForm.annual_premium}
                 onChange={(e) =>
                   setEditPolicyForm({
