@@ -262,6 +262,21 @@ function createTimeline(client, policies, tasks, opportunities, claims) {
     });
   }
 
+  String(client?.interactions || "")
+    .split("\n")
+    .forEach((line) => {
+      const match = line.match(/^\[(.*?)\]\sNota rápida:\s(.*)$/);
+
+      if (match && match[1] && match[2]) {
+        items.push({
+          date: match[1],
+          type: "NOTA",
+          title: "Nota rápida",
+          description: match[2],
+        });
+      }
+    });
+
   policies.forEach((policy) => {
     items.push({
       date: policy.created_at || policy.start_date,
@@ -357,6 +372,13 @@ function timelineStyle(type) {
     };
   }
 
+  if (type === "NOTA") {
+    return {
+      background: "#e5e7eb",
+      color: "#374151",
+    };
+  }
+
   return {
     background: "#f3f4f6",
     color: "#374151",
@@ -422,6 +444,9 @@ const [communicationMessage, setCommunicationMessage] =
 const [emailSubject, setEmailSubject] =
   useState("");
 
+const [quickNote, setQuickNote] =
+  useState("");
+
   if (!client) {
     return <p>Cliente não encontrado.</p>;
   }
@@ -478,6 +503,37 @@ function openEmail() {
     )}`;
 
   window.location.href = url;
+}
+
+ async function saveQuickNote(e) {
+  e.preventDefault();
+
+  if (!quickNote.trim()) {
+    alert("Escreve a nota rápida.");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const noteLine = `[${now}] Nota rápida: ${quickNote.trim()}`;
+
+  const previous = client.interactions || "";
+  const next = previous
+    ? `${noteLine}\n${previous}`
+    : noteLine;
+
+  const { error } = await supabase
+    .from("clients")
+    .update({
+      interactions: next,
+    })
+    .eq("id", client.id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  window.location.reload();
 }
 
  async function editClient() {
@@ -1490,6 +1546,23 @@ const timelineItems = createTimeline(
           </div>
         </section>
 
+        <section style={quickNoteCard}>
+          <h2 style={sectionTitle}>Nota rápida</h2>
+
+          <form onSubmit={saveQuickNote} style={quickNoteForm}>
+            <textarea
+              style={quickNoteTextarea}
+              value={quickNote}
+              onChange={(e) => setQuickNote(e.target.value)}
+              placeholder="Ex: Cliente prefere contacto por WhatsApp. Vai trocar de carro em setembro..."
+            />
+
+            <button type="submit" style={button}>
+              Guardar nota na timeline
+            </button>
+          </form>
+        </section>
+
         <section style={timelineCard}>
           <h2 style={sectionTitle}>Timeline do Cliente</h2>
 
@@ -1884,6 +1957,31 @@ const fieldLabel = {
   gap: 6,
   color: "#374151",
   fontSize: 13,
+};
+
+const quickNoteCard = {
+  background: "linear-gradient(135deg, #f9fafb, #f3f4f6)",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const quickNoteForm = {
+  display: "grid",
+  gap: 12,
+};
+
+const quickNoteTextarea = {
+  width: "100%",
+  minHeight: 100,
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+  boxSizing: "border-box",
+  fontFamily: "Arial, sans-serif",
 };
 
 const timelineCard = {
