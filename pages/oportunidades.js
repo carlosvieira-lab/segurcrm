@@ -579,8 +579,17 @@ function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus })
         const phone = item.client_phone || item.clients?.phone || "";
         const whatsappLink = buildWhatsappLink(phone);
 
+        const today = new Date().toISOString().split("T")[0];
+        const isToday = item.contact_date === today;
+
         return (
-          <div key={item.id} style={opportunityCard}>
+          <div
+            key={item.id}
+            style={{
+              ...opportunityCard,
+              ...(isToday ? opportunityTodayCard : {}),
+            }}
+          >
             <div style={topLine}>
               <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
               <span style={statusBadge}>{item.status || "por contactar"}</span>
@@ -825,6 +834,11 @@ const opportunityCard = {
   background: "#f9fafb",
   padding: 20,
   borderRadius: 16,
+};
+
+const opportunityTodayCard = {
+  background: "#dcfce7",
+  border: "1px solid #86efac",
 };
 
 const topLine = {
