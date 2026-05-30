@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -71,6 +72,7 @@ function buildWhatsappLink(phone) {
 }
 
 export default function Oportunidades({ opportunities, clients }) {
+  const router = useRouter();
   const [clientNif, setClientNif] = useState("");
   const [clientId, setClientId] = useState(null);
   const [clientName, setClientName] = useState("");
@@ -85,6 +87,33 @@ export default function Oportunidades({ opportunities, clients }) {
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
   }, [renewalDate]);
+
+  useEffect(() => {
+    async function loadClientFromQuery() {
+      const clientId = router.query.cliente;
+
+      if (!clientId) return;
+
+      const localClient = clients.find((client) => client.id === clientId);
+
+      if (localClient) {
+        selectClient(localClient);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, nif, phone")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (error || !data) return;
+
+      selectClient(data);
+    }
+
+    loadClientFromQuery();
+  }, [router.query.cliente, clients]);
 
   useEffect(() => {
     const nifClean = onlyNumbers(clientNif);
@@ -480,6 +509,12 @@ export default function Oportunidades({ opportunities, clients }) {
               <p style={successText}>Cliente encontrado e dados preenchidos automaticamente.</p>
             )}
 
+            {clientFound && clientId && (
+              <div style={linkedClientBox}>
+                Cliente importado da ficha: <strong>{clientName}</strong>
+              </div>
+            )}
+
             <label style={label}>Nome do cliente</label>
             <input
               style={input}
@@ -785,6 +820,14 @@ const darkButton = {
 
 const successText = {
   color: "#166534",
+  fontWeight: "bold",
+};
+
+const linkedClientBox = {
+  background: "#dcfce7",
+  color: "#166534",
+  padding: 12,
+  borderRadius: 10,
   fontWeight: "bold",
 };
 
