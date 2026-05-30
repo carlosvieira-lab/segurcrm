@@ -57,11 +57,25 @@ export async function getServerSideProps({ params }) {
     .eq("client_id", id)
     .order("created_at", { ascending: false });
 
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+
+  const { data: opportunities } = await supabase
+    .from("opportunities")
+    .select("*")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+
   return {
     props: {
       client,
       policies: policies || [],
       claims: claims || [],
+      tasks: tasks || [],
+      opportunities: opportunities || [],
     },
   };
 }
@@ -227,7 +241,129 @@ function InfoItem({ label, value }) {
   );
 }
 
-export default function ClientePage({ client, policies, claims }) {
+function formatTimelineDate(date) {
+  if (!date) return "Sem data";
+
+  return new Intl.DateTimeFormat("pt-PT", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(date));
+}
+
+function createTimeline(client, policies, tasks, opportunities, claims) {
+  const items = [];
+
+  if (client?.created_at) {
+    items.push({
+      date: client.created_at,
+      type: "CLIENTE",
+      title: "Cliente criado",
+      description: client.name || "Ficha criada",
+    });
+  }
+
+  policies.forEach((policy) => {
+    items.push({
+      date: policy.created_at || policy.start_date,
+      type: "APÓLICE",
+      title: `Apólice ${policy.branch || ""} criada`,
+      description: `${policy.policy_number || "Sem nº"} · ${policy.insurers?.name || "Sem seguradora"}`,
+    });
+
+    if (policy.status === "anulada" && policy.cancelled_at) {
+      items.push({
+        date: policy.cancelled_at,
+        type: "ANULAÇÃO",
+        title: "Apólice anulada",
+        description: `${policy.policy_number || "Sem nº"} · ${policy.branch || ""}`,
+      });
+    }
+
+    if (policy.last_payment_date) {
+      items.push({
+        date: policy.last_payment_date,
+        type: "PAGAMENTO",
+        title: "Pagamento registado",
+        description: `${policy.policy_number || "Sem nº"} · Próximo pagamento: ${formatDate(policy.next_payment_date)}`,
+      });
+    }
+  });
+
+  tasks.forEach((task) => {
+    items.push({
+      date: task.created_at || task.due_date,
+      type: "TAREFA",
+      title: task.status === "concluida" ? "Tarefa concluída" : "Tarefa criada",
+      description: task.title || task.description || "Sem descrição",
+    });
+  });
+
+  opportunities.forEach((opportunity) => {
+    items.push({
+      date: opportunity.created_at || opportunity.contact_date,
+      type: "OPORTUNIDADE",
+      title: `Oportunidade ${opportunity.status || "criada"}`,
+      description: opportunity.insurance_type || opportunity.name || "Sem descrição",
+    });
+  });
+
+  claims.forEach((claim) => {
+    items.push({
+      date: claim.created_at || claim.claim_date,
+      type: "SINISTRO",
+      title: "Sinistro registado",
+      description: `${claim.claim_number || "Sem nº"} · ${claim.claim_branch || "Sem ramo"} · ${claim.status || "ABERTO"}`,
+    });
+  });
+
+  return items
+    .filter((item) => item.date)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function timelineStyle(type) {
+  if (type === "APÓLICE") {
+    return {
+      background: "#dbeafe",
+      color: "#1d4ed8",
+    };
+  }
+
+  if (type === "TAREFA") {
+    return {
+      background: "#ede9fe",
+      color: "#5b21b6",
+    };
+  }
+
+  if (type === "OPORTUNIDADE") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+    };
+  }
+
+  if (type === "SINISTRO" || type === "ANULAÇÃO") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  if (type === "PAGAMENTO") {
+    return {
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#374151",
+  };
+}
+
+export default function ClientePage({ client, policies, claims, tasks, opportunities }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
 
   const [policyForm, setPolicyForm] = useState({
@@ -634,6 +770,13 @@ const totalCommission = activePolicies.reduce(
 );
 
 const rating = clientRating(activePolicies, totalCommission);
+const timelineItems = createTimeline(
+  client,
+  policies,
+  tasks,
+  opportunities,
+  claims
+);
 
   return (
     <div style={page}>
@@ -1347,6 +1490,42 @@ const rating = clientRating(activePolicies, totalCommission);
           </div>
         </section>
 
+        <section style={timelineCard}>
+          <h2 style={sectionTitle}>Timeline do Cliente</h2>
+
+          {timelineItems.length === 0 ? (
+            <p>Sem histórico registado.</p>
+          ) : (
+            <div style={timelineList}>
+              {timelineItems.map((item, index) => (
+                <div key={`${item.type}-${item.date}-${index}`} style={timelineItem}>
+                  <div style={timelineDot}></div>
+
+                  <div style={timelineContent}>
+                    <div style={timelineTop}>
+                      <span style={{ ...timelineBadge, ...timelineStyle(item.type) }}>
+                        {item.type}
+                      </span>
+
+                      <span style={timelineDate}>
+                        {formatTimelineDate(item.date)}
+                      </span>
+                    </div>
+
+                    <strong style={timelineTitle}>
+                      {item.title}
+                    </strong>
+
+                    <p style={timelineDescription}>
+                      {item.description || "-"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section style={card}>
           <h2>Apólices</h2>
 
@@ -1705,6 +1884,73 @@ const fieldLabel = {
   gap: 6,
   color: "#374151",
   fontSize: 13,
+};
+
+const timelineCard = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const timelineList = {
+  display: "grid",
+  gap: 14,
+};
+
+const timelineItem = {
+  display: "grid",
+  gridTemplateColumns: "16px 1fr",
+  gap: 12,
+  alignItems: "flex-start",
+};
+
+const timelineDot = {
+  width: 12,
+  height: 12,
+  borderRadius: 999,
+  background: "#2563eb",
+  marginTop: 8,
+};
+
+const timelineContent = {
+  background: "#f9fafb",
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #e5e7eb",
+};
+
+const timelineTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "center",
+  marginBottom: 8,
+};
+
+const timelineBadge = {
+  padding: "5px 9px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: "bold",
+};
+
+const timelineDate = {
+  color: "#6b7280",
+  fontSize: 13,
+};
+
+const timelineTitle = {
+  display: "block",
+  color: "#111827",
+  marginBottom: 4,
+};
+
+const timelineDescription = {
+  color: "#6b7280",
+  margin: 0,
+  lineHeight: 1.5,
 };
 
 const communicationCard = {
