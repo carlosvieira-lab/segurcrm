@@ -212,6 +212,8 @@ export default function Importacoes({ clients, policies, insurers }) {
   const [rows, setRows] = useState([]);
   const [previewSearch, setPreviewSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
   const realVida = insurers.find(
@@ -380,6 +382,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
     setLoading(true);
     setErrorMessage("");
+    setImportResult(null);
     setRows([]);
     setFileName(file.name);
 
@@ -411,6 +414,149 @@ export default function Importacoes({ clients, policies, insurers }) {
     }
   }
 
+
+  async function confirmImport() {
+    const confirm = window.confirm(
+      "Confirmas a importação Real Vida?\n\nSerão criados clientes novos e criadas/atualizadas apólices. A importação NÃO preenche ramo nem data de início. Apólices existentes só atualizam prémio, comissão, fracionamento, estado e data de renovação."
+    );
+
+    if (!confirm) return;
+
+    if (!realVida) {
+      alert("Não encontrei a seguradora REAL VIDA na tabela insurers.");
+      return;
+    }
+
+    setImporting(true);
+    setErrorMessage("");
+    setImportResult(null);
+
+    const result = {
+      clientsCreated: 0,
+      clientsUpdated: 0,
+      policiesCreated: 0,
+      policiesUpdated: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    const localClientsByNif = new Map(existingClientsByNif);
+    const localPoliciesByNumber = new Map(existingPoliciesByNumber);
+
+    for (const row of analyzedRows) {
+      try {
+        if (!row.nif || !row.clientName || !row.policyNumber) {
+          result.skipped += 1;
+          result.errors.push(
+            `Linha ${row.index}: falta NIF, cliente ou nº apólice.`
+          );
+          continue;
+        }
+
+        let client = localClientsByNif.get(row.nif);
+
+        if (client) {
+          const { error: clientUpdateError } = await supabase
+            .from("clients")
+            .update({
+              name: client.name || row.clientName,
+              status: "ativo",
+            })
+            .eq("id", client.id);
+
+          if (clientUpdateError) {
+            throw clientUpdateError;
+          }
+
+          result.clientsUpdated += 1;
+        } else {
+          const { data: createdClient, error: clientCreateError } =
+            await supabase
+              .from("clients")
+              .insert({
+                type: "particular",
+                status: "ativo",
+                name: row.clientName,
+                nif: row.nif,
+              })
+              .select("id, name, nif")
+              .single();
+
+          if (clientCreateError) {
+            throw clientCreateError;
+          }
+
+          client = createdClient;
+          localClientsByNif.set(row.nif, client);
+          result.clientsCreated += 1;
+        }
+
+        const normalizedPolicyNumber =
+          normalizePolicyNumber(row.policyNumber);
+
+        const existingPolicy =
+          localPoliciesByNumber.get(normalizedPolicyNumber);
+
+        const policyPayload = {
+          client_id: client.id,
+          insurer_id: realVida.id,
+          policy_number: row.policyNumber,
+          status: row.status,
+          renewal_date: row.renewalDate || null,
+          annual_premium: row.commercialPremium || row.premium || 0,
+          payment_frequency: row.paymentFrequency || "Anual",
+          commission_per_payment: row.commission || 0,
+        };
+
+        if (existingPolicy) {
+          const { error: policyUpdateError } = await supabase
+            .from("policies")
+            .update({
+              status: policyPayload.status,
+              renewal_date: policyPayload.renewal_date,
+              annual_premium: policyPayload.annual_premium,
+              payment_frequency: policyPayload.payment_frequency,
+              commission_per_payment: policyPayload.commission_per_payment,
+            })
+            .eq("id", existingPolicy.id);
+
+          if (policyUpdateError) {
+            throw policyUpdateError;
+          }
+
+          result.policiesUpdated += 1;
+        } else {
+          const { data: createdPolicy, error: policyCreateError } =
+            await supabase
+              .from("policies")
+              .insert({
+                ...policyPayload,
+              })
+              .select("id, policy_number, client_id")
+              .single();
+
+          if (policyCreateError) {
+            throw policyCreateError;
+          }
+
+          localPoliciesByNumber.set(
+            normalizePolicyNumber(createdPolicy.policy_number),
+            createdPolicy
+          );
+
+          result.policiesCreated += 1;
+        }
+      } catch (error) {
+        result.errors.push(
+          `Linha ${row.index}: ${error.message || "erro desconhecido"}`
+        );
+      }
+    }
+
+    setImportResult(result);
+    setImporting(false);
+  }
+
   return (
     <div style={page}>
       <Sidebar active="importacoes" />
@@ -429,7 +575,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <h2>Importar Excel Real Vida</h2>
 
           <p style={muted}>
-            Esta versão apenas lê e valida o ficheiro. Não cria clientes nem apólices. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
+            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche ramo nem data de início. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
           </p>
 
           {!realVida && (
@@ -479,7 +625,44 @@ export default function Importacoes({ clients, policies, insurers }) {
                     Confirma estes dados antes de avançarmos para a fase de importação final.
                   </p>
                 </div>
+
+                <button
+                  style={importButton}
+                  onClick={confirmImport}
+                  disabled={importing || summary.rowsWithErrors > 0}
+                >
+                  {importing ? "A importar..." : "Confirmar importação"}
+                </button>
               </div>
+
+              {summary.rowsWithErrors > 0 && (
+                <div style={warningBox}>
+                  Existem linhas com avisos. Corrige ou confirma o ficheiro antes de importar.
+                </div>
+              )}
+
+              {importResult && (
+                <div style={resultBox}>
+                  <h3 style={{ marginTop: 0 }}>Importação concluída</h3>
+
+                  <div style={resultGrid}>
+                    <span>Clientes criados: <strong>{importResult.clientsCreated}</strong></span>
+                    <span>Clientes atualizados: <strong>{importResult.clientsUpdated}</strong></span>
+                    <span>Apólices criadas: <strong>{importResult.policiesCreated}</strong></span>
+                    <span>Apólices atualizadas: <strong>{importResult.policiesUpdated}</strong></span>
+                    <span>Linhas ignoradas: <strong>{importResult.skipped}</strong></span>
+                    <span>Erros: <strong>{importResult.errors.length}</strong></span>
+                  </div>
+
+                  {importResult.errors.length > 0 && (
+                    <div style={errorList}>
+                      {importResult.errors.slice(0, 20).map((error, index) => (
+                        <div key={index}>{error}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={previewSearchBox}>
                 <label style={previewSearchLabel}>
@@ -678,6 +861,41 @@ const summaryLabel = {
 const summaryValue = {
   fontSize: 30,
   margin: "10px 0 0",
+};
+
+const importButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const resultBox = {
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  color: "#166534",
+  padding: 16,
+  borderRadius: 14,
+  marginBottom: 16,
+};
+
+const resultGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+};
+
+const errorList = {
+  background: "white",
+  color: "#991b1b",
+  padding: 12,
+  borderRadius: 10,
+  marginTop: 12,
+  display: "grid",
+  gap: 6,
 };
 
 const previewSearchBox = {
