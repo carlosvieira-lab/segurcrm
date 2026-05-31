@@ -121,9 +121,22 @@ function parseNumber(value) {
   const text = String(value)
     .replace(/\s/g, "")
     .replace("€", "")
-    .replace(/\./g, "")
-    .replace(",", ".");
+    .trim();
 
+  if (!text) return 0;
+
+  // Formato PT: 1.234,56
+  if (text.includes(",")) {
+    return (
+      Number(
+        text
+          .replace(/\./g, "")
+          .replace(",", ".")
+      ) || 0
+    );
+  }
+
+  // Formato EN/Excel: 1234.56
   return Number(text) || 0;
 }
 
@@ -1023,4 +1036,3 @@ const badgeNew = {
 const muted = {
   color: "#6b7280",
 };
-
