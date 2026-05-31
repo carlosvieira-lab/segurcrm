@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -169,6 +170,44 @@ function buildTopClientsReport(policies) {
     .slice(0, 10);
 }
 
+function calculateAge(date) {
+  if (!date) return null;
+
+  const today = new Date();
+  const birthDate = new Date(date);
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+
+  const monthDifference = today.getMonth() - birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  return age;
+}
+
+function buildClientsUntil40Report(clients) {
+  return clients
+    .map((client) => ({
+      id: client.id,
+      name: client.name || "Sem nome",
+      nif: client.nif || "-",
+      phone: client.phone || "-",
+      email: client.email || "-",
+      birthDate: client.birth_date || null,
+      age: calculateAge(client.birth_date),
+    }))
+    .filter((client) => client.age !== null && client.age <= 40)
+    .sort((a, b) => {
+      if (a.age !== b.age) return a.age - b.age;
+      return a.name.localeCompare(b.name);
+    });
+}
+
 export default function Relatorios({ clients, policies }) {
   const [selectedReport, setSelectedReport] = useState(null);
 
@@ -196,6 +235,8 @@ export default function Relatorios({ clients, policies }) {
       clients,
       policies
     );
+
+  const clientsUntil40 = buildClientsUntil40Report(clients);
 
   function exportCsv(filename, header, rows) {
     const csvContent = [header, ...rows]
@@ -246,6 +287,32 @@ export default function Relatorios({ clients, policies }) {
 
     exportCsv(
       "real_vida_apolices_iniciadas_2026.csv",
+      header,
+      rows
+    );
+  }
+
+  function exportClientsUntil40Csv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Idade",
+      "Data nascimento",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsUntil40.map((client) => [
+      client.name,
+      client.nif,
+      client.age,
+      formatDate(client.birthDate),
+      client.phone,
+      client.email,
+    ]);
+
+    exportCsv(
+      "clientes_ate_40_anos.csv",
       header,
       rows
     );
@@ -495,7 +562,113 @@ export default function Relatorios({ clients, policies }) {
             </strong>
           </button>
 
+          <button
+            style={{
+              ...reportCard,
+              borderTop: "6px solid #0ea5e9",
+            }}
+            onClick={() =>
+              setSelectedReport("clientesAte40")
+            }
+          >
+            <h2 style={reportTitle}>
+              Clientes até 40 anos
+            </h2>
+
+            <p style={reportText}>
+              Lista de clientes com idade até 40 anos, com ligação direta para a ficha.
+            </p>
+
+            <strong style={reportAction}>
+              Abrir relatório
+            </strong>
+          </button>
+
         </section>
+
+        {selectedReport === "clientesAte40" && (
+          <section style={panel}>
+            <div style={reportHeader}>
+              <div>
+                <h2 style={panelTitle}>
+                  Clientes até 40 anos
+                </h2>
+
+                <p style={muted}>
+                  Lista de clientes com data de nascimento registada e idade até 40 anos.
+                </p>
+              </div>
+
+              <div style={buttonGroup}>
+                <button
+                  style={secondaryButton}
+                  onClick={printTopClientsPdf}
+                >
+                  Gerar PDF
+                </button>
+
+                <button
+                  style={button}
+                  onClick={exportClientsUntil40Csv}
+                >
+                  Exportar Excel
+                </button>
+              </div>
+            </div>
+
+            {clientsUntil40.length === 0 ? (
+              <p style={muted}>
+                Sem clientes até 40 anos com data de nascimento registada.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderClientsAge}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Idade</span>
+                  <span>Data nascimento</span>
+                  <span>Telefone</span>
+                  <span>Ficha</span>
+                </div>
+
+                {clientsUntil40.map((client) => (
+                  <div
+                    key={client.id}
+                    style={tableRowClientsAge}
+                  >
+                    <strong>
+                      {client.name}
+                    </strong>
+
+                    <span>
+                      {client.nif}
+                    </span>
+
+                    <strong>
+                      {client.age}
+                    </strong>
+
+                    <span>
+                      {formatDate(client.birthDate)}
+                    </span>
+
+                    <span>
+                      {client.phone}
+                    </span>
+
+                    <Link
+                      href={`/clientes/${client.id}`}
+                      style={openClientButton}
+                    >
+                      Abrir ficha
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
 
         {selectedReport === "topClientes" && (
           <section style={panel}>
@@ -1012,6 +1185,36 @@ const summaryLabel = {
 const summaryValue = {
   color: "#111827",
   fontSize: 24,
+};
+
+const tableHeaderClientsAge = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const tableRowClientsAge = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+};
+
+const openClientButton = {
+  background: "#2563eb",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
 };
 
 const premiumValue = {
