@@ -66,3 +66,42 @@ const sidebar = {
   width: 240,
   background: "#111827",
   color: "white",
+  padding: 24,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  minHeight: "100vh",
+};
+
+const logo = {
+  marginBottom: 40,
+  fontSize: 28,
+};
+
+const nav = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const menuItem = {
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const activeMenuItem = {
+  background: "#2563eb",
+};
+
+const logoutButton = {
+  background: "#dc2626",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
