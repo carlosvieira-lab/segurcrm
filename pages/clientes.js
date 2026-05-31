@@ -49,6 +49,18 @@ export default function Clientes({ clients }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  const existingClientByNif = useMemo(() => {
+    const cleanNif = String(nif || "").trim();
+
+    if (!cleanNif) return null;
+
+    return clients.find(
+      (client) =>
+        String(client.nif || "").trim() === cleanNif
+    );
+  }, [nif, clients]);
+
+
   const visibleClients = clients.filter((client) => client.status !== "anulado");
 
   const filteredClients = useMemo(() => {
@@ -75,6 +87,15 @@ export default function Clientes({ clients }) {
   async function createClientRecord(e) {
     e.preventDefault();
     setSaving(true);
+
+    if (nif && existingClientByNif) {
+      alert(
+        `Já existe um cliente com este NIF:\n\n${existingClientByNif.name}`
+      );
+
+      setSaving(false);
+      return;
+    }
 
     const { error } = await supabase.from("clients").insert({
       type: "particular",
@@ -196,6 +217,25 @@ export default function Clientes({ clients }) {
                 onChange={(e) => setNif(e.target.value)}
                 style={input}
               />
+
+              {existingClientByNif && (
+                <div
+                  style={duplicateWarning}
+                >
+                  <strong>Cliente já existente</strong>
+
+                  <div style={{ marginTop: 6 }}>
+                    {existingClientByNif.name}
+                  </div>
+
+                  <Link
+                    href={`/clientes/${existingClientByNif.id}`}
+                    style={duplicateLink}
+                  >
+                    Abrir ficha
+                  </Link>
+                </div>
+              )}
 
               <input
                 placeholder="Telefone"
@@ -481,6 +521,23 @@ const openButton = {
   textDecoration: "none",
   fontSize: 13,
   fontWeight: "bold",
+};
+
+
+const duplicateWarning = {
+  background: "#fee2e2",
+  border: "1px solid #fecaca",
+  color: "#991b1b",
+  padding: 12,
+  borderRadius: 10,
+};
+
+const duplicateLink = {
+  display: "inline-block",
+  marginTop: 8,
+  color: "#2563eb",
+  fontWeight: "bold",
+  textDecoration: "none",
 };
 
 const deleteButton = {
