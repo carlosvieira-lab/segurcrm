@@ -46,6 +46,31 @@ function cleanText(value) {
     .trim();
 }
 
+function formatClientName(value) {
+  const smallWords = new Set([
+    "de",
+    "da",
+    "do",
+    "das",
+    "dos",
+    "e",
+  ]);
+
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => {
+      if (index > 0 && smallWords.has(word)) {
+        return word;
+      }
+
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
 function formatEuro(value) {
   return new Intl.NumberFormat("pt-PT", {
     style: "currency",
@@ -252,9 +277,9 @@ export default function Importacoes({ clients, policies, insurers }) {
     return rows.map((row, index) => {
       const policyNumber = buildRealVidaPolicyNumber(row);
 
-      const clientName = String(
+      const clientName = formatClientName(
         getCell(row, ["Tomador", "Cliente", "Nome"])
-      ).trim();
+      );
 
       const nif = onlyNumbers(
         getCell(row, ["Nif", "NIF", "Contribuinte"])
@@ -575,7 +600,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <h2>Importar Excel Real Vida</h2>
 
           <p style={muted}>
-            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche ramo nem data de início. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
+            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche ramo nem data de início. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
           </p>
 
           {!realVida && (
