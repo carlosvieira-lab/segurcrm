@@ -241,9 +241,13 @@ export default function Importacoes({ clients, policies, insurers }) {
   const [importResult, setImportResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const realVida = insurers.find(
-    (insurer) => cleanText(insurer.name) === "real vida"
-  );
+  const realVida =
+    insurers.find(
+      (insurer) => String(insurer.name || "").trim() === "REAL VIDA"
+    ) ||
+    insurers.find(
+      (insurer) => cleanText(insurer.name) === "real vida"
+    );
 
   const existingClientsByNif = useMemo(() => {
     const map = new Map();
@@ -442,7 +446,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   async function confirmImport() {
     const confirm = window.confirm(
-      "Confirmas a importação Real Vida?\n\nSerão criados clientes novos e criadas/atualizadas apólices. A importação NÃO preenche ramo nem data de início. Apólices existentes só atualizam prémio, comissão, fracionamento, estado e data de renovação."
+      "Confirmas a importação Real Vida?\n\nSerão criados clientes novos e criadas/atualizadas apólices. A importação NÃO preenche data de início e deixa o ramo em branco para preencher manualmente. Apólices existentes só atualizam prémio, comissão, fracionamento, estado e data de renovação."
     );
 
     if (!confirm) return;
@@ -556,6 +560,7 @@ export default function Importacoes({ clients, policies, insurers }) {
               .from("policies")
               .insert({
                 ...policyPayload,
+                branch: "",
               })
               .select("id, policy_number, client_id")
               .single();
@@ -600,7 +605,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <h2>Importar Excel Real Vida</h2>
 
           <p style={muted}>
-            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche ramo nem data de início. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
+            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
           </p>
 
           {!realVida && (
@@ -1018,3 +1023,4 @@ const badgeNew = {
 const muted = {
   color: "#6b7280",
 };
+
