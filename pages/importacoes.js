@@ -149,10 +149,23 @@ function getCell(row, possibleNames) {
 }
 
 function normalizePolicyNumber(value) {
-  return String(value || "")
+  const raw = String(value || "")
     .trim()
     .replace(/\s/g, "")
     .toUpperCase();
+
+  if (!raw) return "";
+
+  const parts = raw.split("/");
+
+  if (parts.length === 2) {
+    const module = String(Number(parts[0]));
+    const number = parts[1].replace(/^0+/, "") || "0";
+
+    return `${module}/${number}`;
+  }
+
+  return raw.replace(/^0+/, "") || "0";
 }
 
 function buildRealVidaPolicyNumber(row) {
@@ -416,7 +429,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <h2>Importar Excel Real Vida</h2>
 
           <p style={muted}>
-            Esta versão apenas lê e valida o ficheiro. Não cria clientes nem apólices. O nº de apólice Real Vida é tratado como Mod/Apolice, por exemplo 7/148701.
+            Esta versão apenas lê e valida o ficheiro. Não cria clientes nem apólices. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
           </p>
 
           {!realVida && (
