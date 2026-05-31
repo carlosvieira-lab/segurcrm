@@ -84,6 +84,59 @@ function formatDate(date) {
   if (!date) return "-";
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
+
+function parseDecimal(value) {
+  if (value === "" || value === null || value === undefined) return 0;
+
+  if (typeof value === "number") return value;
+
+  const text = String(value)
+    .replace(/\s/g, "")
+    .replace("€", "")
+    .trim();
+
+  if (!text) return 0;
+
+  if (text.includes(",")) {
+    return (
+      Number(
+        text
+          .replace(/\./g, "")
+          .replace(",", ".")
+      ) || 0
+    );
+  }
+
+  return Number(text) || 0;
+}
+
+function cleanNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  return parseDecimal(value);
+}
+
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
+}
+
+function formatDecimalInput(value) {
+  if (value === "" || value === null || value === undefined) return "";
+
+  return new Intl.NumberFormat("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function formatPercent(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(Number(value || 0));
+}
 function calculateAge(date) {
   if (!date) return "-";
 
@@ -169,8 +222,22 @@ function getFrequencyMultiplier(frequency) {
 }
 
 function calculateAnnualPremiumFromPayment(value, frequency) {
-  const premiumPerPayment = Number(String(value || 0).replace(",", "."));
+  const premiumPerPayment = parseDecimal(value);
   return premiumPerPayment * getFrequencyMultiplier(frequency);
+}
+
+function calculateAnnualCommissionFromPayment(value, frequency) {
+  const commissionPerPayment = parseDecimal(value);
+  return commissionPerPayment * getFrequencyMultiplier(frequency);
+}
+
+function calculateCommissionPercentage(annualPremium, annualCommission) {
+  const premium = Number(annualPremium || 0);
+  const commission = Number(annualCommission || 0);
+
+  if (!premium || premium <= 0) return 0;
+
+  return (commission / premium) * 100;
 }
 
 function calculatePremiumPerPayment(policy) {
@@ -624,8 +691,8 @@ setTimeout(() => {
       branch: policy.branch || "",
       license_plate: policy.license_plate || "",
       insurer_name: policy.insurers?.name || "",
-      annual_premium: calculatePremiumPerPayment(policy) || "",
-      commission_per_payment: policy.commission_per_payment || "",
+      annual_premium: formatDecimalInput(calculatePremiumPerPayment(policy)),
+      commission_per_payment: formatDecimalInput(policy.commission_per_payment),
       payment_frequency: policy.payment_frequency || "Mensal",
       start_date: policy.start_date || "",
       renewal_date: policy.renewal_date || "",
@@ -659,11 +726,6 @@ setTimeout(() => {
 
       insurerId = insurer?.id || null;
     }
-
-    const cleanNumber = (value) => {
-      if (value === "" || value === null || value === undefined) return null;
-      return Number(String(value).replace(",", "."));
-    };
 
     const cleanDate = (value) => {
       return value === "" ? null : value;
@@ -781,11 +843,6 @@ setTimeout(() => {
 
       insurerId = insurer?.id || null;
     }
-
-    const cleanNumber = (value) => {
-      if (value === "" || value === null || value === undefined) return null;
-      return Number(String(value).replace(",", "."));
-    };
 
     const cleanDate = (value) => {
       return value === "" ? null : value;
@@ -1167,8 +1224,8 @@ const timelineItems = createTimeline(
 
               <input
                 style={input}
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="Prémio comercial do período"
                 value={policyForm.annual_premium}
                 onChange={(e) =>
@@ -1181,8 +1238,8 @@ const timelineItems = createTimeline(
 
               <input
                 style={input}
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="Comissão por pagamento"
                 value={policyForm.commission_per_payment}
                 onChange={(e) =>
@@ -1208,6 +1265,48 @@ const timelineItems = createTimeline(
                 <option value="Semestral">Semestral</option>
                 <option value="Anual">Anual</option>
               </select>
+
+              <div style={calculationPreview}>
+                <span>
+                  Prémio anual:{" "}
+                  <strong>
+                    {formatEuro(
+                      calculateAnnualPremiumFromPayment(
+                        policyForm.annual_premium,
+                        policyForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </span>
+
+                <span>
+                  Comissão anual:{" "}
+                  <strong>
+                    {formatEuro(
+                      calculateAnnualCommissionFromPayment(
+                        policyForm.commission_per_payment,
+                        policyForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </span>
+
+                <span style={commissionPreviewBadge}>
+                  {formatPercent(
+                    calculateCommissionPercentage(
+                      calculateAnnualPremiumFromPayment(
+                        policyForm.annual_premium,
+                        policyForm.payment_frequency
+                      ),
+                      calculateAnnualCommissionFromPayment(
+                        policyForm.commission_per_payment,
+                        policyForm.payment_frequency
+                      )
+                    )
+                  )}
+                  % comissão
+                </span>
+              </div>
 
               <label style={fieldLabel}>
                 Data início
@@ -1311,8 +1410,8 @@ const timelineItems = createTimeline(
 
               <input
                 style={input}
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="Prémio comercial do período"
                 value={editPolicyForm.annual_premium}
                 onChange={(e) =>
@@ -1325,8 +1424,8 @@ const timelineItems = createTimeline(
 
               <input
                 style={input}
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="Comissão por pagamento"
                 value={editPolicyForm.commission_per_payment}
                 onChange={(e) =>
@@ -1352,6 +1451,48 @@ const timelineItems = createTimeline(
                 <option value="Semestral">Semestral</option>
                 <option value="Anual">Anual</option>
               </select>
+
+              <div style={calculationPreview}>
+                <span>
+                  Prémio anual:{" "}
+                  <strong>
+                    {formatEuro(
+                      calculateAnnualPremiumFromPayment(
+                        editPolicyForm.annual_premium,
+                        editPolicyForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </span>
+
+                <span>
+                  Comissão anual:{" "}
+                  <strong>
+                    {formatEuro(
+                      calculateAnnualCommissionFromPayment(
+                        editPolicyForm.commission_per_payment,
+                        editPolicyForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </span>
+
+                <span style={commissionPreviewBadge}>
+                  {formatPercent(
+                    calculateCommissionPercentage(
+                      calculateAnnualPremiumFromPayment(
+                        editPolicyForm.annual_premium,
+                        editPolicyForm.payment_frequency
+                      ),
+                      calculateAnnualCommissionFromPayment(
+                        editPolicyForm.commission_per_payment,
+                        editPolicyForm.payment_frequency
+                      )
+                    )
+                  )}
+                  % comissão
+                </span>
+              </div>
 
               <label style={fieldLabel}>
                 Data início
@@ -1491,12 +1632,12 @@ const timelineItems = createTimeline(
 
             <div style={statBox}>
               <span style={statLabel}>Prémio anual</span>
-              <strong style={statValue}>{totalPremium.toFixed(2)} €</strong>
+              <strong style={statValue}>{formatEuro(totalPremium)}</strong>
             </div>
 
             <div style={statBox}>
               <span style={statLabel}>Comissão anual</span>
-              <strong style={statValue}>{totalCommission.toFixed(2)} €</strong>
+              <strong style={statValue}>{formatEuro(totalCommission)}</strong>
             </div>
 
             <div style={{ ...statBox, ...ratingStyle(rating) }}>
@@ -1717,13 +1858,23 @@ const timelineItems = createTimeline(
                   </p>
 
                   <p>
-                    <strong>Prémio anual:</strong> {policy.annual_premium || 0} €
+                    <strong>Prémio anual:</strong> {formatEuro(policy.annual_premium)}
                   </p>
 
                   <p>
                     <strong>Comissão anual:</strong>{" "}
-                    {calculateAnnualCommission(policy)} €
+                    {formatEuro(calculateAnnualCommission(policy))}
                   </p>
+
+                  <div style={commissionBadge}>
+                    {formatPercent(
+                      calculateCommissionPercentage(
+                        policy.annual_premium,
+                        calculateAnnualCommission(policy)
+                      )
+                    )}
+                    % comissão
+                  </div>
 
                   <p>
                     <strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}
@@ -1968,6 +2119,38 @@ const badge = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
+};
+
+const calculationPreview = {
+  gridColumn: "1 / -1",
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  display: "flex",
+  gap: 14,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const commissionPreviewBadge = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+  padding: "7px 11px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: "bold",
+};
+
+const commissionBadge = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+  padding: "7px 11px",
+  borderRadius: 999,
+  fontSize: 13,
+  fontWeight: "bold",
+  display: "inline-block",
+  marginBottom: 10,
 };
 
 const claimsGrid = {
