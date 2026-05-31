@@ -22,7 +22,7 @@ export async function getServerSideProps() {
     .from("policies")
     .select(`
       *,
-      clients(id, name, nif),
+      clients(id, name, nif, phone, email),
       insurers(name)
     `);
 
@@ -46,41 +46,35 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-function buildRealVida2026Report(policies) {
-  return policies
-    .filter((policy) => {
-      const insurerName = String(policy.insurers?.name || "")
-        .toLowerCase()
-        .trim();
+function calculateAge(date) {
+  if (!date) return null;
 
-      const startDate = policy.start_date
-        ? new Date(policy.start_date)
-        : null;
+  const today = new Date();
+  const birthDate = new Date(date);
 
-      return (
-        insurerName === "real vida" &&
-        startDate &&
-        startDate >= new Date("2026-01-01") &&
-        startDate <= new Date("2026-12-31") &&
-        policy.status !== "anulada"
-      );
-    })
-    .map((policy) => ({
-      id: policy.id,
-      clientName: policy.clients?.name || "Sem cliente",
-      clientNif: policy.clients?.nif || "-",
-      policyNumber: policy.policy_number || "-",
-      branch: policy.branch || "-",
-      startDate: policy.start_date || null,
-      annualPremium: Number(policy.annual_premium || 0),
-    }))
-    .sort((a, b) => {
-      const nameCompare = a.clientName.localeCompare(b.clientName);
+  let age = today.getFullYear() - birthDate.getFullYear();
 
-      if (nameCompare !== 0) return nameCompare;
+  const monthDifference = today.getMonth() - birthDate.getMonth();
 
-      return new Date(a.startDate || 0) - new Date(b.startDate || 0);
-    });
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  return age;
+}
+
+function calculateAnnualCommission(policy) {
+  const commission = Number(policy.commission_per_payment || 0);
+  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
+
+  if (frequency === "mensal") return commission * 12;
+  if (frequency === "trimestral") return commission * 4;
+  if (frequency === "semestral") return commission * 2;
+
+  return commission;
 }
 
 function buildClientsWithoutHomeInsuranceReport(clients, policies) {
@@ -110,7 +104,6 @@ function buildClientsWithoutHomeInsuranceReport(clients, policies) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-
 function buildClientsWithoutHealthInsuranceReport(clients, policies) {
   const clientsWithHealthInsurance = new Set();
 
@@ -138,7 +131,7 @@ function buildClientsWithoutHealthInsuranceReport(clients, policies) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function buildTopClientsReport(policies) {
+function buildTopClientsPremiumReport(policies) {
   const activePolicies = policies.filter(
     (policy) => policy.status !== "anulada"
   );
@@ -170,24 +163,77 @@ function buildTopClientsReport(policies) {
     .slice(0, 10);
 }
 
-function calculateAge(date) {
-  if (!date) return null;
+function buildTopClientsCommissionReport(policies) {
+  const activePolicies = policies.filter(
+    (policy) => policy.status !== "anulada"
+  );
 
-  const today = new Date();
-  const birthDate = new Date(date);
+  const clientStats = {};
 
-  let age = today.getFullYear() - birthDate.getFullYear();
+  activePolicies.forEach((policy) => {
+    const clientId = policy.client_id || "sem_cliente";
+    const clientName = policy.clients?.name || "Sem cliente";
+    const clientNif = policy.clients?.nif || "-";
+    const premium = Number(policy.annual_premium || 0);
+    const commission = calculateAnnualCommission(policy);
 
-  const monthDifference = today.getMonth() - birthDate.getMonth();
+    if (!clientStats[clientId]) {
+      clientStats[clientId] = {
+        id: clientId,
+        name: clientName,
+        nif: clientNif,
+        policies: 0,
+        premium: 0,
+        commission: 0,
+      };
+    }
 
-  if (
-    monthDifference < 0 ||
-    (monthDifference === 0 && today.getDate() < birthDate.getDate())
-  ) {
-    age--;
-  }
+    clientStats[clientId].policies += 1;
+    clientStats[clientId].premium += premium;
+    clientStats[clientId].commission += commission;
+  });
 
-  return age;
+  return Object.values(clientStats)
+    .sort((a, b) => b.commission - a.commission)
+    .slice(0, 10);
+}
+
+function buildRealVida2026Report(policies) {
+  return policies
+    .filter((policy) => {
+      const insurerName = String(policy.insurers?.name || "")
+        .toLowerCase()
+        .trim();
+
+      const startDate = policy.start_date
+        ? new Date(policy.start_date)
+        : null;
+
+      return (
+        insurerName === "real vida" &&
+        startDate &&
+        startDate >= new Date("2026-01-01") &&
+        startDate <= new Date("2026-12-31") &&
+        policy.status !== "anulada"
+      );
+    })
+    .map((policy) => ({
+      id: policy.id,
+      clientId: policy.client_id || null,
+      clientName: policy.clients?.name || "Sem cliente",
+      clientNif: policy.clients?.nif || "-",
+      policyNumber: policy.policy_number || "-",
+      branch: policy.branch || "-",
+      startDate: policy.start_date || null,
+      annualPremium: Number(policy.annual_premium || 0),
+    }))
+    .sort((a, b) => {
+      const nameCompare = a.clientName.localeCompare(b.clientName);
+
+      if (nameCompare !== 0) return nameCompare;
+
+      return new Date(a.startDate || 0) - new Date(b.startDate || 0);
+    });
 }
 
 function buildClientsUntil40Report(clients) {
@@ -208,21 +254,39 @@ function buildClientsUntil40Report(clients) {
     });
 }
 
+function exportCsv(filename, header, rows) {
+  const csvContent = [header, ...rows]
+    .map((row) =>
+      row
+        .map((cell) =>
+          `"${String(cell).replace(/"/g, '""')}"`
+        )
+        .join(";")
+    )
+    .join("\n");
+
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.setAttribute("download", filename);
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
+}
+
 export default function Relatorios({ clients, policies }) {
-  const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedReport, setSelectedReport] = useState("topClientesPremio");
 
-  const topClients = buildTopClientsReport(policies);
-
-  const realVida2026 = buildRealVida2026Report(policies);
-
-  const realVida2026Totals = {
-    clients: new Set(realVida2026.map((item) => item.clientNif)).size,
-    policies: realVida2026.length,
-    premium: realVida2026.reduce(
-      (sum, item) => sum + Number(item.annualPremium || 0),
-      0
-    ),
-  };
+  const topClientsPremium = buildTopClientsPremiumReport(policies);
+  const topClientsCommission = buildTopClientsCommissionReport(policies);
 
   const clientsWithoutHomeInsurance =
     buildClientsWithoutHomeInsuranceReport(
@@ -236,34 +300,119 @@ export default function Relatorios({ clients, policies }) {
       policies
     );
 
+  const realVida2026 = buildRealVida2026Report(policies);
+
+  const realVida2026Totals = {
+    clients: new Set(realVida2026.map((item) => item.clientNif)).size,
+    policies: realVida2026.length,
+    premium: realVida2026.reduce(
+      (sum, item) => sum + Number(item.annualPremium || 0),
+      0
+    ),
+  };
+
   const clientsUntil40 = buildClientsUntil40Report(clients);
 
-  function exportCsv(filename, header, rows) {
-    const csvContent = [header, ...rows]
-      .map((row) =>
-        row
-          .map((cell) =>
-            `"${String(cell).replace(/"/g, '""')}"`
-          )
-          .join(";")
-      )
-      .join("\n");
+  const selectedReportInfo = reportOptions.find(
+    (report) => report.value === selectedReport
+  );
 
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
+  function printReportPdf() {
+    window.print();
+  }
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+  function exportTopClientsPremiumCsv() {
+    const header = [
+      "Posição",
+      "Cliente",
+      "NIF",
+      "Nº Apólices em vigor",
+      "Prémio total em vigor",
+    ];
 
-    link.href = url;
-    link.setAttribute("download", filename);
+    const rows = topClientsPremium.map((client, index) => [
+      index + 1,
+      client.name,
+      client.nif,
+      client.policies,
+      client.premium.toFixed(2),
+    ]);
 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    exportCsv(
+      "top_10_clientes_premio_em_vigor.csv",
+      header,
+      rows
+    );
+  }
 
-    URL.revokeObjectURL(url);
+  function exportTopClientsCommissionCsv() {
+    const header = [
+      "Posição",
+      "Cliente",
+      "NIF",
+      "Nº Apólices em vigor",
+      "Prémio total em vigor",
+      "Comissão anual",
+    ];
+
+    const rows = topClientsCommission.map((client, index) => [
+      index + 1,
+      client.name,
+      client.nif,
+      client.policies,
+      client.premium.toFixed(2),
+      client.commission.toFixed(2),
+    ]);
+
+    exportCsv(
+      "top_10_clientes_comissoes.csv",
+      header,
+      rows
+    );
+  }
+
+  function exportClientsWithoutHealthCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsWithoutHealthInsurance.map((client) => [
+      client.name,
+      client.nif,
+      client.phone,
+      client.email,
+    ]);
+
+    exportCsv(
+      "clientes_sem_seguro_saude.csv",
+      header,
+      rows
+    );
+  }
+
+  function exportClientsWithoutHomeCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsWithoutHomeInsurance.map((client) => [
+      client.name,
+      client.nif,
+      client.phone,
+      client.email,
+    ]);
+
+    exportCsv(
+      "clientes_sem_seguro_casa.csv",
+      header,
+      rows
+    );
   }
 
   function exportRealVida2026Csv() {
@@ -318,146 +467,35 @@ export default function Relatorios({ clients, policies }) {
     );
   }
 
-  function exportTopClientsCsv() {
-    const header = [
-      "Posição",
-      "Cliente",
-      "NIF",
-      "Nº Apólices em vigor",
-      "Prémio total em vigor",
-    ];
+  function exportSelectedReport() {
+    if (selectedReport === "topClientesPremio") {
+      exportTopClientsPremiumCsv();
+      return;
+    }
 
-    const rows = topClients.map((client, index) => [
-      index + 1,
-      client.name,
-      client.nif,
-      client.policies,
-      client.premium.toFixed(2),
-    ]);
+    if (selectedReport === "topClientesComissoes") {
+      exportTopClientsCommissionCsv();
+      return;
+    }
 
-    const csvContent = [header, ...rows]
-      .map((row) =>
-        row
-          .map((cell) =>
-            `"${String(cell).replace(/"/g, '""')}"`
-          )
-          .join(";")
-      )
-      .join("\n");
+    if (selectedReport === "semCasa") {
+      exportClientsWithoutHomeCsv();
+      return;
+    }
 
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
+    if (selectedReport === "semSaude") {
+      exportClientsWithoutHealthCsv();
+      return;
+    }
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
+    if (selectedReport === "realVida2026") {
+      exportRealVida2026Csv();
+      return;
+    }
 
-    link.href = url;
-    link.setAttribute(
-      "download",
-      "top_10_clientes_premio_em_vigor.csv"
-    );
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-  }
-
-  function printTopClientsPdf() {
-    window.print();
-  }
-
-
-  function exportClientsWithoutHealthCsv() {
-    const header = [
-      "Cliente",
-      "NIF",
-      "Telefone",
-      "Email",
-    ];
-
-    const rows = clientsWithoutHealthInsurance.map((client) => [
-      client.name,
-      client.nif,
-      client.phone,
-      client.email,
-    ]);
-
-    const csvContent = [header, ...rows]
-      .map((row) =>
-        row
-          .map((cell) =>
-            `"${String(cell).replace(/"/g, '""')}"`
-          )
-          .join(";")
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.setAttribute(
-      "download",
-      "clientes_sem_seguro_saude.csv"
-    );
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-  }
-
-  function exportClientsWithoutHomeCsv() {
-    const header = [
-      "Cliente",
-      "NIF",
-      "Telefone",
-      "Email",
-    ];
-
-    const rows = clientsWithoutHomeInsurance.map((client) => [
-      client.name,
-      client.nif,
-      client.phone,
-      client.email,
-    ]);
-
-    const csvContent = [header, ...rows]
-      .map((row) =>
-        row
-          .map((cell) =>
-            `"${String(cell).replace(/"/g, '""')}"`
-          )
-          .join(";")
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.setAttribute(
-      "download",
-      "clientes_sem_seguro_casa.csv"
-    );
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
+    if (selectedReport === "clientesAte40") {
+      exportClientsUntil40Csv();
+    }
   }
 
   return (
@@ -469,244 +507,66 @@ export default function Relatorios({ clients, policies }) {
           <div>
             <h1 style={title}>Relatórios</h1>
             <p style={subtitle}>
-              Relatórios pré-definidos para análise da carteira.
+              Seleciona um relatório e consulta os dados na hora.
             </p>
           </div>
         </header>
 
-        <section style={reportsGrid}>
-          <button
-            style={{
-              ...reportCard,
-              borderTop: "6px solid #2563eb",
-            }}
-            onClick={() =>
-              setSelectedReport("topClientes")
-            }
+        <section style={selectorCard}>
+          <label style={label}>Selecionar relatório</label>
+
+          <select
+            style={select}
+            value={selectedReport}
+            onChange={(e) => setSelectedReport(e.target.value)}
           >
-            <h2 style={reportTitle}>
-              Top 10 clientes
-            </h2>
+            {reportOptions.map((report) => (
+              <option key={report.value} value={report.value}>
+                {report.label}
+              </option>
+            ))}
+          </select>
 
-            <p style={reportText}>
-              Clientes com maior prémio comercial total em vigor.
+          {selectedReportInfo && (
+            <p style={muted}>
+              {selectedReportInfo.description}
             </p>
+          )}
 
-            <strong style={reportAction}>
-              Abrir relatório
-            </strong>
-          </button>
+          <div style={buttonGroup}>
+            <button
+              style={secondaryButton}
+              onClick={printReportPdf}
+            >
+              Gerar PDF
+            </button>
 
-          <button
-            style={{
-              ...reportCard,
-              borderTop: "6px solid #f59e0b",
-            }}
-            onClick={() =>
-              setSelectedReport("semCasa")
-            }
-          >
-            <h2 style={reportTitle}>
-              Clientes sem seguro da casa
-            </h2>
-
-            <p style={reportText}>
-              Lista de clientes que não têm apólice CASA em vigor.
-            </p>
-
-            <strong style={reportAction}>
-              Abrir relatório
-            </strong>
-          </button>
-          <button
-            style={{
-              ...reportCard,
-              borderTop: "6px solid #16a34a",
-            }}
-            onClick={() =>
-              setSelectedReport("semSaude")
-            }
-          >
-            <h2 style={reportTitle}>
-              Clientes sem seguro de saúde
-            </h2>
-
-            <p style={reportText}>
-              Lista de clientes que não têm seguro de saúde em vigor.
-            </p>
-
-            <strong style={reportAction}>
-              Abrir relatório
-            </strong>
-          </button>
-
-          <button
-            style={{
-              ...reportCard,
-              borderTop: "6px solid #7c3aed",
-            }}
-            onClick={() =>
-              setSelectedReport("realVida2026")
-            }
-          >
-            <h2 style={reportTitle}>
-              Real Vida 2026
-            </h2>
-
-            <p style={reportText}>
-              Clientes, apólices e prémios anuais de apólices iniciadas em 2026 na Real Vida.
-            </p>
-
-            <strong style={reportAction}>
-              Abrir relatório
-            </strong>
-          </button>
-
-          <button
-            style={{
-              ...reportCard,
-              borderTop: "6px solid #0ea5e9",
-            }}
-            onClick={() =>
-              setSelectedReport("clientesAte40")
-            }
-          >
-            <h2 style={reportTitle}>
-              Clientes até 40 anos
-            </h2>
-
-            <p style={reportText}>
-              Lista de clientes com idade até 40 anos, com ligação direta para a ficha.
-            </p>
-
-            <strong style={reportAction}>
-              Abrir relatório
-            </strong>
-          </button>
-
+            <button
+              style={button}
+              onClick={exportSelectedReport}
+            >
+              Exportar Excel
+            </button>
+          </div>
         </section>
 
-        {selectedReport === "clientesAte40" && (
+        {selectedReport === "topClientesPremio" && (
           <section style={panel}>
-            <div style={reportHeader}>
-              <div>
-                <h2 style={panelTitle}>
-                  Clientes até 40 anos
-                </h2>
+            <h2 style={panelTitle}>
+              Top 10 clientes por prémio total em vigor
+            </h2>
 
-                <p style={muted}>
-                  Lista de clientes com data de nascimento registada e idade até 40 anos.
-                </p>
-              </div>
+            <p style={muted}>
+              Considera apenas apólices em vigor. Apólices anuladas ficam excluídas.
+            </p>
 
-              <div style={buttonGroup}>
-                <button
-                  style={secondaryButton}
-                  onClick={printTopClientsPdf}
-                >
-                  Gerar PDF
-                </button>
-
-                <button
-                  style={button}
-                  onClick={exportClientsUntil40Csv}
-                >
-                  Exportar Excel
-                </button>
-              </div>
-            </div>
-
-            {clientsUntil40.length === 0 ? (
-              <p style={muted}>
-                Sem clientes até 40 anos com data de nascimento registada.
-              </p>
-            ) : (
-              <div style={table}>
-                <div style={tableHeaderClientsAge}>
-                  <span>Cliente</span>
-                  <span>NIF</span>
-                  <span>Idade</span>
-                  <span>Data nascimento</span>
-                  <span>Telefone</span>
-                  <span>Ficha</span>
-                </div>
-
-                {clientsUntil40.map((client) => (
-                  <div
-                    key={client.id}
-                    style={tableRowClientsAge}
-                  >
-                    <strong>
-                      {client.name}
-                    </strong>
-
-                    <span>
-                      {client.nif}
-                    </span>
-
-                    <strong>
-                      {client.age}
-                    </strong>
-
-                    <span>
-                      {formatDate(client.birthDate)}
-                    </span>
-
-                    <span>
-                      {client.phone}
-                    </span>
-
-                    <Link
-                      href={`/clientes/${client.id}`}
-                      style={openClientButton}
-                    >
-                      Abrir ficha
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-
-        {selectedReport === "topClientes" && (
-          <section style={panel}>
-            <div style={reportHeader}>
-              <div>
-                <h2 style={panelTitle}>
-                  Top 10 clientes por prémio total em vigor
-                </h2>
-
-                <p style={muted}>
-                  Considera apenas apólices em vigor. Apólices anuladas ficam excluídas.
-                </p>
-              </div>
-
-              <div style={buttonGroup}>
-                <button
-                  style={secondaryButton}
-                  onClick={printTopClientsPdf}
-                >
-                  Gerar PDF
-                </button>
-
-                <button
-                  style={button}
-                  onClick={exportTopClientsCsv}
-                >
-                  Exportar Excel
-                </button>
-              </div>
-            </div>
-
-            {topClients.length === 0 ? (
+            {topClientsPremium.length === 0 ? (
               <p style={muted}>
                 Sem dados disponíveis.
               </p>
             ) : (
               <div style={table}>
-                <div style={tableHeader}>
+                <div style={tableHeaderTop}>
                   <span>#</span>
                   <span>Cliente</span>
                   <span>NIF</span>
@@ -714,27 +574,15 @@ export default function Relatorios({ clients, policies }) {
                   <span>Prémio em vigor</span>
                 </div>
 
-                {topClients.map((client, index) => (
+                {topClientsPremium.map((client, index) => (
                   <div
                     key={client.id}
-                    style={tableRow}
+                    style={tableRowTop}
                   >
-                    <strong>
-                      {index + 1}
-                    </strong>
-
-                    <strong>
-                      {client.name}
-                    </strong>
-
-                    <span>
-                      {client.nif}
-                    </span>
-
-                    <span>
-                      {client.policies}
-                    </span>
-
+                    <strong>{index + 1}</strong>
+                    <strong>{client.name}</strong>
+                    <span>{client.nif}</span>
+                    <span>{client.policies}</span>
                     <strong style={premiumValue}>
                       {formatEuro(client.premium)}
                     </strong>
@@ -745,36 +593,100 @@ export default function Relatorios({ clients, policies }) {
           </section>
         )}
 
+        {selectedReport === "topClientesComissoes" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Top 10 clientes por comissões
+            </h2>
+
+            <p style={muted}>
+              Considera a comissão anual estimada das apólices em vigor.
+            </p>
+
+            {topClientsCommission.length === 0 ? (
+              <p style={muted}>
+                Sem dados disponíveis.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderCommission}>
+                  <span>#</span>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Apólices</span>
+                  <span>Prémio</span>
+                  <span>Comissão anual</span>
+                </div>
+
+                {topClientsCommission.map((client, index) => (
+                  <div
+                    key={client.id}
+                    style={tableRowCommission}
+                  >
+                    <strong>{index + 1}</strong>
+                    <strong>{client.name}</strong>
+                    <span>{client.nif}</span>
+                    <span>{client.policies}</span>
+                    <span>{formatEuro(client.premium)}</span>
+                    <strong style={premiumValue}>
+                      {formatEuro(client.commission)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {selectedReport === "semSaude" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Clientes sem seguro de saúde
+            </h2>
+
+            <p style={muted}>
+              Considera clientes sem nenhuma apólice SAÚDE em vigor.
+            </p>
+
+            {clientsWithoutHealthInsurance.length === 0 ? (
+              <p style={muted}>
+                Todos os clientes têm seguro de saúde em vigor.
+              </p>
+            ) : (
+              <ClientsSimpleTable clients={clientsWithoutHealthInsurance} />
+            )}
+          </section>
+        )}
+
+        {selectedReport === "semCasa" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Clientes sem seguro da casa
+            </h2>
+
+            <p style={muted}>
+              Considera clientes que não têm nenhuma apólice CASA em vigor.
+            </p>
+
+            {clientsWithoutHomeInsurance.length === 0 ? (
+              <p style={muted}>
+                Todos os clientes têm seguro da casa em vigor.
+              </p>
+            ) : (
+              <ClientsSimpleTable clients={clientsWithoutHomeInsurance} />
+            )}
+          </section>
+        )}
 
         {selectedReport === "realVida2026" && (
           <section style={panel}>
-            <div style={reportHeader}>
-              <div>
-                <h2 style={panelTitle}>
-                  Real Vida — Apólices iniciadas em 2026
-                </h2>
+            <h2 style={panelTitle}>
+              Real Vida — Apólices iniciadas em 2026
+            </h2>
 
-                <p style={muted}>
-                  Lista de clientes, apólices e prémios anuais de apólices em vigor iniciadas em 2026 na Real Vida.
-                </p>
-              </div>
-
-              <div style={buttonGroup}>
-                <button
-                  style={secondaryButton}
-                  onClick={printTopClientsPdf}
-                >
-                  Gerar PDF
-                </button>
-
-                <button
-                  style={button}
-                  onClick={exportRealVida2026Csv}
-                >
-                  Exportar Excel
-                </button>
-              </div>
-            </div>
+            <p style={muted}>
+              Lista de clientes, apólices e prémios anuais de apólices em vigor iniciadas em 2026 na Real Vida.
+            </p>
 
             <div style={summaryGrid}>
               <div style={summaryBox}>
@@ -843,141 +755,48 @@ export default function Relatorios({ clients, policies }) {
           </section>
         )}
 
-
-        {selectedReport === "semSaude" && (
+        {selectedReport === "clientesAte40" && (
           <section style={panel}>
-            <div style={reportHeader}>
-              <div>
-                <h2 style={panelTitle}>
-                  Clientes sem seguro de saúde
-                </h2>
+            <h2 style={panelTitle}>
+              Clientes até 40 anos
+            </h2>
 
-                <p style={muted}>
-                  Considera clientes sem nenhuma apólice SAÚDE em vigor.
-                </p>
-              </div>
+            <p style={muted}>
+              Lista de clientes com data de nascimento registada e idade até 40 anos.
+            </p>
 
-              <div style={buttonGroup}>
-                <button
-                  style={secondaryButton}
-                  onClick={printTopClientsPdf}
-                >
-                  Gerar PDF
-                </button>
-
-                <button
-                  style={button}
-                  onClick={exportClientsWithoutHealthCsv}
-                >
-                  Exportar Excel
-                </button>
-              </div>
-            </div>
-
-            {clientsWithoutHealthInsurance.length === 0 ? (
+            {clientsUntil40.length === 0 ? (
               <p style={muted}>
-                Todos os clientes têm seguro de saúde em vigor.
+                Sem clientes até 40 anos com data de nascimento registada.
               </p>
             ) : (
               <div style={table}>
-                <div style={tableHeaderHome}>
+                <div style={tableHeaderClientsAge}>
                   <span>Cliente</span>
                   <span>NIF</span>
+                  <span>Idade</span>
+                  <span>Data nascimento</span>
                   <span>Telefone</span>
-                  <span>Email</span>
+                  <span>Ficha</span>
                 </div>
 
-                {clientsWithoutHealthInsurance.map((client) => (
+                {clientsUntil40.map((client) => (
                   <div
                     key={client.id}
-                    style={tableRowHome}
+                    style={tableRowClientsAge}
                   >
-                    <strong>
-                      {client.name}
-                    </strong>
+                    <strong>{client.name}</strong>
+                    <span>{client.nif}</span>
+                    <strong>{client.age}</strong>
+                    <span>{formatDate(client.birthDate)}</span>
+                    <span>{client.phone}</span>
 
-                    <span>
-                      {client.nif}
-                    </span>
-
-                    <span>
-                      {client.phone}
-                    </span>
-
-                    <span>
-                      {client.email}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-
-        {selectedReport === "semCasa" && (
-          <section style={panel}>
-            <div style={reportHeader}>
-              <div>
-                <h2 style={panelTitle}>
-                  Clientes sem seguro da casa
-                </h2>
-
-                <p style={muted}>
-                  Considera clientes que não têm nenhuma apólice CASA em vigor.
-                </p>
-              </div>
-
-              <div style={buttonGroup}>
-                <button
-                  style={secondaryButton}
-                  onClick={printTopClientsPdf}
-                >
-                  Gerar PDF
-                </button>
-
-                <button
-                  style={button}
-                  onClick={exportClientsWithoutHomeCsv}
-                >
-                  Exportar Excel
-                </button>
-              </div>
-            </div>
-
-            {clientsWithoutHomeInsurance.length === 0 ? (
-              <p style={muted}>
-                Todos os clientes têm seguro da casa em vigor.
-              </p>
-            ) : (
-              <div style={table}>
-                <div style={tableHeaderHome}>
-                  <span>Cliente</span>
-                  <span>NIF</span>
-                  <span>Telefone</span>
-                  <span>Email</span>
-                </div>
-
-                {clientsWithoutHomeInsurance.map((client) => (
-                  <div
-                    key={client.id}
-                    style={tableRowHome}
-                  >
-                    <strong>
-                      {client.name}
-                    </strong>
-
-                    <span>
-                      {client.nif}
-                    </span>
-
-                    <span>
-                      {client.phone}
-                    </span>
-
-                    <span>
-                      {client.email}
-                    </span>
+                    <Link
+                      href={`/clientes/${client.id}`}
+                      style={openClientButton}
+                    >
+                      Abrir ficha
+                    </Link>
                   </div>
                 ))}
               </div>
@@ -988,6 +807,83 @@ export default function Relatorios({ clients, policies }) {
     </div>
   );
 }
+
+function ClientsSimpleTable({ clients }) {
+  return (
+    <div style={table}>
+      <div style={tableHeaderHome}>
+        <span>Cliente</span>
+        <span>NIF</span>
+        <span>Telefone</span>
+        <span>Email</span>
+        <span>Ficha</span>
+      </div>
+
+      {clients.map((client) => (
+        <div
+          key={client.id}
+          style={tableRowHome}
+        >
+          <strong>
+            {client.name}
+          </strong>
+
+          <span>
+            {client.nif}
+          </span>
+
+          <span>
+            {client.phone}
+          </span>
+
+          <span>
+            {client.email}
+          </span>
+
+          <Link
+            href={`/clientes/${client.id}`}
+            style={openClientButton}
+          >
+            Abrir ficha
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const reportOptions = [
+  {
+    value: "topClientesPremio",
+    label: "Top 10 clientes por prémio",
+    description: "Clientes com maior prémio comercial total em vigor.",
+  },
+  {
+    value: "topClientesComissoes",
+    label: "Top 10 clientes por comissões",
+    description: "Clientes com maior comissão anual estimada.",
+  },
+  {
+    value: "semCasa",
+    label: "Clientes sem seguro da casa",
+    description: "Clientes que não têm nenhuma apólice CASA em vigor.",
+  },
+  {
+    value: "semSaude",
+    label: "Clientes sem seguro de saúde",
+    description: "Clientes que não têm nenhuma apólice SAÚDE em vigor.",
+  },
+  {
+    value: "realVida2026",
+    label: "Real Vida 2026",
+    description: "Apólices Real Vida iniciadas em 2026.",
+  },
+  {
+    value: "clientesAte40",
+    label: "Clientes até 40 anos",
+    description: "Clientes com idade até 40 anos.",
+  },
+];
 
 const page = {
   display: "flex",
@@ -1015,39 +911,28 @@ const subtitle = {
   marginTop: 10,
 };
 
-const reportsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 18,
-  marginBottom: 30,
-};
-
-const reportCard = {
+const selectorCard = {
   background: "white",
   padding: 24,
   borderRadius: 18,
-  border: "none",
+  marginBottom: 24,
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-  cursor: "pointer",
-  textAlign: "left",
+  display: "grid",
+  gap: 12,
 };
 
-const reportTitle = {
-  margin: 0,
-  fontSize: 22,
-  color: "#111827",
-};
-
-const reportText = {
+const label = {
+  fontSize: 13,
   color: "#6b7280",
-  marginTop: 10,
-  lineHeight: 1.4,
+  fontWeight: "bold",
 };
 
-const reportAction = {
-  display: "inline-block",
-  marginTop: 12,
-  color: "#2563eb",
+const select = {
+  padding: 14,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
+  maxWidth: 520,
 };
 
 const panel = {
@@ -1058,16 +943,8 @@ const panel = {
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const reportHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 20,
-  alignItems: "flex-start",
-  marginBottom: 24,
-};
-
 const panelTitle = {
-  margin: 0,
+  marginTop: 0,
 };
 
 const buttonGroup = {
@@ -1101,7 +978,7 @@ const table = {
   gap: 8,
 };
 
-const tableHeader = {
+const tableHeaderTop = {
   display: "grid",
   gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr",
   gap: 12,
@@ -1112,7 +989,7 @@ const tableHeader = {
   fontSize: 14,
 };
 
-const tableRow = {
+const tableRowTop = {
   display: "grid",
   gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr",
   gap: 12,
@@ -1121,9 +998,29 @@ const tableRow = {
   alignItems: "center",
 };
 
+const tableHeaderCommission = {
+  display: "grid",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const tableRowCommission = {
+  display: "grid",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+};
+
 const tableHeaderHome = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.6fr",
+  gridTemplateColumns: "2fr 1fr 1fr 1.6fr 1fr",
   gap: 12,
   background: "#f3f4f6",
   padding: "12px 14px",
@@ -1134,7 +1031,7 @@ const tableHeaderHome = {
 
 const tableRowHome = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.6fr",
+  gridTemplateColumns: "2fr 1fr 1fr 1.6fr 1fr",
   gap: 12,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
@@ -1155,6 +1052,26 @@ const tableHeaderRealVida = {
 const tableRowRealVida = {
   display: "grid",
   gridTemplateColumns: "2fr 1fr 1.2fr 1fr 1fr 1.2fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+};
+
+const tableHeaderClientsAge = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const tableRowClientsAge = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
   gap: 12,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
@@ -1185,26 +1102,6 @@ const summaryLabel = {
 const summaryValue = {
   color: "#111827",
   fontSize: 24,
-};
-
-const tableHeaderClientsAge = {
-  display: "grid",
-  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
-  gap: 12,
-  background: "#f3f4f6",
-  padding: "12px 14px",
-  borderRadius: 12,
-  fontWeight: "bold",
-  fontSize: 14,
-};
-
-const tableRowClientsAge = {
-  display: "grid",
-  gridTemplateColumns: "2fr 1fr 0.7fr 1.2fr 1fr 1fr",
-  gap: 12,
-  padding: "14px",
-  borderBottom: "1px solid #e5e7eb",
-  alignItems: "center",
 };
 
 const openClientButton = {
