@@ -148,6 +148,27 @@ function getCell(row, possibleNames) {
   return "";
 }
 
+function normalizePolicyNumber(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s/g, "")
+    .toUpperCase();
+}
+
+function buildRealVidaPolicyNumber(row) {
+  const mod = String(getCell(row, ["Mod", "Modulo", "Módulo"]))
+    .trim();
+
+  const apolice = String(getCell(row, ["Apolice", "Apólice", "Policy"]))
+    .trim();
+
+  if (mod && apolice) {
+    return `${mod}/${apolice}`;
+  }
+
+  return apolice;
+}
+
 function loadSheetJs() {
   return new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && window.XLSX) {
@@ -201,7 +222,7 @@ export default function Importacoes({ clients, policies, insurers }) {
     const map = new Map();
 
     policies.forEach((policy) => {
-      const policyNumber = String(policy.policy_number || "").trim();
+      const policyNumber = normalizePolicyNumber(policy.policy_number);
 
       if (policyNumber) {
         map.set(policyNumber, policy);
@@ -213,9 +234,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   const analyzedRows = useMemo(() => {
     return rows.map((row, index) => {
-      const policyNumber = String(
-        getCell(row, ["Apolice", "Apólice", "Policy"])
-      ).trim();
+      const policyNumber = buildRealVidaPolicyNumber(row);
 
       const clientName = String(
         getCell(row, ["Tomador", "Cliente", "Nome"])
@@ -258,7 +277,7 @@ export default function Importacoes({ clients, policies, insurers }) {
         : null;
 
       const existingPolicy = policyNumber
-        ? existingPoliciesByNumber.get(policyNumber)
+        ? existingPoliciesByNumber.get(normalizePolicyNumber(policyNumber))
         : null;
 
       return {
@@ -366,7 +385,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <h2>Importar Excel Real Vida</h2>
 
           <p style={muted}>
-            Esta versão apenas lê e valida o ficheiro. Não cria clientes nem apólices.
+            Esta versão apenas lê e valida o ficheiro. Não cria clientes nem apólices. O nº de apólice Real Vida é tratado como Mod/Apolice, por exemplo 7/148701.
           </p>
 
           {!realVida && (
