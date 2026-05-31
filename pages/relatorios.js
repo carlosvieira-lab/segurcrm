@@ -1326,3 +1326,4 @@ const premiumValue = {
 
 const muted = {
   color: "#6b7280",
+};
