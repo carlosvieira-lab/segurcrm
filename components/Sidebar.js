@@ -27,13 +27,14 @@ export default function Sidebar({ active }) {
 
         <nav style={nav}>
           <MenuItem href="/" label="Dashboard" active={active === "dashboard"} />
-    <MenuItem href="/assistant" label="✨ IA" active={active === "assistant"} />
+          <MenuItem href="/assistant" label="✨ IA" active={active === "assistant"} />
           <MenuItem href="/pesquisa" label="Pesquisa" active={active === "pesquisa"} />
           <MenuItem href="/clientes" label="Clientes" active={active === "clientes"} />
           <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
           <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
           <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
-    <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
+          <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
+          <MenuItem href="/importacoes" label="Importações" active={active === "importacoes"} />
           <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
           <MenuItem href="/oportunidades" label="Oportunidades" active={active === "oportunidades"} />
           <MenuItem href="/sinistros" label="Sinistros" active={active === "sinistros"} />
@@ -65,42 +66,3 @@ const sidebar = {
   width: 240,
   background: "#111827",
   color: "white",
-  padding: 24,
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "space-between",
-  minHeight: "100vh",
-};
-
-const logo = {
-  marginBottom: 40,
-  fontSize: 28,
-};
-
-const nav = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 12,
-};
-
-const menuItem = {
-  color: "white",
-  textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  fontWeight: "bold",
-};
-
-const activeMenuItem = {
-  background: "#2563eb",
-};
-
-const logoutButton = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
