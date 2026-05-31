@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -230,6 +230,38 @@ function ratingStyle(rating) {
     background: "#f3f4f6",
     color: "#374151",
   };
+}
+
+const fundamentalBranches = [
+  "AUTOMÓVEL",
+  "CASA",
+  "SAUDE",
+  "VIDA",
+];
+
+function normalizeBranchName(branch) {
+  return String(branch || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function getFundamentalBranchStatus(policies) {
+  const activeBranches = new Set(
+    policies
+      .filter((policy) => policy.status !== "anulada")
+      .map((policy) => normalizeBranchName(policy.branch))
+  );
+
+  return fundamentalBranches.map((branch) => {
+    const normalizedBranch = normalizeBranchName(branch);
+
+    return {
+      branch,
+      hasPolicy: activeBranches.has(normalizedBranch),
+    };
+  });
 }
 
 function InfoItem({ label, value }) {
@@ -826,6 +858,10 @@ const totalCommission = activePolicies.reduce(
 );
 
 const rating = clientRating(activePolicies, totalCommission);
+const fundamentalBranchStatus = getFundamentalBranchStatus(policies);
+const missingFundamentalBranches = fundamentalBranchStatus.filter(
+  (item) => !item.hasPolicy
+);
 const timelineItems = createTimeline(
   client,
   policies,
@@ -1472,6 +1508,44 @@ const timelineItems = createTimeline(
               </strong>
             </div>
           </div>
+
+          <div style={fundamentalBranchesBox}>
+            <div>
+              <h3 style={fundamentalBranchesTitle}>
+                Ramos fundamentais
+              </h3>
+
+              <p style={fundamentalBranchesText}>
+                Com base nas apólices em vigor, estes são os ramos fundamentais que o cliente tem ou ainda não tem.
+              </p>
+            </div>
+
+            <div style={fundamentalBranchesGrid}>
+              {fundamentalBranchStatus.map((item) => (
+                <div
+                  key={item.branch}
+                  style={{
+                    ...fundamentalBranchBadge,
+                    ...(item.hasPolicy
+                      ? fundamentalBranchOk
+                      : fundamentalBranchMissing),
+                  }}
+                >
+                  <strong>{item.branch}</strong>
+                  <span>{item.hasPolicy ? "Tem" : "Falta"}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={missingBranchesSummary}>
+              <strong>Em falta:</strong>{" "}
+              {missingFundamentalBranches.length === 0
+                ? "Nenhum. Cliente completo nos 4 ramos fundamentais."
+                : missingFundamentalBranches
+                    .map((item) => item.branch)
+                    .join(", ")}
+            </div>
+          </div>
         </section>
 
         <section style={communicationCard}>
@@ -2049,6 +2123,54 @@ const timelineDescription = {
   color: "#6b7280",
   margin: 0,
   lineHeight: 1.5,
+};
+
+const fundamentalBranchesBox = {
+  background: "white",
+  padding: 18,
+  borderRadius: 16,
+  marginTop: 20,
+  border: "1px solid #bfdbfe",
+};
+
+const fundamentalBranchesTitle = {
+  margin: "0 0 6px",
+};
+
+const fundamentalBranchesText = {
+  color: "#6b7280",
+  margin: "0 0 14px",
+};
+
+const fundamentalBranchesGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 12,
+};
+
+const fundamentalBranchBadge = {
+  padding: 14,
+  borderRadius: 14,
+  display: "grid",
+  gap: 6,
+  textAlign: "center",
+};
+
+const fundamentalBranchOk = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+};
+
+const fundamentalBranchMissing = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+};
+
+const missingBranchesSummary = {
+  marginTop: 14,
+  color: "#111827",
 };
 
 const communicationCard = {
