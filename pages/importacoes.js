@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -197,6 +197,7 @@ function loadSheetJs() {
 export default function Importacoes({ clients, policies, insurers }) {
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState([]);
+  const [previewSearch, setPreviewSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -329,6 +330,36 @@ export default function Importacoes({ clients, policies, insurers }) {
     };
   }, [analyzedRows]);
 
+  const filteredPreviewRows = useMemo(() => {
+    const term = cleanText(previewSearch);
+    const numbers = onlyNumbers(previewSearch);
+
+    if (!term && !numbers) return analyzedRows;
+
+    return analyzedRows.filter((row) => {
+      const text = cleanText(`
+        ${row.clientName || ""}
+        ${row.nif || ""}
+        ${row.policyNumber || ""}
+        ${row.existingClient?.name || ""}
+        ${row.existingClient?.nif || ""}
+        ${row.existingPolicy?.policy_number || ""}
+      `);
+
+      const numericText = onlyNumbers(`
+        ${row.nif || ""}
+        ${row.policyNumber || ""}
+        ${row.existingClient?.nif || ""}
+        ${row.existingPolicy?.policy_number || ""}
+      `);
+
+      return (
+        text.includes(term) ||
+        (numbers && numericText.includes(numbers))
+      );
+    });
+  }, [analyzedRows, previewSearch]);
+
   async function readExcel(event) {
     const file = event.target.files?.[0];
 
@@ -437,6 +468,23 @@ export default function Importacoes({ clients, policies, insurers }) {
                 </div>
               </div>
 
+              <div style={previewSearchBox}>
+                <label style={previewSearchLabel}>
+                  Pesquisar na pré-visualização
+                </label>
+
+                <input
+                  style={previewSearchInput}
+                  value={previewSearch}
+                  onChange={(e) => setPreviewSearch(e.target.value)}
+                  placeholder="Pesquisar por nome, NIF ou nº apólice..."
+                />
+
+                <p style={muted}>
+                  Resultados na pré-visualização: {filteredPreviewRows.length}
+                </p>
+              </div>
+
               <div style={table}>
                 <div style={tableHeader}>
                   <span>#</span>
@@ -451,7 +499,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <span>Apólice</span>
                 </div>
 
-                {analyzedRows.map((row) => {
+                {filteredPreviewRows.map((row) => {
                   const hasWarning =
                     !row.policyNumber ||
                     !row.nif ||
@@ -467,9 +515,17 @@ export default function Importacoes({ clients, policies, insurers }) {
                     >
                       <span>{row.index}</span>
 
-                      <strong>
-                        {row.clientName || "Sem nome"}
-                      </strong>
+                      <div>
+                        <strong>
+                          {row.clientName || "Sem nome"}
+                        </strong>
+
+                        {row.existingClient && (
+                          <div style={matchedText}>
+                            CRM: {row.existingClient.name}
+                          </div>
+                        )}
+                      </div>
 
                       <span>
                         {row.nif || "-"}
@@ -609,6 +665,38 @@ const summaryLabel = {
 const summaryValue = {
   fontSize: 30,
   margin: "10px 0 0",
+};
+
+const previewSearchBox = {
+  background: "#f9fafb",
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #e5e7eb",
+  marginBottom: 16,
+};
+
+const previewSearchLabel = {
+  display: "block",
+  fontSize: 13,
+  color: "#6b7280",
+  fontWeight: "bold",
+  marginBottom: 8,
+};
+
+const previewSearchInput = {
+  width: "100%",
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 15,
+  boxSizing: "border-box",
+};
+
+const matchedText = {
+  color: "#2563eb",
+  fontSize: 12,
+  marginTop: 4,
+  fontWeight: "bold",
 };
 
 const tableHeaderArea = {
