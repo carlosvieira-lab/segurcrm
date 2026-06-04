@@ -1235,3 +1235,4 @@ const badgeNew = {
 
 const muted = {
   color: "#6b7280",
+};
