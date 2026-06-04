@@ -491,7 +491,6 @@ export default function Importacoes({ clients, policies, insurers }) {
   function rowBlockingReason(row) {
     if (!row.nif) return "Sem NIF";
     if (!row.policyNumber) return "Sem nº apólice";
-    if (duplicatedNifsInExcel.has(row.nif)) return "NIF duplicado no Excel";
     if (duplicatedPoliciesInExcel.has(normalizePolicyNumber(row.policyNumber))) {
       return "Apólice duplicada no Excel";
     }
@@ -515,7 +514,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   const summary = useMemo(() => {
     const clientsNew = analyzedRows.filter(
-      (row) => row.nif && !row.existingClient && !duplicatedNifsInExcel.has(row.nif)
+      (row) => row.nif && !row.existingClient
     ).length;
 
     const clientsExisting = analyzedRows.filter(
@@ -790,7 +789,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   async function confirmGeneraliImport() {
     const confirm = window.confirm(
-      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou duplicadas no Excel NÃO serão importadas."
+      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices."
     );
 
     if (!confirm) return;
@@ -1052,7 +1051,7 @@ export default function Importacoes({ clients, policies, insurers }) {
               <SummaryCard title="Apólices existentes" value={summary.policiesExisting} color="#7c3aed" />
               <SummaryCard title="Apólices novas" value={summary.policiesNew} color="#0f766e" />
               <SummaryCard title="Linhas bloqueadas" value={summary.rowsWithErrors} color="#dc2626" />
-              <SummaryCard title="NIF duplicados Excel" value={summary.duplicatedNifs} color="#f59e0b" />
+              <SummaryCard title="NIF repetidos Excel" value={summary.duplicatedNifs} color="#2563eb" />
               <SummaryCard title="Apólices duplicadas Excel" value={summary.duplicatedPolicies} color="#f59e0b" />
             </section>
 
@@ -1096,7 +1095,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
               {summary.rowsWithErrors > 0 && (
                 <div style={warningBox}>
-                  Existem linhas bloqueadas. Linhas sem NIF, sem nº apólice ou duplicadas no Excel não serão importadas.
+                  Existem linhas bloqueadas. Só ficam bloqueadas linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel. NIF repetido é permitido quando o cliente tem várias apólices.
                 </div>
               )}
 
