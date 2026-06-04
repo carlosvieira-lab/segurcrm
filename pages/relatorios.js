@@ -26,10 +26,15 @@ export async function getServerSideProps() {
       insurers(name)
     `);
 
+  const { data: opportunities } = await supabase
+    .from("opportunities")
+    .select("id, client_id, insurance_type, status, contact_date");
+
   return {
     props: {
       clients: clients || [],
       policies: policies || [],
+      opportunities: opportunities || [],
     },
   };
 }
@@ -295,6 +300,96 @@ function buildPortfolioAuditReport(policies) {
     });
 }
 
+
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function buildWhatsappLink(phone) {
+  const numbers = onlyNumbers(phone);
+  if (!numbers) return "";
+  if (numbers.startsWith("351")) return `https://wa.me/${numbers}`;
+  return `https://wa.me/351${numbers}`;
+}
+
+function buildGeneraliClientsReport(policies, opportunities) {
+  const opportunitiesByClient = new Map();
+
+  opportunities.forEach((opportunity) => {
+    if (!opportunity.client_id) return;
+
+    if (!opportunitiesByClient.has(opportunity.client_id)) {
+      opportunitiesByClient.set(opportunity.client_id, []);
+    }
+
+    opportunitiesByClient.get(opportunity.client_id).push(opportunity);
+  });
+
+  const clientStats = {};
+
+  policies
+    .filter((policy) => {
+      const insurerName = String(policy.insurers?.name || "")
+        .toLowerCase()
+        .trim();
+
+      return (
+        insurerName.includes("generali") &&
+        policy.status !== "anulada" &&
+        policy.client_id
+      );
+    })
+    .forEach((policy) => {
+      const clientId = policy.client_id;
+      const client = policy.clients || {};
+      const premium = Number(policy.annual_premium || 0);
+      const commission = calculateAnnualCommission(policy);
+
+      if (!clientStats[clientId]) {
+        clientStats[clientId] = {
+          id: clientId,
+          name: client.name || "Sem cliente",
+          nif: client.nif || "-",
+          phone: client.phone || "-",
+          email: client.email || "-",
+          policies: 0,
+          premium: 0,
+          commission: 0,
+          branches: new Set(),
+          policyNumbers: [],
+          hasOpportunity: opportunitiesByClient.has(clientId),
+          opportunities: opportunitiesByClient.get(clientId) || [],
+        };
+      }
+
+      clientStats[clientId].policies += 1;
+      clientStats[clientId].premium += premium;
+      clientStats[clientId].commission += commission;
+
+      if (policy.branch) {
+        clientStats[clientId].branches.add(policy.branch);
+      }
+
+      if (policy.policy_number) {
+        clientStats[clientId].policyNumbers.push(policy.policy_number);
+      }
+    });
+
+  return Object.values(clientStats)
+    .map((client) => ({
+      ...client,
+      branches: [...client.branches].join(", ") || "-",
+      policyNumbers: client.policyNumbers.join(", ") || "-",
+    }))
+    .sort((a, b) => {
+      if (a.hasOpportunity !== b.hasOpportunity) {
+        return a.hasOpportunity ? 1 : -1;
+      }
+
+      return b.premium - a.premium;
+    });
+}
+
 function exportCsv(filename, header, rows) {
   const csvContent = [header, ...rows]
     .map((row) =>
@@ -323,8 +418,9 @@ function exportCsv(filename, header, rows) {
   URL.revokeObjectURL(url);
 }
 
-export default function Relatorios({ clients, policies }) {
+export default function Relatorios({ clients, policies, opportunities }) {
   const [selectedReport, setSelectedReport] = useState("topClientesPremio");
+  const [showOnlyGeneraliWithoutOpportunity, setShowOnlyGeneraliWithoutOpportunity] = useState(true);
 
   const topClientsPremium = buildTopClientsPremiumReport(policies);
   const topClientsCommission = buildTopClientsCommissionReport(policies);
@@ -350,6 +446,21 @@ export default function Relatorios({ clients, policies }) {
       (sum, item) => sum + Number(item.annualPremium || 0),
       0
     ),
+  };
+
+  const generaliClients = buildGeneraliClientsReport(policies, opportunities);
+
+  const generaliClientsFiltered = showOnlyGeneraliWithoutOpportunity
+    ? generaliClients.filter((client) => !client.hasOpportunity)
+    : generaliClients;
+
+  const generaliTotals = {
+    clients: generaliClients.length,
+    withoutOpportunity: generaliClients.filter((client) => !client.hasOpportunity).length,
+    withOpportunity: generaliClients.filter((client) => client.hasOpportunity).length,
+    policies: generaliClients.reduce((sum, client) => sum + client.policies, 0),
+    premium: generaliClients.reduce((sum, client) => sum + Number(client.premium || 0), 0),
+    commission: generaliClients.reduce((sum, client) => sum + Number(client.commission || 0), 0),
   };
 
   const clientsUntil40 = buildClientsUntil40Report(clients);
@@ -492,6 +603,40 @@ export default function Relatorios({ clients, policies }) {
     );
   }
 
+  function exportGeneraliClientsCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+      "Nº Apólices",
+      "Ramos",
+      "Nº Apólices Generali",
+      "Prémio anual",
+      "Comissão anual estimada",
+      "Tem oportunidade",
+    ];
+
+    const rows = generaliClientsFiltered.map((client) => [
+      client.name,
+      client.nif,
+      client.phone,
+      client.email,
+      client.policies,
+      client.branches,
+      client.policyNumbers,
+      client.premium.toFixed(2),
+      client.commission.toFixed(2),
+      client.hasOpportunity ? "Sim" : "Não",
+    ]);
+
+    exportCsv(
+      "generali_clientes_oportunidades.csv",
+      header,
+      rows
+    );
+  }
+
   function exportClientsUntil40Csv() {
     const header = [
       "Cliente",
@@ -581,6 +726,11 @@ export default function Relatorios({ clients, policies }) {
 
     if (selectedReport === "realVida2026") {
       exportRealVida2026Csv();
+      return;
+    }
+
+    if (selectedReport === "generaliClientes") {
+      exportGeneraliClientsCsv();
       return;
     }
 
@@ -875,6 +1025,135 @@ export default function Relatorios({ clients, policies }) {
           </section>
         )}
 
+        {selectedReport === "generaliClientes" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Generali — Clientes para oportunidades
+            </h2>
+
+            <p style={muted}>
+              Lista de clientes com apólices Generali em vigor, preparada para abrir ficha, contactar e criar oportunidades.
+            </p>
+
+            <div style={summaryGrid}>
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Clientes Generali</span>
+                <strong style={summaryValue}>{generaliTotals.clients}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Sem oportunidade</span>
+                <strong style={summaryValue}>{generaliTotals.withoutOpportunity}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Com oportunidade</span>
+                <strong style={summaryValue}>{generaliTotals.withOpportunity}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Apólices</span>
+                <strong style={summaryValue}>{generaliTotals.policies}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Prémio anual</span>
+                <strong style={summaryValue}>{formatEuro(generaliTotals.premium)}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Comissão anual</span>
+                <strong style={summaryValue}>{formatEuro(generaliTotals.commission)}</strong>
+              </div>
+            </div>
+
+            <label style={filterCheck}>
+              <input
+                type="checkbox"
+                checked={showOnlyGeneraliWithoutOpportunity}
+                onChange={(event) =>
+                  setShowOnlyGeneraliWithoutOpportunity(event.target.checked)
+                }
+              />
+              Mostrar apenas clientes sem oportunidade
+            </label>
+
+            {generaliClientsFiltered.length === 0 ? (
+              <p style={muted}>
+                Sem clientes Generali nesta seleção.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderGenerali}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Telefone</span>
+                  <span>Email</span>
+                  <span>Apólices</span>
+                  <span>Ramos</span>
+                  <span>Prémio</span>
+                  <span>Comissão</span>
+                  <span>Oportunidade</span>
+                  <span>Ações</span>
+                </div>
+
+                {generaliClientsFiltered.map((client) => {
+                  const whatsappLink = buildWhatsappLink(client.phone);
+
+                  return (
+                    <div
+                      key={client.id}
+                      style={tableRowGenerali}
+                    >
+                      <strong>{client.name}</strong>
+                      <span>{client.nif}</span>
+                      <span>{client.phone}</span>
+                      <span>{client.email}</span>
+                      <span>{client.policies}</span>
+                      <span>{client.branches}</span>
+                      <strong style={premiumValue}>{formatEuro(client.premium)}</strong>
+                      <strong style={premiumValue}>{formatEuro(client.commission)}</strong>
+
+                      <span style={client.hasOpportunity ? badgeExisting : badgeMissing}>
+                        {client.hasOpportunity ? "EXISTE" : "CRIAR"}
+                      </span>
+
+                      <div style={generaliActions}>
+                        <Link
+                          href={`/clientes/${client.id}`}
+                          style={openClientButton}
+                        >
+                          Abrir ficha
+                        </Link>
+
+                        <Link
+                          href={`/oportunidades?cliente=${client.id}`}
+                          style={createOpportunityButton}
+                        >
+                          Criar oportunidade
+                        </Link>
+
+                        {whatsappLink ? (
+                          <a
+                            href={whatsappLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={whatsappButton}
+                          >
+                            WhatsApp
+                          </a>
+                        ) : (
+                          <span style={muted}>Sem telefone</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
         {selectedReport === "clientesAte40" && (
           <section style={panel}>
             <h2 style={panelTitle}>
@@ -1002,6 +1281,11 @@ const reportOptions = [
     value: "realVida2026",
     label: "Real Vida 2026",
     description: "Apólices Real Vida iniciadas em 2026.",
+  },
+  {
+    value: "generaliClientes",
+    label: "Generali - Clientes para oportunidades",
+    description: "Clientes Generali com botões para abrir ficha, criar oportunidade e WhatsApp.",
   },
   {
     value: "clientesAte40",
@@ -1273,6 +1557,88 @@ const openClientButton = {
 
 const premiumValue = {
   color: "#16a34a",
+};
+
+const filterCheck = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  padding: 12,
+  borderRadius: 12,
+  marginBottom: 16,
+  color: "#374151",
+  fontWeight: "bold",
+};
+
+const tableHeaderGenerali = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 2.4fr",
+  gap: 10,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 13,
+  minWidth: 1500,
+};
+
+const tableRowGenerali = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 2.4fr",
+  gap: 10,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+  minWidth: 1500,
+  fontSize: 13,
+};
+
+const generaliActions = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const createOpportunityButton = {
+  background: "#16a34a",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const whatsappButton = {
+  background: "#22c55e",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const badgeExisting = {
+  background: "#dbeafe",
+  color: "#1d4ed8",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const badgeMissing = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: "bold",
+  textAlign: "center",
 };
 
 const muted = {
