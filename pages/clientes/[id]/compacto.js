@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../../components/Sidebar";
@@ -312,6 +312,21 @@ function normalizeBranchName(branch) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
+}
+
+function getBranchIcon(branch) {
+  const normalized = normalizeBranchName(branch);
+
+  if (normalized.includes("AUTOMOVEL")) return "🚗";
+  if (normalized.includes("CASA")) return "🏠";
+  if (normalized.includes("SAUDE")) return "❤️";
+  if (normalized.includes("VIDA")) return "👤";
+  if (normalized.includes("VIAGEM")) return "✈️";
+  if (normalized.includes("CAES") || normalized.includes("GATOS")) return "🐾";
+  if (normalized.includes("FINANCEIROS")) return "💶";
+  if (normalized.includes("ATCO") || normalized.includes("ATCP")) return "🛡️";
+
+  return "📄";
 }
 
 function getFundamentalBranchStatus(policies) {
@@ -1612,7 +1627,6 @@ const timelineItems = createTimeline(
           <h2 style={sectionTitle}>Dados do cliente</h2>
 
           <div style={clientInfoGrid}>
-            <InfoItem label="Nome" value={client.name} />
             <InfoItem label="NIF" value={client.nif} />
             <InfoItem label="Telefone" value={client.phone} />
             <InfoItem label="Email" value={client.email} />
@@ -1719,7 +1733,12 @@ const timelineItems = createTimeline(
                       : fundamentalBranchMissing),
                   }}
                 >
-                  <strong>{item.branch}</strong>
+                  <strong>
+                    <span style={fundamentalBranchIcon}>
+                      {getBranchIcon(item.branch)}
+                    </span>
+                    {item.branch}
+                  </strong>
                   <span>{item.hasPolicy ? "Tem" : "Falta"}</span>
                 </div>
               ))}
@@ -1888,7 +1907,12 @@ const timelineItems = createTimeline(
   }}
 >
                   <div style={policyTop}>
-                    <h3>{policy.branch || "Sem ramo"}</h3>
+                    <h3 style={policyTitle}>
+                      <span style={policyIcon}>
+                        {getBranchIcon(policy.branch)}
+                      </span>
+                      {policy.branch || "Sem ramo"}
+                    </h3>
                     <span style={badge}>{policy.status || "ativa"}</span>
                   </div>
 
@@ -2021,62 +2045,72 @@ const headerButtons = {
 };
 
 const title = {
-  fontSize: 32,
+  fontSize: 36,
   margin: 0,
-  lineHeight: 1.1,
+  lineHeight: 1.05,
+  color: "#15803d",
+  fontWeight: 900,
 };
 
 const subtitle = {
-  color: "#6b7280",
+  color: "#475569",
   margin: "6px 0 0",
+  fontSize: 18,
 };
 
 const sectionTitle = {
-  margin: "0 0 14px",
-  fontSize: 19,
+  margin: "0 0 12px",
+  fontSize: 20,
   lineHeight: 1.2,
+  color: "#0f172a",
+  fontWeight: 900,
 };
 
 const clientInfoCard = {
-  background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
+  background: "linear-gradient(135deg, #dcfce7, #eff6ff)",
   padding: 18,
   borderRadius: 18,
   marginBottom: 16,
+  border: "1px solid #bbf7d0",
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const clientInfoGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))",
   gap: 10,
   marginBottom: 14,
 };
 
 const infoItem = {
-  background: "white",
+  background: "rgba(255,255,255,0.92)",
   padding: "10px 12px",
   borderRadius: 12,
   display: "flex",
   flexDirection: "column",
-  gap: 4,
-  minHeight: 54,
+  gap: 5,
+  minHeight: 58,
+  border: "1px solid #d1fae5",
 };
 
 const infoLabel = {
-  color: "#6b7280",
-  fontSize: 12,
+  color: "#15803d",
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const infoValue = {
-  color: "#111827",
-  fontSize: 14,
-  lineHeight: 1.25,
+  color: "#020617",
+  fontSize: 16,
+  lineHeight: 1.18,
+  wordBreak: "break-word",
 };
 
 const clientStats = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
   gap: 10,
+  marginTop: 10,
 };
 
 const statBox = {
@@ -2086,17 +2120,19 @@ const statBox = {
   display: "flex",
   flexDirection: "column",
   gap: 4,
+  border: "1px solid #e5e7eb",
 };
 
 const statLabel = {
-  color: "#6b7280",
-  fontSize: 12,
+  color: "#15803d",
+  fontSize: 13,
+  fontWeight: 800,
 };
 
 const statValue = {
-  fontSize: 20,
+  fontSize: 24,
   color: "#2563eb",
-  lineHeight: 1.15,
+  lineHeight: 1.1,
 };
 
 const button = {
@@ -2178,8 +2214,9 @@ const policyCard = {
   background: "#f9fafb",
   padding: 14,
   borderRadius: 12,
-  fontSize: 14,
-  lineHeight: 1.25,
+  fontSize: 15,
+  lineHeight: 1.22,
+  border: "1px solid #e5e7eb",
 };
 
 const policyTop = {
@@ -2324,38 +2361,39 @@ const quickNoteTextarea = {
 };
 
 const timelineCard = {
-  background: "white",
-  padding: 18,
+  background: "linear-gradient(135deg, #eff6ff, #f8fafc)",
+  padding: 14,
   borderRadius: 16,
   marginBottom: 16,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  border: "1px solid #bfdbfe",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const timelineList = {
   display: "grid",
-  gap: 9,
+  gap: 6,
 };
 
 const timelineItem = {
   display: "grid",
-  gridTemplateColumns: "14px 1fr",
-  gap: 8,
+  gridTemplateColumns: "10px 1fr",
+  gap: 7,
   alignItems: "flex-start",
 };
 
 const timelineDot = {
-  width: 10,
-  height: 10,
+  width: 8,
+  height: 8,
   borderRadius: 999,
   background: "#2563eb",
-  marginTop: 8,
+  marginTop: 9,
 };
 
 const timelineContent = {
-  background: "#f9fafb",
-  padding: 10,
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
+  background: "white",
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #dbeafe",
 };
 
 const timelineTop = {
@@ -2363,7 +2401,7 @@ const timelineTop = {
   justifyContent: "space-between",
   gap: 10,
   alignItems: "center",
-  marginBottom: 5,
+  marginBottom: 3,
 };
 
 const timelineBadge = {
@@ -2381,15 +2419,15 @@ const timelineDate = {
 const timelineTitle = {
   display: "block",
   color: "#111827",
-  marginBottom: 2,
+  marginBottom: 1,
   fontSize: 14,
 };
 
 const timelineDescription = {
-  color: "#6b7280",
+  color: "#475569",
   margin: 0,
-  lineHeight: 1.35,
-  fontSize: 13,
+  lineHeight: 1.25,
+  fontSize: 12,
 };
 
 const fundamentalBranchesBox = {
@@ -2422,7 +2460,8 @@ const fundamentalBranchBadge = {
   display: "grid",
   gap: 4,
   textAlign: "center",
-  fontSize: 13,
+  fontSize: 14,
+  alignItems: "center",
 };
 
 const fundamentalBranchOk = {
@@ -2525,4 +2564,26 @@ const cancelButton = {
   cursor: "pointer",
   fontWeight: "bold",
   fontSize: 13,
+};
+
+
+const policyTitle = {
+  margin: 0,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 19,
+  color: "#0f172a",
+};
+
+const policyIcon = {
+  fontSize: 24,
+  lineHeight: 1,
+};
+
+const fundamentalBranchIcon = {
+  display: "inline-block",
+  marginRight: 8,
+  fontSize: 24,
+  verticalAlign: "middle",
 };
