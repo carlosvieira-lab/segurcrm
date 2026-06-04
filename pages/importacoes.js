@@ -1086,7 +1086,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <button
                     style={importButton}
                     onClick={confirmGeneraliImport}
-                    disabled={importing || summary.rowsWithErrors > 0}
+                    disabled={importing}
                   >
                     {importing ? "A importar..." : "Confirmar importação Generali"}
                   </button>
