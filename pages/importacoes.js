@@ -860,7 +860,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           if (row.phone) updatePayload.phone = row.phone;
           if (row.email) updatePayload.email = row.email;
           if (row.address) updatePayload.address = row.address;
-          if (row.locality) updatePayload.locality = row.locality;
+          if (row.locality) updatePayload.city = row.locality;
           if (row.postalCode) updatePayload.postal_code = row.postalCode;
 
           const { error: clientUpdateError } = await supabase
@@ -888,7 +888,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           if (row.phone) insertPayload.phone = row.phone;
           if (row.email) insertPayload.email = row.email;
           if (row.address) insertPayload.address = row.address;
-          if (row.locality) insertPayload.locality = row.locality;
+          if (row.locality) insertPayload.city = row.locality;
           if (row.postalCode) insertPayload.postal_code = row.postalCode;
 
           const { data: createdClient, error: clientCreateError } =
