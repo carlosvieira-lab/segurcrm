@@ -40,6 +40,17 @@ function formatDateTime(date) {
   }).format(new Date(date));
 }
 
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function buildWhatsappLink(phone) {
+  const numbers = onlyNumbers(phone);
+  if (!numbers) return "";
+  if (numbers.startsWith("351")) return `https://wa.me/${numbers}`;
+  return `https://wa.me/351${numbers}`;
+}
+
 function todayIso() {
   return new Date().toISOString().split("T")[0];
 }
@@ -763,6 +774,7 @@ function TaskCard({ task, selected, compact = false, onOpen, editTask, completeT
   const clientName = getClientName(task);
   const clientNif = getClientNif(task);
   const clientPhone = getClientPhone(task);
+  const whatsappLink = buildWhatsappLink(clientPhone);
 
   return (
     <div style={{ ...taskCard, ...(selected ? selectedCard : {}) }}>
@@ -818,6 +830,17 @@ function TaskCard({ task, selected, compact = false, onOpen, editTask, completeT
           </Link>
         )}
 
+        {whatsappLink && (
+          <a
+            href={whatsappLink}
+            target="_blank"
+            rel="noreferrer"
+            style={smallWhatsappButton}
+          >
+            WhatsApp
+          </a>
+        )}
+
         <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => editTask(task)}>
           Editar
         </button>
@@ -837,6 +860,7 @@ function TaskDetail({ task, editTask, completeTask, onClose }) {
   const clientName = getClientName(task);
   const clientNif = getClientNif(task);
   const clientPhone = getClientPhone(task);
+  const whatsappLink = buildWhatsappLink(clientPhone);
 
   return (
     <aside style={detailPanel}>
@@ -892,6 +916,17 @@ function TaskDetail({ task, editTask, completeTask, onClose }) {
           <Link href={`/clientes/${task.client_id}`} style={fullDarkButton}>
             Abrir cliente
           </Link>
+        )}
+
+        {whatsappLink && (
+          <a
+            href={whatsappLink}
+            target="_blank"
+            rel="noreferrer"
+            style={fullWhatsappButton}
+          >
+            WhatsApp
+          </a>
         )}
 
         <button style={fullBlueButton} onClick={() => editTask(task)}>
@@ -1348,6 +1383,15 @@ const smallLinkButton = {
   fontWeight: "bold",
 };
 
+const smallWhatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
 const tableWrap = {
   overflowX: "auto",
 };
@@ -1531,6 +1575,17 @@ const fullDarkButton = {
   textAlign: "center",
 };
 
+const fullWhatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
 const fullBlueButton = {
   background: "#2563eb",
   color: "white",
@@ -1552,6 +1607,3 @@ const fullGreenButton = {
 };
 
 const muted = {
-  color: "#64748b",
-};
-
