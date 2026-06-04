@@ -254,6 +254,47 @@ function buildClientsUntil40Report(clients) {
     });
 }
 
+function buildPortfolioAuditReport(policies) {
+  return policies
+    .map((policy) => {
+      const commissionPerPayment = Number(policy.commission_per_payment || 0);
+      const annualCommission = calculateAnnualCommission(policy);
+      const annualPremium = Number(policy.annual_premium || 0);
+
+      return {
+        id: policy.id,
+        clientId: policy.client_id || null,
+        clientName: policy.clients?.name || "Sem cliente",
+        clientNif: policy.clients?.nif || "-",
+        insurerName: policy.insurers?.name || "-",
+        branch: policy.branch || "-",
+        policyNumber: policy.policy_number || "-",
+        paymentFrequency: policy.payment_frequency || "-",
+        annualPremium,
+        commissionPerPayment,
+        annualCommission,
+        status: policy.status || "ativa",
+        startDate: policy.start_date || null,
+        renewalDate: policy.renewal_date || null,
+        warning:
+          annualPremium >= 10000 ||
+          annualCommission >= 5000 ||
+          commissionPerPayment >= 1000,
+      };
+    })
+    .sort((a, b) => {
+      const insurerCompare = a.insurerName.localeCompare(b.insurerName);
+
+      if (insurerCompare !== 0) return insurerCompare;
+
+      const clientCompare = a.clientName.localeCompare(b.clientName);
+
+      if (clientCompare !== 0) return clientCompare;
+
+      return String(a.policyNumber).localeCompare(String(b.policyNumber));
+    });
+}
+
 function exportCsv(filename, header, rows) {
   const csvContent = [header, ...rows]
     .map((row) =>
@@ -312,6 +353,16 @@ export default function Relatorios({ clients, policies }) {
   };
 
   const clientsUntil40 = buildClientsUntil40Report(clients);
+
+  const portfolioAudit = buildPortfolioAuditReport(policies);
+
+  const portfolioAuditTotals = {
+    policies: portfolioAudit.length,
+    activePolicies: portfolioAudit.filter((policy) => policy.status !== "anulada").length,
+    premium: portfolioAudit.reduce((sum, policy) => sum + Number(policy.annualPremium || 0), 0),
+    commission: portfolioAudit.reduce((sum, policy) => sum + Number(policy.annualCommission || 0), 0),
+    warnings: portfolioAudit.filter((policy) => policy.warning).length,
+  };
 
   const selectedReportInfo = reportOptions.find(
     (report) => report.value === selectedReport
@@ -467,6 +518,46 @@ export default function Relatorios({ clients, policies }) {
     );
   }
 
+  function exportPortfolioAuditCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Seguradora",
+      "Ramo",
+      "Nº Apólice",
+      "Fracionamento",
+      "Prémio anual",
+      "Comissão por pagamento",
+      "Comissão anual",
+      "Estado",
+      "Data início",
+      "Data renovação",
+      "Alerta valor elevado",
+    ];
+
+    const rows = portfolioAudit.map((policy) => [
+      policy.clientName,
+      policy.clientNif,
+      policy.insurerName,
+      policy.branch,
+      policy.policyNumber,
+      policy.paymentFrequency,
+      policy.annualPremium.toFixed(2),
+      policy.commissionPerPayment.toFixed(2),
+      policy.annualCommission.toFixed(2),
+      policy.status,
+      formatDate(policy.startDate),
+      formatDate(policy.renewalDate),
+      policy.warning ? "Sim" : "Não",
+    ]);
+
+    exportCsv(
+      "auditoria_carteira_completa.csv",
+      header,
+      rows
+    );
+  }
+
   function exportSelectedReport() {
     if (selectedReport === "topClientesPremio") {
       exportTopClientsPremiumCsv();
@@ -495,6 +586,11 @@ export default function Relatorios({ clients, policies }) {
 
     if (selectedReport === "clientesAte40") {
       exportClientsUntil40Csv();
+      return;
+    }
+
+    if (selectedReport === "auditoriaCarteira") {
+      exportPortfolioAuditCsv();
     }
   }
 
@@ -888,6 +984,11 @@ const reportOptions = [
     description: "Clientes com maior comissão anual estimada.",
   },
   {
+    value: "auditoriaCarteira",
+    label: "Auditoria da carteira completa",
+    description: "Exportação completa de apólices, prémios, comissões e fracionamento.",
+  },
+  {
     value: "semCasa",
     label: "Clientes sem seguro da casa",
     description: "Clientes que não têm nenhuma apólice CASA em vigor.",
@@ -1000,6 +1101,38 @@ const secondaryButton = {
 const table = {
   display: "grid",
   gap: 8,
+};
+
+const tableHeaderPortfolioAudit = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1.3fr 1fr 1.2fr 1.2fr 1.2fr 1fr",
+  gap: 12,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 14,
+  minWidth: 1200,
+};
+
+const tableRowPortfolioAudit = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1.3fr 1fr 1.2fr 1.2fr 1.2fr 1fr",
+  gap: 12,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+  minWidth: 1200,
+};
+
+const warningRow = {
+  background: "#fff7ed",
+};
+
+const smallMuted = {
+  color: "#6b7280",
+  fontSize: 12,
+  marginTop: 4,
 };
 
 const tableHeaderTop = {
