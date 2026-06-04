@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -22,7 +23,7 @@ export async function getServerSideProps() {
     .from("policies")
     .select(`
       *,
-      clients(id, name, nif, phone, email),
+      clients(id, name, nif, phone, email, generali_trabalhado),
       insurers(name)
     `);
 
@@ -358,6 +359,7 @@ function buildGeneraliClientsReport(policies, opportunities) {
           branches: new Set(),
           policyNumbers: [],
           hasOpportunity: opportunitiesByClient.has(clientId),
+          isWorked: Boolean(client.generali_trabalhado),
           opportunities: opportunitiesByClient.get(clientId) || [],
         };
       }
@@ -421,6 +423,24 @@ function exportCsv(filename, header, rows) {
 export default function Relatorios({ clients, policies, opportunities }) {
   const [selectedReport, setSelectedReport] = useState("topClientesPremio");
   const [showOnlyGeneraliWithoutOpportunity, setShowOnlyGeneraliWithoutOpportunity] = useState(true);
+  const [showOnlyGeneraliPending, setShowOnlyGeneraliPending] = useState(true);
+  const [workedGeneraliClients, setWorkedGeneraliClients] = useState(() => {
+    const initial = new Set();
+
+    clients.forEach((client) => {
+      if (client.generali_trabalhado) {
+        initial.add(client.id);
+      }
+    });
+
+    policies.forEach((policy) => {
+      if (policy.clients?.generali_trabalhado && policy.client_id) {
+        initial.add(policy.client_id);
+      }
+    });
+
+    return initial;
+  });
 
   const topClientsPremium = buildTopClientsPremiumReport(policies);
   const topClientsCommission = buildTopClientsCommissionReport(policies);
@@ -450,18 +470,53 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
   const generaliClients = buildGeneraliClientsReport(policies, opportunities);
 
-  const generaliClientsFiltered = showOnlyGeneraliWithoutOpportunity
-    ? generaliClients.filter((client) => !client.hasOpportunity)
-    : generaliClients;
+  const generaliClientsWithWorkState = generaliClients.map((client) => ({
+    ...client,
+    isWorked: client.isWorked || workedGeneraliClients.has(client.id),
+  }));
+
+  const generaliClientsFiltered = generaliClientsWithWorkState.filter((client) => {
+    if (showOnlyGeneraliWithoutOpportunity && client.hasOpportunity) return false;
+    if (showOnlyGeneraliPending && client.isWorked) return false;
+
+    return true;
+  });
 
   const generaliTotals = {
-    clients: generaliClients.length,
-    withoutOpportunity: generaliClients.filter((client) => !client.hasOpportunity).length,
-    withOpportunity: generaliClients.filter((client) => client.hasOpportunity).length,
-    policies: generaliClients.reduce((sum, client) => sum + client.policies, 0),
-    premium: generaliClients.reduce((sum, client) => sum + Number(client.premium || 0), 0),
-    commission: generaliClients.reduce((sum, client) => sum + Number(client.commission || 0), 0),
+    clients: generaliClientsWithWorkState.length,
+    withoutOpportunity: generaliClientsWithWorkState.filter((client) => !client.hasOpportunity).length,
+    withOpportunity: generaliClientsWithWorkState.filter((client) => client.hasOpportunity).length,
+    pending: generaliClientsWithWorkState.filter((client) => !client.isWorked).length,
+    worked: generaliClientsWithWorkState.filter((client) => client.isWorked).length,
+    policies: generaliClientsWithWorkState.reduce((sum, client) => sum + client.policies, 0),
+    premium: generaliClientsWithWorkState.reduce((sum, client) => sum + Number(client.premium || 0), 0),
+    commission: generaliClientsWithWorkState.reduce((sum, client) => sum + Number(client.commission || 0), 0),
   };
+
+  async function markGeneraliClientWorked(clientId) {
+    if (!clientId) return;
+
+    const confirm = window.confirm("Marcar este cliente Generali como trabalhado?");
+    if (!confirm) return;
+
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        generali_trabalhado: true,
+      })
+      .eq("id", clientId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setWorkedGeneraliClients((current) => {
+      const next = new Set(current);
+      next.add(clientId);
+      return next;
+    });
+  }
 
   const clientsUntil40 = buildClientsUntil40Report(clients);
 
@@ -615,6 +670,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
       "Prémio anual",
       "Comissão anual estimada",
       "Tem oportunidade",
+      "Trabalhado",
     ];
 
     const rows = generaliClientsFiltered.map((client) => [
@@ -628,6 +684,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
       client.premium.toFixed(2),
       client.commission.toFixed(2),
       client.hasOpportunity ? "Sim" : "Não",
+      client.isWorked ? "Sim" : "Não",
     ]);
 
     exportCsv(
@@ -1052,6 +1109,16 @@ export default function Relatorios({ clients, policies, opportunities }) {
               </div>
 
               <div style={summaryBox}>
+                <span style={summaryLabel}>Pendentes</span>
+                <strong style={summaryValue}>{generaliTotals.pending}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Trabalhados</span>
+                <strong style={summaryValue}>{generaliTotals.worked}</strong>
+              </div>
+
+              <div style={summaryBox}>
                 <span style={summaryLabel}>Apólices</span>
                 <strong style={summaryValue}>{generaliTotals.policies}</strong>
               </div>
@@ -1067,16 +1134,29 @@ export default function Relatorios({ clients, policies, opportunities }) {
               </div>
             </div>
 
-            <label style={filterCheck}>
-              <input
-                type="checkbox"
-                checked={showOnlyGeneraliWithoutOpportunity}
-                onChange={(event) =>
-                  setShowOnlyGeneraliWithoutOpportunity(event.target.checked)
-                }
-              />
-              Mostrar apenas clientes sem oportunidade
-            </label>
+            <div style={filterRow}>
+              <label style={filterCheck}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyGeneraliWithoutOpportunity}
+                  onChange={(event) =>
+                    setShowOnlyGeneraliWithoutOpportunity(event.target.checked)
+                  }
+                />
+                Mostrar apenas clientes sem oportunidade
+              </label>
+
+              <label style={filterCheck}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyGeneraliPending}
+                  onChange={(event) =>
+                    setShowOnlyGeneraliPending(event.target.checked)
+                  }
+                />
+                Mostrar apenas pendentes
+              </label>
+            </div>
 
             {generaliClientsFiltered.length === 0 ? (
               <p style={muted}>
@@ -1094,6 +1174,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
                   <span>Prémio</span>
                   <span>Comissão</span>
                   <span>Oportunidade</span>
+                  <span>Estado</span>
                   <span>Ações</span>
                 </div>
 
@@ -1103,7 +1184,10 @@ export default function Relatorios({ clients, policies, opportunities }) {
                   return (
                     <div
                       key={client.id}
-                      style={tableRowGenerali}
+                      style={{
+                        ...tableRowGenerali,
+                        ...(client.isWorked ? workedGeneraliRow : {}),
+                      }}
                     >
                       <strong>{client.name}</strong>
                       <span>{client.nif}</span>
@@ -1116,6 +1200,10 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
                       <span style={client.hasOpportunity ? badgeExisting : badgeMissing}>
                         {client.hasOpportunity ? "EXISTE" : "CRIAR"}
+                      </span>
+
+                      <span style={client.isWorked ? badgeWorked : badgePending}>
+                        {client.isWorked ? "TRABALHADO" : "PENDENTE"}
                       </span>
 
                       <div style={generaliActions}>
@@ -1144,6 +1232,16 @@ export default function Relatorios({ clients, policies, opportunities }) {
                           </a>
                         ) : (
                           <span style={muted}>Sem telefone</span>
+                        )}
+
+                        {!client.isWorked && (
+                          <button
+                            type="button"
+                            style={workedButton}
+                            onClick={() => markGeneraliClientWorked(client.id)}
+                          >
+                            ✓ Trabalhado
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1559,6 +1657,13 @@ const premiumValue = {
   color: "#16a34a",
 };
 
+const filterRow = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
 const filterCheck = {
   display: "flex",
   gap: 8,
@@ -1567,31 +1672,30 @@ const filterCheck = {
   border: "1px solid #e5e7eb",
   padding: 12,
   borderRadius: 12,
-  marginBottom: 16,
   color: "#374151",
   fontWeight: "bold",
 };
 
 const tableHeaderGenerali = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 2.4fr",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 1fr 2.7fr",
   gap: 10,
   background: "#f3f4f6",
   padding: "12px 14px",
   borderRadius: 12,
   fontWeight: "bold",
   fontSize: 13,
-  minWidth: 1500,
+  minWidth: 1650,
 };
 
 const tableRowGenerali = {
   display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 2.4fr",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 0.7fr 1.4fr 1.1fr 1.1fr 1fr 1fr 2.7fr",
   gap: 10,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
   alignItems: "center",
-  minWidth: 1500,
+  minWidth: 1650,
   fontSize: 13,
 };
 
@@ -1637,6 +1741,37 @@ const badgeMissing = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 11,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const badgeWorked = {
+  background: "#bbf7d0",
+  color: "#166534",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const badgePending = {
+  background: "#fef3c7",
+  color: "#92400e",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const workedButton = {
+  background: "#15803d",
+  color: "white",
+  border: "none",
+  padding: "9px 12px",
+  borderRadius: 8,
+  cursor: "pointer",
   fontWeight: "bold",
   textAlign: "center",
 };
