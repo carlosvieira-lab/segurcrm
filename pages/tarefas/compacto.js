@@ -162,6 +162,7 @@ export default function TarefasCompacto({ tasks }) {
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showAllDoNow, setShowAllDoNow] = useState(false);
 
   const [showTaskForm, setShowTaskForm] = useState(false);
 
@@ -537,16 +538,22 @@ export default function TarefasCompacto({ tasks }) {
             <section style={urgentSection}>
               <div style={sectionTop}>
                 <h2 style={urgentTitle}>🔥 Fazer Agora ({doNowTasks.length})</h2>
-                <button type="button" style={ghostButton} onClick={() => setPriorityFilter("TODAS")}>
-                  Ver todas →
-                </button>
+                {doNowTasks.length > 3 && (
+                  <button
+                    type="button"
+                    style={ghostButton}
+                    onClick={() => setShowAllDoNow(!showAllDoNow)}
+                  >
+                    {showAllDoNow ? "Ver menos ↑" : "Ver todas →"}
+                  </button>
+                )}
               </div>
 
               {doNowTasks.length === 0 ? (
                 <p style={muted}>Sem tarefas urgentes.</p>
               ) : (
                 <div style={urgentGrid}>
-                  {doNowTasks.slice(0, 3).map((task) => (
+                  {(showAllDoNow ? doNowTasks : doNowTasks.slice(0, 3)).map((task) => (
                     <TaskCard
                       key={task.id}
                       task={task}
@@ -1547,3 +1554,4 @@ const fullGreenButton = {
 const muted = {
   color: "#64748b",
 };
+
