@@ -254,41 +254,6 @@ function buildClientsUntil40Report(clients) {
     });
 }
 
-function buildIncompletePoliciesReport(policies) {
-  return policies
-    .filter((policy) => {
-      const branch = String(policy.branch || "").trim();
-
-      return (
-        policy.status !== "anulada" &&
-        (!branch || !policy.start_date)
-      );
-    })
-    .map((policy) => ({
-      id: policy.id,
-      clientId: policy.client_id || null,
-      clientName: policy.clients?.name || "Sem cliente",
-      clientNif: policy.clients?.nif || "-",
-      insurerName: policy.insurers?.name || "-",
-      policyNumber: policy.policy_number || "-",
-      branch: policy.branch || "",
-      startDate: policy.start_date || null,
-      renewalDate: policy.renewal_date || null,
-      annualPremium: Number(policy.annual_premium || 0),
-      missingBranch: !String(policy.branch || "").trim(),
-      missingStartDate: !policy.start_date,
-    }))
-    .sort((a, b) => {
-      const insurerCompare = a.insurerName.localeCompare(b.insurerName);
-      if (insurerCompare !== 0) return insurerCompare;
-
-      const nameCompare = a.clientName.localeCompare(b.clientName);
-      if (nameCompare !== 0) return nameCompare;
-
-      return String(a.policyNumber).localeCompare(String(b.policyNumber));
-    });
-}
-
 function exportCsv(filename, header, rows) {
   const csvContent = [header, ...rows]
     .map((row) =>
@@ -347,14 +312,6 @@ export default function Relatorios({ clients, policies }) {
   };
 
   const clientsUntil40 = buildClientsUntil40Report(clients);
-
-  const incompletePolicies = buildIncompletePoliciesReport(policies);
-
-  const incompletePoliciesTotals = {
-    total: incompletePolicies.length,
-    withoutBranch: incompletePolicies.filter((policy) => policy.missingBranch).length,
-    withoutStartDate: incompletePolicies.filter((policy) => policy.missingStartDate).length,
-  };
 
   const selectedReportInfo = reportOptions.find(
     (report) => report.value === selectedReport
@@ -510,40 +467,6 @@ export default function Relatorios({ clients, policies }) {
     );
   }
 
-  function exportIncompletePoliciesCsv() {
-    const header = [
-      "Cliente",
-      "NIF",
-      "Seguradora",
-      "Nº Apólice",
-      "Ramo",
-      "Data início",
-      "Data renovação",
-      "Prémio anual",
-      "Falta ramo",
-      "Falta data início",
-    ];
-
-    const rows = incompletePolicies.map((policy) => [
-      policy.clientName,
-      policy.clientNif,
-      policy.insurerName,
-      policy.policyNumber,
-      policy.branch || "FALTA",
-      formatDate(policy.startDate),
-      formatDate(policy.renewalDate),
-      policy.annualPremium.toFixed(2),
-      policy.missingBranch ? "Sim" : "Não",
-      policy.missingStartDate ? "Sim" : "Não",
-    ]);
-
-    exportCsv(
-      "apolices_com_dados_em_falta.csv",
-      header,
-      rows
-    );
-  }
-
   function exportSelectedReport() {
     if (selectedReport === "topClientesPremio") {
       exportTopClientsPremiumCsv();
@@ -572,11 +495,6 @@ export default function Relatorios({ clients, policies }) {
 
     if (selectedReport === "clientesAte40") {
       exportClientsUntil40Csv();
-      return;
-    }
-
-    if (selectedReport === "apolicesIncompletas") {
-      exportIncompletePoliciesCsv();
     }
   }
 
@@ -654,6 +572,7 @@ export default function Relatorios({ clients, policies }) {
                   <span>NIF</span>
                   <span>Apólices</span>
                   <span>Prémio em vigor</span>
+                  <span>Ficha</span>
                 </div>
 
                 {topClientsPremium.map((client, index) => (
@@ -668,6 +587,17 @@ export default function Relatorios({ clients, policies }) {
                     <strong style={premiumValue}>
                       {formatEuro(client.premium)}
                     </strong>
+
+                    {client.id && client.id !== "sem_cliente" ? (
+                      <Link
+                        href={`/clientes/${client.id}`}
+                        style={openClientButton}
+                      >
+                        Abrir ficha
+                      </Link>
+                    ) : (
+                      <span>-</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -698,6 +628,7 @@ export default function Relatorios({ clients, policies }) {
                   <span>Apólices</span>
                   <span>Prémio</span>
                   <span>Comissão anual</span>
+                  <span>Ficha</span>
                 </div>
 
                 {topClientsCommission.map((client, index) => (
@@ -713,6 +644,17 @@ export default function Relatorios({ clients, policies }) {
                     <strong style={premiumValue}>
                       {formatEuro(client.commission)}
                     </strong>
+
+                    {client.id && client.id !== "sem_cliente" ? (
+                      <Link
+                        href={`/clientes/${client.id}`}
+                        style={openClientButton}
+                      >
+                        Abrir ficha
+                      </Link>
+                    ) : (
+                      <span>-</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -885,87 +827,6 @@ export default function Relatorios({ clients, policies }) {
             )}
           </section>
         )}
-
-        {selectedReport === "apolicesIncompletas" && (
-          <section style={panel}>
-            <h2 style={panelTitle}>
-              Apólices com dados em falta
-            </h2>
-
-            <p style={muted}>
-              Mostra apólices em vigor que ainda precisam de ser completadas, especialmente as importadas sem ramo ou sem data de início.
-            </p>
-
-            <div style={summaryGrid}>
-              <div style={summaryBox}>
-                <span style={summaryLabel}>Total incompletas</span>
-                <strong style={summaryValue}>{incompletePoliciesTotals.total}</strong>
-              </div>
-
-              <div style={summaryBox}>
-                <span style={summaryLabel}>Sem ramo</span>
-                <strong style={summaryValue}>{incompletePoliciesTotals.withoutBranch}</strong>
-              </div>
-
-              <div style={summaryBox}>
-                <span style={summaryLabel}>Sem data início</span>
-                <strong style={summaryValue}>{incompletePoliciesTotals.withoutStartDate}</strong>
-              </div>
-            </div>
-
-            {incompletePolicies.length === 0 ? (
-              <p style={muted}>
-                Não existem apólices em vigor com ramo ou data de início em falta.
-              </p>
-            ) : (
-              <div style={table}>
-                <div style={tableHeaderIncompletePolicies}>
-                  <span>Cliente</span>
-                  <span>NIF</span>
-                  <span>Seguradora</span>
-                  <span>Nº Apólice</span>
-                  <span>Ramo</span>
-                  <span>Data início</span>
-                  <span>Renovação</span>
-                  <span>Ficha</span>
-                </div>
-
-                {incompletePolicies.map((policy) => (
-                  <div
-                    key={policy.id}
-                    style={tableRowIncompletePolicies}
-                  >
-                    <strong>{policy.clientName}</strong>
-                    <span>{policy.clientNif}</span>
-                    <span>{policy.insurerName}</span>
-                    <span>{policy.policyNumber}</span>
-
-                    <span style={policy.missingBranch ? missingBadge : okBadge}>
-                      {policy.missingBranch ? "Falta" : policy.branch}
-                    </span>
-
-                    <span style={policy.missingStartDate ? missingBadge : okBadge}>
-                      {policy.missingStartDate ? "Falta" : formatDate(policy.startDate)}
-                    </span>
-
-                    <span>{formatDate(policy.renewalDate)}</span>
-
-                    {policy.clientId ? (
-                      <Link
-                        href={`/clientes/${policy.clientId}`}
-                        style={openClientButton}
-                      >
-                        Abrir ficha
-                      </Link>
-                    ) : (
-                      <span>-</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
       </main>
     </div>
   );
@@ -1045,11 +906,6 @@ const reportOptions = [
     value: "clientesAte40",
     label: "Clientes até 40 anos",
     description: "Clientes com idade até 40 anos.",
-  },
-  {
-    value: "apolicesIncompletas",
-    label: "Apólices com dados em falta",
-    description: "Apólices em vigor sem ramo ou sem data de início.",
   },
 ];
 
@@ -1148,7 +1004,7 @@ const table = {
 
 const tableHeaderTop = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr 1fr",
   gap: 12,
   background: "#f3f4f6",
   padding: "12px 14px",
@@ -1159,7 +1015,7 @@ const tableHeaderTop = {
 
 const tableRowTop = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr 1fr",
   gap: 12,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
@@ -1168,7 +1024,7 @@ const tableRowTop = {
 
 const tableHeaderCommission = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr 1fr",
   gap: 12,
   background: "#f3f4f6",
   padding: "12px 14px",
@@ -1179,7 +1035,7 @@ const tableHeaderCommission = {
 
 const tableRowCommission = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.3fr 1.3fr 1fr",
   gap: 12,
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
@@ -1244,44 +1100,6 @@ const tableRowClientsAge = {
   padding: "14px",
   borderBottom: "1px solid #e5e7eb",
   alignItems: "center",
-};
-
-const tableHeaderIncompletePolicies = {
-  display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.2fr 0.9fr 1fr 1fr 1fr",
-  gap: 12,
-  background: "#f3f4f6",
-  padding: "12px 14px",
-  borderRadius: 12,
-  fontWeight: "bold",
-  fontSize: 14,
-};
-
-const tableRowIncompletePolicies = {
-  display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr 1.2fr 0.9fr 1fr 1fr 1fr",
-  gap: 12,
-  padding: "14px",
-  borderBottom: "1px solid #e5e7eb",
-  alignItems: "center",
-};
-
-const missingBadge = {
-  background: "#fee2e2",
-  color: "#991b1b",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontWeight: "bold",
-  textAlign: "center",
-};
-
-const okBadge = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontWeight: "bold",
-  textAlign: "center",
 };
 
 const summaryGrid = {
