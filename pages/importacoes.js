@@ -789,7 +789,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   async function confirmGeneraliImport() {
     const confirm = window.confirm(
-      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices."
+      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão atualizadas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices."
     );
 
     if (!confirm) return;
@@ -911,7 +911,25 @@ export default function Importacoes({ clients, policies, insurers }) {
         const existingPolicy = localPoliciesByNumber.get(normalizedPolicyNumber);
 
         if (existingPolicy) {
-          result.policiesExistingIgnored += 1;
+          const { error: policyUpdateError } = await supabase
+            .from("policies")
+            .update({
+              client_id: client.id,
+              insurer_id: generali.id,
+              status: row.status,
+              branch: row.branch || "",
+              renewal_date: row.renewalDate || null,
+              annual_premium: row.commercialPremium || row.premium || 0,
+              payment_frequency: row.paymentFrequency || "Anual",
+              commission_per_payment: row.commission || 0,
+            })
+            .eq("id", existingPolicy.id);
+
+          if (policyUpdateError) {
+            throw policyUpdateError;
+          }
+
+          result.policiesUpdated += 1;
           continue;
         }
 
@@ -1004,7 +1022,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <p style={muted}>
             {importMode === "realvida"
               ? "Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634."
-              : "Esta fase lê e valida o Excel Generali em pré-visualização, sem gravar nada no CRM. Vamos confirmar clientes, NIF, telefone, email, morada, apólice, ramo, prémio, comissão e datas antes de ativar a importação final."}
+              : "Importação/atualização mensal Generali. Cria clientes e apólices novas, enriquece clientes existentes e atualiza apólices já existentes com prémio, comissão, fracionamento, renovação, ramo e estado. Não grava data de início e não anula apólices que não venham no ficheiro."}
           </p>
 
           {importMode === "realvida" && !realVida && (
@@ -1088,7 +1106,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                     onClick={confirmGeneraliImport}
                     disabled={importing}
                   >
-                    {importing ? "A importar..." : "Confirmar importação Generali"}
+                    {importing ? "A importar..." : "Confirmar importação/atualização Generali"}
                   </button>
                 )}
               </div>
