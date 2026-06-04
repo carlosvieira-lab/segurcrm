@@ -398,11 +398,30 @@ export default function Importacoes({ clients, policies, insurers }) {
           : getCell(row, ["FormaPagamento", "Forma Pagamento", "Fracionamento"])
       );
 
-      const commissionRaw = parseNumber(
+      const commissionDistribution = parseNumber(
         isGenerali
           ? getCell(row, ["Comissão Distribuição", "Comissao Distribuicao", "Comissão", "Comissao"])
           : getCell(row, ["Comissao", "Comissão"])
       );
+
+      const commissionCollection = parseNumber(
+        isGenerali
+          ? getCell(row, [
+              "Comissão Cobrança",
+              "Comissao Cobranca",
+              "Comissão de Cobrança",
+              "Comissao de Cobranca",
+              "Comissão Cob.",
+              "Comissao Cob.",
+              "Cobrança",
+              "Cobranca",
+            ])
+          : 0
+      );
+
+      const commissionRaw = isGenerali
+        ? commissionDistribution + commissionCollection
+        : commissionDistribution;
 
       const commission = isGenerali ? Math.abs(commissionRaw) : commissionRaw;
 
@@ -438,9 +457,65 @@ export default function Importacoes({ clients, policies, insurers }) {
     });
   }, [rows, importMode, existingClientsByNif, existingPoliciesByNumber]);
 
+  const duplicatedNifsInExcel = useMemo(() => {
+    const counts = new Map();
+
+    analyzedRows.forEach((row) => {
+      if (!row.nif) return;
+      counts.set(row.nif, (counts.get(row.nif) || 0) + 1);
+    });
+
+    return new Set(
+      [...counts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([nif]) => nif)
+    );
+  }, [analyzedRows]);
+
+  const duplicatedPoliciesInExcel = useMemo(() => {
+    const counts = new Map();
+
+    analyzedRows.forEach((row) => {
+      const policyNumber = normalizePolicyNumber(row.policyNumber);
+      if (!policyNumber) return;
+      counts.set(policyNumber, (counts.get(policyNumber) || 0) + 1);
+    });
+
+    return new Set(
+      [...counts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([policyNumber]) => policyNumber)
+    );
+  }, [analyzedRows]);
+
+  function rowBlockingReason(row) {
+    if (!row.nif) return "Sem NIF";
+    if (!row.policyNumber) return "Sem nº apólice";
+    if (duplicatedNifsInExcel.has(row.nif)) return "NIF duplicado no Excel";
+    if (duplicatedPoliciesInExcel.has(normalizePolicyNumber(row.policyNumber))) {
+      return "Apólice duplicada no Excel";
+    }
+
+    return "";
+  }
+
+  function rowQualityWarnings(row) {
+    const warnings = [];
+
+    if (!row.phone) warnings.push("Sem telefone");
+    if (!row.email) warnings.push("Sem email");
+    if (!row.address) warnings.push("Sem morada");
+    if (!row.postalCode) warnings.push("Sem código postal");
+    if (!row.branch) warnings.push("Sem ramo");
+    if (!row.commercialPremium && !row.premium) warnings.push("Sem prémio");
+    if (!row.commission) warnings.push("Sem comissão");
+
+    return warnings;
+  }
+
   const summary = useMemo(() => {
     const clientsNew = analyzedRows.filter(
-      (row) => row.nif && !row.existingClient
+      (row) => row.nif && !row.existingClient && !duplicatedNifsInExcel.has(row.nif)
     ).length;
 
     const clientsExisting = analyzedRows.filter(
@@ -448,16 +523,25 @@ export default function Importacoes({ clients, policies, insurers }) {
     ).length;
 
     const policiesNew = analyzedRows.filter(
-      (row) => row.policyNumber && !row.existingPolicy
+      (row) =>
+        row.policyNumber &&
+        !row.existingPolicy &&
+        !duplicatedPoliciesInExcel.has(normalizePolicyNumber(row.policyNumber))
     ).length;
 
     const policiesExisting = analyzedRows.filter(
       (row) => row.policyNumber && row.existingPolicy
     ).length;
 
-    const rowsWithErrors = analyzedRows.filter(
-      (row) => !row.policyNumber || !row.nif || !row.clientName
-    ).length;
+    const rowsWithErrors = analyzedRows.filter((row) => rowBlockingReason(row)).length;
+
+    const withoutPhone = analyzedRows.filter((row) => !row.phone).length;
+    const withoutEmail = analyzedRows.filter((row) => !row.email).length;
+    const withoutAddress = analyzedRows.filter((row) => !row.address).length;
+    const withoutPostalCode = analyzedRows.filter((row) => !row.postalCode).length;
+    const withoutBranch = analyzedRows.filter((row) => !row.branch).length;
+    const withoutPremium = analyzedRows.filter((row) => !row.commercialPremium && !row.premium).length;
+    const withoutCommission = analyzedRows.filter((row) => !row.commission).length;
 
     return {
       total: analyzedRows.length,
@@ -466,8 +550,17 @@ export default function Importacoes({ clients, policies, insurers }) {
       policiesNew,
       policiesExisting,
       rowsWithErrors,
+      duplicatedNifs: duplicatedNifsInExcel.size,
+      duplicatedPolicies: duplicatedPoliciesInExcel.size,
+      withoutPhone,
+      withoutEmail,
+      withoutAddress,
+      withoutPostalCode,
+      withoutBranch,
+      withoutPremium,
+      withoutCommission,
     };
-  }, [analyzedRows]);
+  }, [analyzedRows, duplicatedNifsInExcel, duplicatedPoliciesInExcel]);
 
   const filteredPreviewRows = useMemo(() => {
     const term = cleanText(previewSearch);
@@ -552,11 +645,6 @@ export default function Importacoes({ clients, policies, insurers }) {
 
 
   async function confirmImport() {
-    if (importMode === "generali") {
-      alert("Nesta fase a Generali está apenas em pré-visualização. Depois de validares os dados, eu preparo o botão de importação final.");
-      return;
-    }
-
     const confirm = window.confirm(
       "Confirmas a importação Real Vida?\n\nSerão criados clientes novos e criadas/atualizadas apólices. A importação NÃO preenche data de início e deixa o ramo em branco para preencher manualmente. Apólices existentes só atualizam prémio, comissão, fracionamento, estado e data de renovação."
     );
@@ -699,6 +787,174 @@ export default function Importacoes({ clients, policies, insurers }) {
     setImporting(false);
   }
 
+
+  async function confirmGeneraliImport() {
+    const confirm = window.confirm(
+      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou duplicadas no Excel NÃO serão importadas."
+    );
+
+    if (!confirm) return;
+
+    if (!generali) {
+      alert("Não encontrei a seguradora GENERALI na tabela insurers.");
+      return;
+    }
+
+    setImporting(true);
+    setErrorMessage("");
+    setImportResult(null);
+
+    const result = {
+      clientsCreated: 0,
+      clientsUpdated: 0,
+      clientsEnriched: 0,
+      clientsSkipped: 0,
+      policiesCreated: 0,
+      policiesUpdated: 0,
+      policiesExistingIgnored: 0,
+      skipped: 0,
+      qualityWarnings: {
+        withoutPhone: 0,
+        withoutEmail: 0,
+        withoutAddress: 0,
+        withoutPostalCode: 0,
+        withoutBranch: 0,
+        withoutPremium: 0,
+        withoutCommission: 0,
+      },
+      errors: [],
+    };
+
+    const localClientsByNif = new Map(existingClientsByNif);
+    const localPoliciesByNumber = new Map(existingPoliciesByNumber);
+
+    for (const row of analyzedRows) {
+      try {
+        const blockingReason = rowBlockingReason(row);
+
+        if (blockingReason) {
+          result.skipped += 1;
+          result.errors.push(`Linha ${row.index}: ${blockingReason}.`);
+          continue;
+        }
+
+        const warnings = rowQualityWarnings(row);
+
+        warnings.forEach((warning) => {
+          if (warning === "Sem telefone") result.qualityWarnings.withoutPhone += 1;
+          if (warning === "Sem email") result.qualityWarnings.withoutEmail += 1;
+          if (warning === "Sem morada") result.qualityWarnings.withoutAddress += 1;
+          if (warning === "Sem código postal") result.qualityWarnings.withoutPostalCode += 1;
+          if (warning === "Sem ramo") result.qualityWarnings.withoutBranch += 1;
+          if (warning === "Sem prémio") result.qualityWarnings.withoutPremium += 1;
+          if (warning === "Sem comissão") result.qualityWarnings.withoutCommission += 1;
+        });
+
+        let client = localClientsByNif.get(row.nif);
+
+        if (client) {
+          const updatePayload = {
+            name: client.name || row.clientName,
+            status: "ativo",
+          };
+
+          if (row.phone) updatePayload.phone = row.phone;
+          if (row.email) updatePayload.email = row.email;
+          if (row.address) updatePayload.address = row.address;
+          if (row.locality) updatePayload.locality = row.locality;
+          if (row.postalCode) updatePayload.postal_code = row.postalCode;
+
+          const { error: clientUpdateError } = await supabase
+            .from("clients")
+            .update(updatePayload)
+            .eq("id", client.id);
+
+          if (clientUpdateError) {
+            throw clientUpdateError;
+          }
+
+          result.clientsUpdated += 1;
+
+          if (row.phone || row.email || row.address || row.locality || row.postalCode) {
+            result.clientsEnriched += 1;
+          }
+        } else {
+          const insertPayload = {
+            type: "particular",
+            status: "ativo",
+            name: row.clientName,
+            nif: row.nif,
+          };
+
+          if (row.phone) insertPayload.phone = row.phone;
+          if (row.email) insertPayload.email = row.email;
+          if (row.address) insertPayload.address = row.address;
+          if (row.locality) insertPayload.locality = row.locality;
+          if (row.postalCode) insertPayload.postal_code = row.postalCode;
+
+          const { data: createdClient, error: clientCreateError } =
+            await supabase
+              .from("clients")
+              .insert(insertPayload)
+              .select("id, name, nif")
+              .single();
+
+          if (clientCreateError) {
+            throw clientCreateError;
+          }
+
+          client = createdClient;
+          localClientsByNif.set(row.nif, client);
+          result.clientsCreated += 1;
+        }
+
+        const normalizedPolicyNumber = normalizePolicyNumber(row.policyNumber);
+        const existingPolicy = localPoliciesByNumber.get(normalizedPolicyNumber);
+
+        if (existingPolicy) {
+          result.policiesExistingIgnored += 1;
+          continue;
+        }
+
+        const { data: createdPolicy, error: policyCreateError } =
+          await supabase
+            .from("policies")
+            .insert({
+              client_id: client.id,
+              insurer_id: generali.id,
+              policy_number: row.policyNumber,
+              status: row.status,
+              branch: row.branch || "",
+              start_date: null,
+              renewal_date: row.renewalDate || null,
+              annual_premium: row.commercialPremium || row.premium || 0,
+              payment_frequency: row.paymentFrequency || "Anual",
+              commission_per_payment: row.commission || 0,
+            })
+            .select("id, policy_number, client_id")
+            .single();
+
+        if (policyCreateError) {
+          throw policyCreateError;
+        }
+
+        localPoliciesByNumber.set(
+          normalizePolicyNumber(createdPolicy.policy_number),
+          createdPolicy
+        );
+
+        result.policiesCreated += 1;
+      } catch (error) {
+        result.errors.push(
+          `Linha ${row.index}: ${error.message || "erro desconhecido"}`
+        );
+      }
+    }
+
+    setImportResult(result);
+    setImporting(false);
+  }
+
   return (
     <div style={page}>
       <Sidebar active="importacoes" />
@@ -795,7 +1051,19 @@ export default function Importacoes({ clients, policies, insurers }) {
               <SummaryCard title="Clientes novos" value={summary.clientsNew} color="#16a34a" />
               <SummaryCard title="Apólices existentes" value={summary.policiesExisting} color="#7c3aed" />
               <SummaryCard title="Apólices novas" value={summary.policiesNew} color="#0f766e" />
-              <SummaryCard title="Linhas com avisos" value={summary.rowsWithErrors} color="#dc2626" />
+              <SummaryCard title="Linhas bloqueadas" value={summary.rowsWithErrors} color="#dc2626" />
+              <SummaryCard title="NIF duplicados Excel" value={summary.duplicatedNifs} color="#f59e0b" />
+              <SummaryCard title="Apólices duplicadas Excel" value={summary.duplicatedPolicies} color="#f59e0b" />
+            </section>
+
+            <section style={qualityGrid}>
+              <QualityCard title="Sem telefone" value={summary.withoutPhone} />
+              <QualityCard title="Sem email" value={summary.withoutEmail} />
+              <QualityCard title="Sem morada" value={summary.withoutAddress} />
+              <QualityCard title="Sem código postal" value={summary.withoutPostalCode} />
+              <QualityCard title="Sem ramo" value={summary.withoutBranch} />
+              <QualityCard title="Sem prémio" value={summary.withoutPremium} />
+              <QualityCard title="Sem comissão" value={summary.withoutCommission} />
             </section>
 
             <section style={card}>
@@ -817,18 +1085,18 @@ export default function Importacoes({ clients, policies, insurers }) {
                   </button>
                 ) : (
                   <button
-                    style={previewOnlyButton}
-                    onClick={confirmImport}
-                    disabled={false}
+                    style={importButton}
+                    onClick={confirmGeneraliImport}
+                    disabled={importing || summary.rowsWithErrors > 0}
                   >
-                    Pré-visualização Generali
+                    {importing ? "A importar..." : "Confirmar importação Generali"}
                   </button>
                 )}
               </div>
 
               {summary.rowsWithErrors > 0 && (
                 <div style={warningBox}>
-                  Existem linhas com avisos. Corrige ou confirma o ficheiro antes de importar.
+                  Existem linhas bloqueadas. Linhas sem NIF, sem nº apólice ou duplicadas no Excel não serão importadas.
                 </div>
               )}
 
@@ -839,10 +1107,12 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <div style={resultGrid}>
                     <span>Clientes criados: <strong>{importResult.clientsCreated}</strong></span>
                     <span>Clientes atualizados: <strong>{importResult.clientsUpdated}</strong></span>
+                    <span>Clientes enriquecidos: <strong>{importResult.clientsEnriched || 0}</strong></span>
                     <span>Apólices criadas: <strong>{importResult.policiesCreated}</strong></span>
-                    <span>Apólices atualizadas: <strong>{importResult.policiesUpdated}</strong></span>
+                    <span>Apólices atualizadas: <strong>{importResult.policiesUpdated || 0}</strong></span>
+                    <span>Apólices já existentes: <strong>{importResult.policiesExistingIgnored || 0}</strong></span>
                     <span>Linhas ignoradas: <strong>{importResult.skipped}</strong></span>
-                    <span>Erros: <strong>{importResult.errors.length}</strong></span>
+                    <span>Erros/alertas: <strong>{importResult.errors.length}</strong></span>
                   </div>
 
                   {importResult.errors.length > 0 && (
@@ -890,10 +1160,9 @@ export default function Importacoes({ clients, policies, insurers }) {
                 </div>
 
                 {filteredPreviewRows.map((row) => {
-                  const hasWarning =
-                    !row.policyNumber ||
-                    !row.nif ||
-                    !row.clientName;
+                  const blockingReason = rowBlockingReason(row);
+                  const qualityWarnings = rowQualityWarnings(row);
+                  const hasWarning = Boolean(blockingReason);
 
                   return (
                     <div
@@ -913,6 +1182,18 @@ export default function Importacoes({ clients, policies, insurers }) {
                         {row.existingClient && (
                           <div style={matchedText}>
                             CRM: {row.existingClient.name}
+                          </div>
+                        )}
+
+                        {blockingReason && (
+                          <div style={warningText}>
+                            ⚠ {blockingReason}
+                          </div>
+                        )}
+
+                        {!blockingReason && qualityWarnings.length > 0 && (
+                          <div style={softWarningText}>
+                            ⚠ {qualityWarnings.slice(0, 3).join(" · ")}
                           </div>
                         )}
                       </div>
@@ -968,6 +1249,17 @@ export default function Importacoes({ clients, policies, insurers }) {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function QualityCard({ title, value }) {
+  const hasWarning = Number(value || 0) > 0;
+
+  return (
+    <div style={hasWarning ? qualityCardWarning : qualityCard}>
+      <p style={qualityLabel}>{title}</p>
+      <strong style={hasWarning ? qualityValueWarning : qualityValue}>{value}</strong>
     </div>
   );
 }
@@ -1096,18 +1388,49 @@ const summaryValue = {
   margin: "10px 0 0",
 };
 
-const importButton = {
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
+const qualityGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+  marginBottom: 24,
 };
 
-const previewOnlyButton = {
-  background: "#f59e0b",
+const qualityCard = {
+  background: "white",
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #e5e7eb",
+};
+
+const qualityCardWarning = {
+  background: "#fff7ed",
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #fdba74",
+};
+
+const qualityLabel = {
+  color: "#6b7280",
+  margin: 0,
+  fontSize: 13,
+};
+
+const qualityValue = {
+  display: "block",
+  marginTop: 6,
+  color: "#16a34a",
+  fontSize: 24,
+};
+
+const qualityValueWarning = {
+  display: "block",
+  marginTop: 6,
+  color: "#dc2626",
+  fontSize: 24,
+};
+
+const importButton = {
+  background: "#16a34a",
   color: "white",
   border: "none",
   padding: "12px 16px",
@@ -1168,6 +1491,20 @@ const previewSearchInput = {
 
 const matchedText = {
   color: "#2563eb",
+  fontSize: 12,
+  marginTop: 4,
+  fontWeight: "bold",
+};
+
+const warningText = {
+  color: "#dc2626",
+  fontSize: 12,
+  marginTop: 4,
+  fontWeight: "bold",
+};
+
+const softWarningText = {
+  color: "#92400e",
   fontSize: 12,
   marginTop: 4,
   fontWeight: "bold",
