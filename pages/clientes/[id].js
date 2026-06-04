@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -555,6 +555,18 @@ const [quickNote, setQuickNote] =
     .replace(/\D/g, "");
 }
 
+function getPhoneCallHref(phone) {
+  const cleanPhone = cleanPhoneNumber(phone);
+
+  if (!cleanPhone) return "#";
+
+  const finalPhone = cleanPhone.startsWith("351")
+    ? cleanPhone
+    : `351${cleanPhone}`;
+
+  return `tel:+${finalPhone}`;
+}
+
 function openWhatsApp() {
   const phone = cleanPhoneNumber(client.phone);
 
@@ -942,6 +954,15 @@ const timelineItems = createTimeline(
             <button style={editClientButton} onClick={editClient}>
               Editar cliente
             </button>
+
+            {client.phone && (
+              <a
+                href={getPhoneCallHref(client.phone)}
+                style={callButton}
+              >
+                📞 Ligar
+              </a>
+            )}
 
             <Link
               href={`/tarefas?cliente=${client.id}`}
@@ -2059,6 +2080,18 @@ const editClientButton = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
+};
+
+const callButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+  textDecoration: "none",
+  display: "inline-block",
 };
 
 const taskShortcutButton = {
