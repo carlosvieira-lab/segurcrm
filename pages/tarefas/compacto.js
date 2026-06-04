@@ -161,6 +161,7 @@ export default function TarefasCompacto({ tasks }) {
   const [categoryFilter, setCategoryFilter] = useState("TODAS");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   const [showTaskForm, setShowTaskForm] = useState(false);
 
@@ -531,7 +532,7 @@ export default function TarefasCompacto({ tasks }) {
           <StatCard title="Concluídas" value={completedTasks.length} color="#7c3aed" icon="✅" />
         </section>
 
-        <section style={workArea}>
+        <section style={showDetail ? workArea : workAreaFull}>
           <div style={leftColumn}>
             <section style={urgentSection}>
               <div style={sectionTop}>
@@ -551,7 +552,10 @@ export default function TarefasCompacto({ tasks }) {
                       task={task}
                       selected={selectedId === task.id}
                       compact
-                      onOpen={() => setSelectedId(task.id)}
+                      onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
                       editTask={editTask}
                       completeTask={completeTask}
                     />
@@ -591,7 +595,10 @@ export default function TarefasCompacto({ tasks }) {
                           key={task.id}
                           task={task}
                           selected={selectedId === task.id}
-                          onOpen={() => setSelectedId(task.id)}
+                          onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
                         />
                       ))}
                     </tbody>
@@ -645,7 +652,10 @@ export default function TarefasCompacto({ tasks }) {
                       key={task.id}
                       task={task}
                       selected={selectedId === task.id}
-                      onOpen={() => setSelectedId(task.id)}
+                      onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
                       editTask={editTask}
                       completeTask={completeTask}
                     />
@@ -655,16 +665,26 @@ export default function TarefasCompacto({ tasks }) {
             </section>
           </div>
 
-          <div style={rightColumn}>
-            {selectedTask ? (
-              <TaskDetail task={selectedTask} editTask={editTask} completeTask={completeTask} />
-            ) : (
-              <div style={emptyDetail}>
-                <h2>Detalhe da Tarefa</h2>
-                <p>Seleciona uma tarefa para ver o detalhe completo.</p>
-              </div>
-            )}
-          </div>
+          {showDetail && (
+            <div style={rightColumn}>
+              {selectedTask ? (
+                <TaskDetail
+                  task={selectedTask}
+                  editTask={editTask}
+                  completeTask={completeTask}
+                  onClose={() => {
+                    setSelectedId(null);
+                    setShowDetail(false);
+                  }}
+                />
+              ) : (
+                <div style={emptyDetail}>
+                  <h2>Detalhe da Tarefa</h2>
+                  <p>Seleciona uma tarefa para ver o detalhe completo.</p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -803,7 +823,7 @@ function TaskCard({ task, selected, compact = false, onOpen, editTask, completeT
   );
 }
 
-function TaskDetail({ task, editTask, completeTask }) {
+function TaskDetail({ task, editTask, completeTask, onClose }) {
   const priority = normalizePriority(task.priority);
   const category = normalizeCategory(task.category);
   const timing = taskTiming(task);
@@ -813,7 +833,13 @@ function TaskDetail({ task, editTask, completeTask }) {
 
   return (
     <aside style={detailPanel}>
-      <h2 style={detailTitle}>Detalhe da Tarefa</h2>
+      <div style={detailHeader}>
+        <h2 style={detailTitle}>Detalhe da Tarefa</h2>
+
+        <button type="button" style={closeDetailButton} onClick={onClose}>
+          ✕
+        </button>
+      </div>
 
       <h3 style={detailTaskTitle}>{task.title || "Sem título"}</h3>
 
@@ -1080,6 +1106,13 @@ const cardValue = {
 const workArea = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) 330px",
+  gap: 16,
+  alignItems: "start",
+};
+
+const workAreaFull = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
   gap: 16,
   alignItems: "start",
 };
@@ -1404,10 +1437,31 @@ const emptyDetail = {
   color: "#64748b",
 };
 
+const detailHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 14,
+};
+
 const detailTitle = {
-  margin: "0 0 14px",
+  margin: 0,
   color: "#0f172a",
   fontSize: 20,
+};
+
+const closeDetailButton = {
+  border: "none",
+  background: "#ef4444",
+  color: "white",
+  width: 34,
+  height: 34,
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: 18,
+  lineHeight: 1,
 };
 
 const detailTaskTitle = {
