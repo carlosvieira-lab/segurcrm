@@ -1607,3 +1607,6 @@ const fullGreenButton = {
 };
 
 const muted = {
+  color: "#64748b",
+};
+
