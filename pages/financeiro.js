@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import Sidebar from "../../components/Sidebar";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -1021,4 +1021,3 @@ const tableRow = {
 const muted = {
   color: "#64748b",
 };
-
