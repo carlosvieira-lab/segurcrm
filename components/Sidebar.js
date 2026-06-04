@@ -15,6 +15,17 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export default function Sidebar({ active }) {
   const router = useRouter();
 
+  const clientId =
+    typeof router.query.id === "string"
+      ? router.query.id
+      : Array.isArray(router.query.id)
+      ? router.query.id[0]
+      : null;
+
+  const showClientCompactButton =
+    router.pathname === "/clientes/[id]" ||
+    router.pathname === "/clientes/[id]/compacto";
+
   async function logout() {
     await supabase.auth.signOut();
     router.push("/login");
@@ -30,6 +41,15 @@ export default function Sidebar({ active }) {
           <MenuItem href="/assistant" label="✨ IA" active={active === "assistant"} />
           <MenuItem href="/pesquisa" label="Pesquisa" active={active === "pesquisa"} />
           <MenuItem href="/clientes" label="Clientes" active={active === "clientes"} />
+
+          {showClientCompactButton && clientId && (
+            <MenuItem
+              href={`/clientes/${clientId}/compacto`}
+              label="Cliente Compacto"
+              active={active === "cliente-compacto"}
+            />
+          )}
+
           <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
           <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
           <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
