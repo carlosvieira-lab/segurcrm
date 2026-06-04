@@ -253,6 +253,7 @@ export default function Importacoes({ clients, policies, insurers }) {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [importMode, setImportMode] = useState("realvida");
 
   const realVida =
     insurers.find(
@@ -260,6 +261,11 @@ export default function Importacoes({ clients, policies, insurers }) {
     ) ||
     insurers.find(
       (insurer) => cleanText(insurer.name) === "real vida"
+    );
+
+  const generali =
+    insurers.find(
+      (insurer) => cleanText(insurer.name).includes("generali")
     );
 
   const existingClientsByNif = useMemo(() => {
@@ -292,43 +298,113 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   const analyzedRows = useMemo(() => {
     return rows.map((row, index) => {
-      const policyNumber = buildRealVidaPolicyNumber(row);
+      const isGenerali = importMode === "generali";
+
+      const policyNumber = isGenerali
+        ? String(
+            getCell(row, [
+              "Nº Apólice",
+              "N Apolice",
+              "Nº Apolice",
+              "Numero Apolice",
+              "Número Apólice",
+              "Apolice",
+              "Apólice",
+            ])
+          ).trim()
+        : buildRealVidaPolicyNumber(row);
 
       const clientName = formatClientName(
-        getCell(row, ["Tomador", "Cliente", "Nome"])
+        isGenerali
+          ? getCell(row, ["Nome Cliente", "Cliente", "Tomador", "Nome"])
+          : getCell(row, ["Tomador", "Cliente", "Nome"])
       );
 
       const nif = onlyNumbers(
-        getCell(row, ["Nif", "NIF", "Contribuinte"])
+        isGenerali
+          ? getCell(row, ["Nº Contribuinte", "N Contribuinte", "NIF", "Nif", "Contribuinte"])
+          : getCell(row, ["Nif", "NIF", "Contribuinte"])
       );
 
+      const phone = onlyNumbers(
+        isGenerali
+          ? getCell(row, ["Nº Telemóvel", "N Telemovel", "Telemóvel", "Telemovel", "Telefone", "Contacto"])
+          : getCell(row, ["Telefone", "Telemovel", "Telemóvel"])
+      );
+
+      const email = String(
+        isGenerali
+          ? getCell(row, ["Email", "E-mail", "Mail"])
+          : getCell(row, ["Email", "E-mail"])
+      ).trim();
+
+      const address = String(
+        isGenerali
+          ? getCell(row, ["Morada", "Endereço", "Endereco"])
+          : getCell(row, ["Morada"])
+      ).trim();
+
+      const locality = String(
+        isGenerali
+          ? getCell(row, ["Localidade"])
+          : getCell(row, ["Localidade"])
+      ).trim();
+
+      const postalCode = String(
+        isGenerali
+          ? getCell(row, ["Código Postal", "Codigo Postal", "C Postal", "CP"])
+          : getCell(row, ["Código Postal", "Codigo Postal", "CP"])
+      ).trim();
+
+      const branch = String(
+        isGenerali
+          ? getCell(row, ["Produto", "Ramo", "Modalidade"])
+          : getCell(row, ["Produto", "Ramo"])
+      ).trim();
+
       const startDate = excelDateToIso(
-        getCell(row, ["PeriodoDe", "Período De", "Inicio", "DataInicio"])
+        isGenerali
+          ? getCell(row, ["Data Início Período", "Data Inicio Periodo", "Inicio Periodo", "Data Inicio", "Início"])
+          : getCell(row, ["PeriodoDe", "Período De", "Inicio", "DataInicio"])
       );
 
       const renewalDate = excelDateToIso(
-        getCell(row, ["PeriodoAte", "Período Até", "Fim", "DataFim"])
+        isGenerali
+          ? getCell(row, ["Data Fim Período", "Data Fim Periodo", "Fim Periodo", "Data Fim", "Fim"])
+          : getCell(row, ["PeriodoAte", "Período Até", "Fim", "DataFim"])
       );
 
       const status = normalizeStatus(
-        getCell(row, ["Situacao", "Situação", "Estado"])
+        isGenerali
+          ? getCell(row, ["Situação", "Situacao", "Estado"])
+          : getCell(row, ["Situacao", "Situação", "Estado"])
       );
 
       const premium = parseNumber(
-        getCell(row, ["Premio", "Prémio"])
+        isGenerali
+          ? getCell(row, ["Prémio Comercial", "Premio Comercial", "Prémio", "Premio"])
+          : getCell(row, ["Premio", "Prémio"])
       );
 
       const commercialPremium = parseNumber(
-        getCell(row, ["PremioComercial", "Prémio Comercial"])
+        isGenerali
+          ? getCell(row, ["Prémio Comercial", "Premio Comercial"])
+          : getCell(row, ["PremioComercial", "Prémio Comercial"])
       );
 
       const paymentFrequency = normalizePaymentFrequency(
-        getCell(row, ["FormaPagamento", "Forma Pagamento", "Fracionamento"])
+        isGenerali
+          ? getCell(row, ["Tipo Fraccionamento", "Tipo Fracionamento", "Fraccionamento", "Fracionamento"])
+          : getCell(row, ["FormaPagamento", "Forma Pagamento", "Fracionamento"])
       );
 
-      const commission = parseNumber(
-        getCell(row, ["Comissao", "Comissão"])
+      const commissionRaw = parseNumber(
+        isGenerali
+          ? getCell(row, ["Comissão Distribuição", "Comissao Distribuicao", "Comissão", "Comissao"])
+          : getCell(row, ["Comissao", "Comissão"])
       );
+
+      const commission = isGenerali ? Math.abs(commissionRaw) : commissionRaw;
 
       const existingClient = nif
         ? existingClientsByNif.get(nif)
@@ -343,6 +419,12 @@ export default function Importacoes({ clients, policies, insurers }) {
         policyNumber,
         clientName,
         nif,
+        phone,
+        email,
+        address,
+        locality,
+        postalCode,
+        branch,
         startDate,
         renewalDate,
         status,
@@ -354,7 +436,7 @@ export default function Importacoes({ clients, policies, insurers }) {
         existingPolicy,
       };
     });
-  }, [rows, existingClientsByNif, existingPoliciesByNumber]);
+  }, [rows, importMode, existingClientsByNif, existingPoliciesByNumber]);
 
   const summary = useMemo(() => {
     const clientsNew = analyzedRows.filter(
@@ -401,6 +483,12 @@ export default function Importacoes({ clients, policies, insurers }) {
         ${row.existingClient?.name || ""}
         ${row.existingClient?.nif || ""}
         ${row.existingPolicy?.policy_number || ""}
+        ${row.phone || ""}
+        ${row.email || ""}
+        ${row.address || ""}
+        ${row.locality || ""}
+        ${row.postalCode || ""}
+        ${row.branch || ""}
       `);
 
       const numericText = onlyNumbers(`
@@ -408,6 +496,12 @@ export default function Importacoes({ clients, policies, insurers }) {
         ${row.policyNumber || ""}
         ${row.existingClient?.nif || ""}
         ${row.existingPolicy?.policy_number || ""}
+        ${row.phone || ""}
+        ${row.email || ""}
+        ${row.address || ""}
+        ${row.locality || ""}
+        ${row.postalCode || ""}
+        ${row.branch || ""}
       `);
 
       return (
@@ -449,7 +543,7 @@ export default function Importacoes({ clients, policies, insurers }) {
     } catch (error) {
       console.error(error);
       setErrorMessage(
-        "Não foi possível ler o Excel. Confirma se o ficheiro é o export da Real Vida."
+        "Não foi possível ler o Excel. Confirma se o ficheiro é um Excel válido da Real Vida ou Generali."
       );
     } finally {
       setLoading(false);
@@ -458,6 +552,11 @@ export default function Importacoes({ clients, policies, insurers }) {
 
 
   async function confirmImport() {
+    if (importMode === "generali") {
+      alert("Nesta fase a Generali está apenas em pré-visualização. Depois de validares os dados, eu preparo o botão de importação final.");
+      return;
+    }
+
     const confirm = window.confirm(
       "Confirmas a importação Real Vida?\n\nSerão criados clientes novos e criadas/atualizadas apólices. A importação NÃO preenche data de início e deixa o ramo em branco para preencher manualmente. Apólices existentes só atualizam prémio, comissão, fracionamento, estado e data de renovação."
     );
@@ -615,15 +714,54 @@ export default function Importacoes({ clients, policies, insurers }) {
         </header>
 
         <section style={card}>
-          <h2>Importar Excel Real Vida</h2>
+          <h2>Importar Excel</h2>
+
+          <div style={modeSelector}>
+            <button
+              type="button"
+              style={importMode === "realvida" ? modeButtonActive : modeButton}
+              onClick={() => {
+                setImportMode("realvida");
+                setRows([]);
+                setFileName("");
+                setImportResult(null);
+                setErrorMessage("");
+              }}
+            >
+              Real Vida
+            </button>
+
+            <button
+              type="button"
+              style={importMode === "generali" ? modeButtonActive : modeButton}
+              onClick={() => {
+                setImportMode("generali");
+                setRows([]);
+                setFileName("");
+                setImportResult(null);
+                setErrorMessage("");
+              }}
+            >
+              Generali
+            </button>
+          </div>
 
           <p style={muted}>
-            Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634.
+            {importMode === "realvida"
+              ? "Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634."
+              : "Esta fase lê e valida o Excel Generali em pré-visualização, sem gravar nada no CRM. Vamos confirmar clientes, NIF, telefone, email, morada, apólice, ramo, prémio, comissão e datas antes de ativar a importação final."}
           </p>
 
-          {!realVida && (
+          {importMode === "realvida" && !realVida && (
             <div style={warningBox}>
               Não encontrei a seguradora REAL VIDA na tabela insurers.
+              A pré-visualização funciona, mas antes da importação final convém confirmar a seguradora.
+            </div>
+          )}
+
+          {importMode === "generali" && !generali && (
+            <div style={warningBox}>
+              Não encontrei a seguradora GENERALI na tabela insurers.
               A pré-visualização funciona, mas antes da importação final convém confirmar a seguradora.
             </div>
           )}
@@ -669,13 +807,23 @@ export default function Importacoes({ clients, policies, insurers }) {
                   </p>
                 </div>
 
-                <button
-                  style={importButton}
-                  onClick={confirmImport}
-                  disabled={importing || summary.rowsWithErrors > 0}
-                >
-                  {importing ? "A importar..." : "Confirmar importação"}
-                </button>
+                {importMode === "realvida" ? (
+                  <button
+                    style={importButton}
+                    onClick={confirmImport}
+                    disabled={importing || summary.rowsWithErrors > 0}
+                  >
+                    {importing ? "A importar..." : "Confirmar importação"}
+                  </button>
+                ) : (
+                  <button
+                    style={previewOnlyButton}
+                    onClick={confirmImport}
+                    disabled={false}
+                  >
+                    Pré-visualização Generali
+                  </button>
+                )}
               </div>
 
               {summary.rowsWithErrors > 0 && (
@@ -729,7 +877,10 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <span>#</span>
                   <span>Cliente</span>
                   <span>NIF</span>
+                  <span>Telefone</span>
+                  <span>Email</span>
                   <span>Apólice</span>
+                  <span>Ramo</span>
                   <span>Início</span>
                   <span>Até</span>
                   <span>Prémio comercial</span>
@@ -771,7 +922,19 @@ export default function Importacoes({ clients, policies, insurers }) {
                       </span>
 
                       <span>
+                        {row.phone || "-"}
+                      </span>
+
+                      <span>
+                        {row.email || "-"}
+                      </span>
+
+                      <span>
                         {row.policyNumber || "-"}
+                      </span>
+
+                      <span>
+                        {row.branch || "-"}
                       </span>
 
                       <span>
@@ -852,6 +1015,33 @@ const card = {
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
+const modeSelector = {
+  display: "flex",
+  gap: 10,
+  margin: "18px 0",
+  flexWrap: "wrap",
+};
+
+const modeButton = {
+  background: "#f3f4f6",
+  color: "#374151",
+  border: "1px solid #d1d5db",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const modeButtonActive = {
+  background: "#2563eb",
+  color: "white",
+  border: "1px solid #2563eb",
+  padding: "10px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
 const uploadBox = {
   display: "grid",
   gap: 8,
@@ -908,6 +1098,16 @@ const summaryValue = {
 
 const importButton = {
   background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const previewOnlyButton = {
+  background: "#f59e0b",
   color: "white",
   border: "none",
   padding: "12px 16px",
@@ -988,24 +1188,24 @@ const table = {
 
 const tableHeader = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1.2fr 1fr 1fr 1.2fr 1fr 0.8fr 0.8fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr 1.2fr 1.2fr 1fr 1fr 1.2fr 1fr 0.8fr 0.8fr",
   gap: 10,
   background: "#f3f4f6",
   padding: "12px 14px",
   borderRadius: 12,
   fontWeight: "bold",
   fontSize: 13,
-  minWidth: 1150,
+  minWidth: 1500,
 };
 
 const tableRow = {
   display: "grid",
-  gridTemplateColumns: "0.4fr 2fr 1fr 1.2fr 1fr 1fr 1.2fr 1fr 0.8fr 0.8fr",
+  gridTemplateColumns: "0.4fr 2fr 1fr 1fr 1.4fr 1.2fr 1.2fr 1fr 1fr 1.2fr 1fr 0.8fr 0.8fr",
   gap: 10,
   padding: "12px 14px",
   borderBottom: "1px solid #e5e7eb",
   alignItems: "center",
-  minWidth: 1150,
+  minWidth: 1500,
   fontSize: 13,
 };
 
@@ -1035,4 +1235,3 @@ const badgeNew = {
 
 const muted = {
   color: "#6b7280",
-};
