@@ -85,7 +85,65 @@ function sortByContactDate(a, b) {
   return nameA.localeCompare(nameB, "pt-PT");
 }
 
-export default function Oportunidades({ opportunities, clients }) {
+function getOpportunityName(item) {
+  return item.name || item.clients?.name || "Sem nome";
+}
+
+function getOpportunityNif(item) {
+  return item.client_nif || item.clients?.nif || "-";
+}
+
+function getOpportunityPhone(item) {
+  return item.client_phone || item.clients?.phone || "";
+}
+
+function getInitials(name) {
+  const words = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+function contactStatus(item) {
+  const today = new Date().toISOString().split("T")[0];
+
+  if (!item.contact_date) {
+    return {
+      label: "Sem data",
+      color: "#64748b",
+      background: "#f1f5f9",
+    };
+  }
+
+  if (item.contact_date < today) {
+    return {
+      label: "Atrasado",
+      color: "#b91c1c",
+      background: "#fee2e2",
+    };
+  }
+
+  if (item.contact_date === today) {
+    return {
+      label: "Hoje",
+      color: "#c2410c",
+      background: "#ffedd5",
+    };
+  }
+
+  return {
+    label: "Futura",
+    color: "#1d4ed8",
+    background: "#dbeafe",
+  };
+}
+
+export default function OportunidadesCompacto({ opportunities, clients }) {
   const router = useRouter();
   const [clientNif, setClientNif] = useState("");
   const [clientId, setClientId] = useState(null);
@@ -97,6 +155,7 @@ export default function Oportunidades({ opportunities, clients }) {
   const [saving, setSaving] = useState(false);
   const [clientFound, setClientFound] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
 
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
@@ -486,18 +545,30 @@ export default function Oportunidades({ opportunities, clients }) {
     .filter((item) => item.status === "perdido")
     .sort(sortByContactDate);
 
+  const allSorted = [...filtered].sort(sortByContactDate);
+  const selectedOpportunity =
+    allSorted.find((item) => item.id === selectedId) || null;
+
   return (
     <div style={page}>
-      <Sidebar active="oportunidades" />
+      <Sidebar active="oportunidades-compacto" />
 
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Agenda de Captação</h1>
+            <h1 style={title}>Oportunidades 🎯</h1>
             <p style={subtitle}>
               Regista oportunidades fora da carteira e agenda contacto 1 mês antes do vencimento.
             </p>
           </div>
+
+          <button
+            type="button"
+            style={newOpportunityButton}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
+            + Nova oportunidade
+          </button>
         </header>
 
         <section style={searchCard}>
@@ -505,73 +576,88 @@ export default function Oportunidades({ opportunities, clients }) {
             style={searchInput}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar oportunidades por cliente, NIF, telefone, estado, oportunidade ou procedimento..."
+            placeholder="Pesquisar por cliente, NIF, telefone, oportunidade ou procedimento..."
           />
         </section>
 
+        <section style={statsGrid}>
+          <StatCard title="A contactar" value={toContact.length} color="#dc2626" icon="📅" />
+          <StatCard title="Futuras" value={future.length} color="#2563eb" icon="🗓️" />
+          <StatCard title="Ganhas" value={won.length} color="#16a34a" icon="🏆" />
+          <StatCard title="Perdidas" value={lost.length} color="#f97316" icon="✖" />
+          <StatCard title="Total" value={filtered.length} color="#7c3aed" icon="👥" />
+        </section>
+
         <section style={formCard}>
-          <h2>Nova oportunidade</h2>
+          <h2 style={formTitle}>👥 Nova oportunidade</h2>
 
           <form style={form} onSubmit={createOpportunity}>
-            <label style={label}>NIF do cliente</label>
+            <div>
+              <label style={label}>NIF do cliente</label>
+              <div style={nifRow}>
+                <input
+                  style={input}
+                  value={clientNif}
+                  onChange={(e) => setClientNif(e.target.value)}
+                  placeholder="NIF do cliente"
+                />
 
-            <div style={nifRow}>
+                <button type="button" style={darkButton} onClick={searchClientByNif}>
+                  Procurar
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={label}>Nome do cliente</label>
               <input
                 style={input}
-                value={clientNif}
-                onChange={(e) => setClientNif(e.target.value)}
-                placeholder="NIF"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Nome do cliente"
               />
+            </div>
 
-              <button type="button" style={darkButton} onClick={searchClientByNif}>
-                Procurar
-              </button>
+            <div>
+              <label style={label}>Contacto telefónico</label>
+              <input
+                style={input}
+                value={clientPhone}
+                onChange={(e) => setClientPhone(e.target.value)}
+                placeholder="Telefone"
+              />
             </div>
 
             {clientFound && (
-              <p style={successText}>Cliente encontrado e dados preenchidos automaticamente.</p>
-            )}
-
-            {clientFound && clientId && (
               <div style={linkedClientBox}>
                 Cliente importado da ficha: <strong>{clientName}</strong>
               </div>
             )}
 
-            <label style={label}>Nome do cliente</label>
-            <input
-              style={input}
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Nome do cliente"
-            />
+            <div style={wideField}>
+              <label style={label}>Oportunidade / seguro a captar</label>
+              <textarea
+                style={textarea}
+                value={opportunityText}
+                onChange={(e) => setOpportunityText(e.target.value)}
+                placeholder="Ex: Seguro automóvel na companhia X, cliente demonstrou interesse em transferir..."
+              />
+            </div>
 
-            <label style={label}>Contacto telefónico</label>
-            <input
-              style={input}
-              value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value)}
-              placeholder="Telefone"
-            />
+            <div>
+              <label style={label}>Data de vencimento da apólice na congénere</label>
+              <input
+                type="date"
+                style={input}
+                value={renewalDate}
+                onChange={(e) => setRenewalDate(e.target.value)}
+              />
+            </div>
 
-            <label style={label}>Oportunidade / seguro a captar</label>
-            <textarea
-              style={textarea}
-              value={opportunityText}
-              onChange={(e) => setOpportunityText(e.target.value)}
-              placeholder="Ex: Seguro automóvel na companhia X, cliente demonstrou interesse em transferir..."
-            />
-
-            <label style={label}>Data de vencimento da apólice na congénere</label>
-            <input
-              type="date"
-              style={input}
-              value={renewalDate}
-              onChange={(e) => setRenewalDate(e.target.value)}
-            />
-
-            <label style={label}>Data automática para contacto</label>
-            <input style={inputDisabled} value={contactDate || ""} readOnly />
+            <div>
+              <label style={label}>Data automática para contacto</label>
+              <input style={inputDisabled} value={contactDate || ""} readOnly />
+            </div>
 
             <button style={button} disabled={saving}>
               {saving ? "A guardar..." : "Guardar oportunidade"}
@@ -579,159 +665,277 @@ export default function Oportunidades({ opportunities, clients }) {
           </form>
         </section>
 
-        <section style={statsGrid}>
-          <StatCard title="A contactar" value={toContact.length} color="#dc2626" />
-          <StatCard title="Futuras" value={future.length} color="#2563eb" />
-          <StatCard title="Ganhas" value={won.length} color="#16a34a" />
-          <StatCard title="Perdidas" value={lost.length} color="#6b7280" />
+        <section style={urgentSection}>
+          <h2 style={urgentTitle}>📞 A contactar agora ({toContact.length})</h2>
+
+          {toContact.length === 0 ? (
+            <p style={muted}>Sem contactos urgentes.</p>
+          ) : (
+            <div style={urgentGrid}>
+              {toContact.slice(0, 4).map((item) => (
+                <UrgentCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedId === item.id}
+                  onOpen={() => setSelectedId(item.id)}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
-        <Section title="A contactar agora" urgent>
-          <OpportunityGrid
-            items={toContact}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
+        <section style={listSection}>
+          <div style={listHeader}>
+            <h2 style={sectionTitle}>Oportunidades registadas</h2>
+            <span style={orderBadge}>Ordenado por data de contacto ↑</span>
+          </div>
 
-        <Section title="Contactos futuros">
-          <OpportunityGrid
-            items={future}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Cliente</th>
+                  <th style={th}>Contacto</th>
+                  <th style={th}>Oportunidade</th>
+                  <th style={th}>Vencimento</th>
+                  <th style={th}>Contactar em</th>
+                  <th style={th}>Estado</th>
+                  <th style={th}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allSorted.map((item) => (
+                  <OpportunityRow
+                    key={item.id}
+                    item={item}
+                    selected={selectedId === item.id}
+                    onOpen={() => setSelectedId(item.id)}
+                    editOpportunity={editOpportunity}
+                    addProcedure={addProcedure}
+                    updateStatus={updateStatus}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-        <Section title="Ganhas">
-          <OpportunityGrid
-            items={won}
+        {selectedOpportunity && (
+          <OpportunityDetail
+            item={selectedOpportunity}
+            onClose={() => setSelectedId(null)}
             editOpportunity={editOpportunity}
             addProcedure={addProcedure}
             updateStatus={updateStatus}
           />
-        </Section>
-
-        <Section title="Perdidas">
-          <OpportunityGrid
-            items={lost}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
+        )}
       </main>
     </div>
   );
 }
 
-function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus }) {
-  if (items.length === 0) {
-    return <p style={muted}>Sem registos.</p>;
-  }
-
+function StatCard({ title, value, color, icon }) {
   return (
-    <div style={grid}>
-      {items.map((item) => {
-        const phone = item.client_phone || item.clients?.phone || "";
-        const whatsappLink = buildWhatsappLink(phone);
-
-        const today = new Date().toISOString().split("T")[0];
-        const isUrgent =
-          item.status !== "ganho" &&
-          item.status !== "perdido" &&
-          item.contact_date &&
-          item.contact_date <= today;
-
-        return (
-          <div
-            key={item.id}
-            style={{
-              ...opportunityCard,
-              ...(isUrgent ? opportunityUrgentCard : {}),
-            }}
-          >
-            <div style={topLine}>
-              <h3 style={opportunityTitle}>
-                {isUrgent ? "🔥 " : ""}
-                {item.name || item.clients?.name || "Sem nome"}
-              </h3>
-              <span style={statusBadge}>{item.status || "por contactar"}</span>
-            </div>
-
-            <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
-            <p><strong>Telefone:</strong> {phone || "-"}</p>
-            <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
-            <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
-            <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
-
-            <div style={quickActions}>
-              {item.client_id && (
-                <Link href={`/clientes/${item.client_id}`} style={clientLink}>
-                  Abrir ficha do cliente
-                </Link>
-              )}
-
-              {whatsappLink && (
-                <a
-                  href={whatsappLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={whatsappButton}
-                >
-                  WhatsApp
-                </a>
-              )}
-            </div>
-
-            <div style={procedureBox}>
-              <strong>Procedimentos / cronologia</strong>
-              <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
-            </div>
-
-            <div style={buttonGroup}>
-              <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
-                Editar
-              </button>
-
-              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
-                + Procedimento
-              </button>
-
-              <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
-                Contactado
-              </button>
-
-              <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
-                Ganho
-              </button>
-
-              <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
-                Perdido
-              </button>
-            </div>
-          </div>
-        );
-      })}
+    <div style={statCard}>
+      <div style={{ ...statIcon, color, background: `${color}18` }}>{icon}</div>
+      <div>
+        <p style={cardLabel}>{title}</p>
+        <h2 style={{ ...cardValue, color }}>{value}</h2>
+      </div>
     </div>
   );
 }
 
-function Section({ title, children, urgent = false }) {
+function UrgentCard({ item, selected, onOpen }) {
+  const status = contactStatus(item);
+  const phone = getOpportunityPhone(item);
+
   return (
-    <section style={urgent ? urgentSection : section}>
-      <h2 style={urgent ? urgentSectionTitle : sectionTitle}>{title}</h2>
-      {children}
-    </section>
+    <button
+      type="button"
+      style={{
+        ...urgentCard,
+        ...(selected ? selectedCard : {}),
+      }}
+      onClick={onOpen}
+    >
+      <div style={urgentTop}>
+        <strong style={urgentName}>{getOpportunityName(item)}</strong>
+        <span
+          style={{
+            ...miniBadge,
+            color: status.color,
+            background: status.background,
+          }}
+        >
+          {status.label}
+        </span>
+      </div>
+
+      <div style={urgentMeta}>NIF: {getOpportunityNif(item)}</div>
+      <div style={urgentMeta}>☎ {phone || "-"}</div>
+      <div style={urgentContact}>
+        Contacto em: <strong>{formatDate(item.contact_date)}</strong>
+      </div>
+    </button>
   );
 }
 
-function StatCard({ title, value, color }) {
+function OpportunityRow({
+  item,
+  selected,
+  onOpen,
+  editOpportunity,
+  addProcedure,
+  updateStatus,
+}) {
+  const name = getOpportunityName(item);
+  const phone = getOpportunityPhone(item);
+  const status = contactStatus(item);
+
   return (
-    <div style={statCard}>
-      <p style={cardLabel}>{title}</p>
-      <h2 style={{ ...cardValue, color }}>{value}</h2>
+    <tr style={selected ? selectedRow : tr}>
+      <td style={td}>
+        <div style={clientCell}>
+          <span style={avatar}>{getInitials(name)}</span>
+          <div>
+            <strong>{name}</strong>
+            <div style={smallMuted}>NIF: {getOpportunityNif(item)}</div>
+          </div>
+        </div>
+      </td>
+
+      <td style={td}>☎ {phone || "-"}</td>
+
+      <td style={td}>
+        <div style={opportunityTextCell}>
+          {item.insurance_type || "-"}
+        </div>
+      </td>
+
+      <td style={td}>{formatDate(item.renewal_date)}</td>
+
+      <td style={td}>
+        <div>{formatDate(item.contact_date)}</div>
+        <span style={{ ...miniBadge, color: status.color, background: status.background }}>
+          {status.label}
+        </span>
+      </td>
+
+      <td style={td}>
+        <span style={statusBadge}>{item.status || "por contactar"}</span>
+      </td>
+
+      <td style={td}>
+        <div style={rowActions}>
+          <button type="button" style={iconButtonGreen} onClick={onOpen} title="Abrir oportunidade">
+            👁
+          </button>
+
+          <button type="button" style={iconButtonBlue} onClick={() => editOpportunity(item)} title="Editar">
+            ✎
+          </button>
+
+          <button type="button" style={iconButtonPurple} onClick={() => addProcedure(item)} title="Procedimento">
+            +
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function OpportunityDetail({
+  item,
+  onClose,
+  editOpportunity,
+  addProcedure,
+  updateStatus,
+}) {
+  const phone = getOpportunityPhone(item);
+  const whatsappLink = buildWhatsappLink(phone);
+  const status = contactStatus(item);
+
+  return (
+    <aside style={detailPanel}>
+      <div style={detailHeader}>
+        <div>
+          <h2 style={detailTitle}>{getOpportunityName(item)}</h2>
+          <span style={{ ...miniBadge, color: status.color, background: status.background }}>
+            {status.label}
+          </span>
+        </div>
+
+        <button type="button" style={closeButton} onClick={onClose}>
+          Fechar
+        </button>
+      </div>
+
+      <div style={detailGrid}>
+        <Info label="NIF" value={getOpportunityNif(item)} />
+        <Info label="Telefone" value={phone || "-"} />
+        <Info label="Vencimento" value={formatDate(item.renewal_date)} />
+        <Info label="Contactar em" value={formatDate(item.contact_date)} />
+        <Info label="Estado" value={item.status || "por contactar"} />
+      </div>
+
+      <div style={detailBlock}>
+        <strong>Oportunidade</strong>
+        <p>{item.insurance_type || "-"}</p>
+      </div>
+
+      <div style={detailButtons}>
+        {item.client_id && (
+          <Link href={`/clientes/${item.client_id}`} style={clientLink}>
+            Abrir ficha do cliente
+          </Link>
+        )}
+
+        {whatsappLink && (
+          <a
+            href={whatsappLink}
+            target="_blank"
+            rel="noreferrer"
+            style={whatsappButton}
+          >
+            WhatsApp
+          </a>
+        )}
+
+        <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
+          Editar
+        </button>
+
+        <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
+          + Procedimento
+        </button>
+
+        <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
+          Contactado
+        </button>
+
+        <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
+          Ganho
+        </button>
+
+        <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
+          Perdido
+        </button>
+      </div>
+
+      <div style={procedureBox}>
+        <strong>Procedimentos / cronologia</strong>
+        <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
+      </div>
+    </aside>
+  );
+}
+
+function Info({ label, value }) {
+  return (
+    <div style={infoBox}>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -745,15 +949,20 @@ const page = {
 
 const main = {
   flex: 1,
-  padding: 28,
+  padding: 24,
+  position: "relative",
 };
 
 const header = {
-  marginBottom: 18,
+  marginBottom: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
 };
 
 const title = {
-  fontSize: 38,
+  fontSize: 34,
   margin: 0,
   color: "#15803d",
   fontWeight: 900,
@@ -762,36 +971,91 @@ const title = {
 
 const subtitle = {
   color: "#475569",
-  marginTop: 8,
-  fontSize: 16,
-  lineHeight: 1.35,
+  marginTop: 6,
+  fontSize: 15,
+};
+
+const newOpportunityButton = {
+  background: "#15803d",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const searchCard = {
   background: "white",
-  padding: 14,
+  padding: 12,
   borderRadius: 16,
-  marginBottom: 16,
+  marginBottom: 14,
   border: "1px solid #e5e7eb",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const searchInput = {
   width: "100%",
-  padding: 13,
+  padding: 12,
   borderRadius: 12,
   border: "1px solid #cbd5e1",
-  fontSize: 16,
+  fontSize: 15,
   boxSizing: "border-box",
 };
 
-const formCard = {
-  background: "linear-gradient(135deg, #ffffff, #f8fafc)",
-  padding: 18,
-  borderRadius: 18,
-  marginBottom: 16,
+const statsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const statCard = {
+  background: "white",
+  padding: 14,
+  borderRadius: 16,
   border: "1px solid #e5e7eb",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+const statIcon = {
+  width: 46,
+  height: 46,
+  borderRadius: 12,
+  display: "grid",
+  placeItems: "center",
+  fontSize: 22,
+};
+
+const cardLabel = {
+  color: "#334155",
+  margin: 0,
+  fontWeight: 800,
+  fontSize: 13,
+};
+
+const cardValue = {
+  fontSize: 30,
+  margin: "4px 0 0",
+  lineHeight: 1,
+};
+
+const formCard = {
+  background: "linear-gradient(135deg, #ffffff, #f0fdf4)",
+  padding: 16,
+  borderRadius: 18,
+  marginBottom: 14,
+  border: "1px solid #bbf7d0",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const formTitle = {
+  margin: "0 0 12px",
+  color: "#15803d",
+  fontSize: 20,
 };
 
 const form = {
@@ -800,9 +1064,15 @@ const form = {
   gap: 10,
 };
 
+const wideField = {
+  gridColumn: "span 2",
+};
+
 const label = {
-  fontSize: 13,
-  color: "#15803d",
+  display: "block",
+  marginBottom: 5,
+  fontSize: 12,
+  color: "#166534",
   fontWeight: 800,
 };
 
@@ -813,30 +1083,30 @@ const nifRow = {
 };
 
 const input = {
-  padding: 12,
+  padding: 11,
   borderRadius: 10,
   border: "1px solid #cbd5e1",
-  fontSize: 15,
+  fontSize: 14,
   boxSizing: "border-box",
   width: "100%",
 };
 
 const inputDisabled = {
-  padding: 12,
+  padding: 11,
   borderRadius: 10,
   border: "1px solid #cbd5e1",
   background: "#f1f5f9",
-  fontSize: 15,
+  fontSize: 14,
   boxSizing: "border-box",
   width: "100%",
 };
 
 const textarea = {
-  padding: 12,
+  padding: 11,
   borderRadius: 10,
   border: "1px solid #cbd5e1",
-  minHeight: 86,
-  fontSize: 15,
+  minHeight: 78,
+  fontSize: 14,
   fontFamily: "Arial, sans-serif",
   boxSizing: "border-box",
   width: "100%",
@@ -846,133 +1116,195 @@ const button = {
   background: "#15803d",
   color: "white",
   border: "none",
-  padding: 13,
+  padding: 12,
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
-  fontSize: 15,
+  alignSelf: "end",
 };
 
 const darkButton = {
   background: "#111827",
   color: "white",
   border: "none",
-  padding: "0 16px",
+  padding: "0 14px",
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
 };
 
-const successText = {
-  color: "#166534",
-  fontWeight: "bold",
-  margin: 0,
-  gridColumn: "1 / -1",
-};
-
 const linkedClientBox = {
   background: "#dcfce7",
   color: "#166534",
-  padding: 11,
+  padding: 10,
   borderRadius: 10,
   fontWeight: "bold",
   gridColumn: "1 / -1",
 };
 
-const statsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 12,
-  marginBottom: 16,
-};
-
-const statCard = {
-  background: "white",
-  padding: 16,
-  borderRadius: 16,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const cardLabel = {
-  color: "#15803d",
-  margin: 0,
-  fontWeight: 800,
-  fontSize: 14,
-};
-
-const cardValue = {
-  fontSize: 34,
-  margin: "8px 0 0",
-  lineHeight: 1,
-};
-
-const section = {
-  background: "white",
-  padding: 18,
-  borderRadius: 18,
-  marginBottom: 16,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
 const urgentSection = {
   background: "linear-gradient(135deg, #fff7ed, #fee2e2)",
-  padding: 18,
+  padding: 16,
   borderRadius: 18,
-  marginBottom: 16,
+  marginBottom: 14,
   border: "2px solid #fb923c",
   boxShadow: "0 1px 5px rgba(0,0,0,0.08)",
 };
 
-const sectionTitle = {
-  margin: "0 0 14px",
-  color: "#0f172a",
-  fontSize: 22,
-  fontWeight: 900,
-};
-
-const urgentSectionTitle = {
-  margin: "0 0 14px",
+const urgentTitle = {
+  margin: "0 0 12px",
   color: "#9a3412",
-  fontSize: 24,
-  fontWeight: 900,
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))",
-  gap: 12,
-};
-
-const opportunityCard = {
-  background: "#f8fafc",
-  padding: 15,
-  borderRadius: 15,
-  border: "1px solid #e5e7eb",
-  fontSize: 15,
-  lineHeight: 1.28,
-};
-
-const opportunityUrgentCard = {
-  background: "#fff7ed",
-  border: "2px solid #fb923c",
-};
-
-const opportunityTitle = {
-  margin: 0,
-  color: "#0f172a",
   fontSize: 20,
   fontWeight: 900,
-  lineHeight: 1.15,
 };
 
-const topLine = {
+const urgentGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 10,
+};
+
+const urgentCard = {
+  background: "#fff7ed",
+  border: "1px solid #fecaca",
+  borderRadius: 12,
+  padding: 12,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const selectedCard = {
+  outline: "3px solid #16a34a",
+};
+
+const urgentTop = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 12,
+  gap: 8,
   alignItems: "center",
-  marginBottom: 8,
+  marginBottom: 6,
+};
+
+const urgentName = {
+  color: "#111827",
+  fontSize: 15,
+};
+
+const urgentMeta = {
+  color: "#334155",
+  fontSize: 13,
+  marginBottom: 4,
+};
+
+const urgentContact = {
+  color: "#991b1b",
+  fontSize: 13,
+  marginTop: 6,
+};
+
+const listSection = {
+  background: "white",
+  padding: 16,
+  borderRadius: 18,
+  marginBottom: 18,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const listHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 10,
+};
+
+const sectionTitle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 21,
+  fontWeight: 900,
+};
+
+const orderBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+  borderRadius: 999,
+  padding: "6px 10px",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const tableWrap = {
+  overflowX: "auto",
+};
+
+const table = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 13,
+};
+
+const th = {
+  textAlign: "left",
+  color: "#475569",
+  padding: "10px 8px",
+  borderBottom: "1px solid #e5e7eb",
+  whiteSpace: "nowrap",
+};
+
+const tr = {
+  background: "white",
+};
+
+const selectedRow = {
+  background: "#f0fdf4",
+};
+
+const td = {
+  padding: "10px 8px",
+  borderBottom: "1px solid #e5e7eb",
+  verticalAlign: "middle",
+};
+
+const clientCell = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  minWidth: 210,
+};
+
+const avatar = {
+  minWidth: 36,
+  width: 36,
+  height: 36,
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#15803d",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+};
+
+const smallMuted = {
+  color: "#64748b",
+  fontSize: 12,
+  marginTop: 3,
+};
+
+const opportunityTextCell = {
+  maxWidth: 260,
+  whiteSpace: "normal",
+  lineHeight: 1.25,
+};
+
+const miniBadge = {
+  display: "inline-block",
+  padding: "4px 9px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
 };
 
 const statusBadge = {
@@ -985,40 +1317,135 @@ const statusBadge = {
   whiteSpace: "nowrap",
 };
 
-const quickActions = {
+const rowActions = {
+  display: "flex",
+  gap: 6,
+  alignItems: "center",
+};
+
+const iconButtonGreen = {
+  border: "none",
+  background: "#dcfce7",
+  color: "#166534",
+  borderRadius: 999,
+  width: 30,
+  height: 30,
+  cursor: "pointer",
+};
+
+const iconButtonBlue = {
+  border: "none",
+  background: "#dbeafe",
+  color: "#1d4ed8",
+  borderRadius: 999,
+  width: 30,
+  height: 30,
+  cursor: "pointer",
+};
+
+const iconButtonPurple = {
+  border: "none",
+  background: "#ede9fe",
+  color: "#6d28d9",
+  borderRadius: 999,
+  width: 30,
+  height: 30,
+  cursor: "pointer",
+  fontWeight: 900,
+};
+
+const detailPanel = {
+  position: "sticky",
+  bottom: 0,
+  background: "white",
+  border: "2px solid #bbf7d0",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 -4px 18px rgba(15, 23, 42, 0.15)",
+  zIndex: 5,
+};
+
+const detailHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const detailTitle = {
+  margin: "0 0 6px",
+  color: "#15803d",
+  fontSize: 24,
+};
+
+const closeButton = {
+  background: "#f1f5f9",
+  border: "1px solid #cbd5e1",
+  color: "#0f172a",
+  borderRadius: 10,
+  padding: "9px 12px",
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const detailGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const infoBox = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 10,
+  display: "grid",
+  gap: 4,
+  color: "#64748b",
+  fontSize: 12,
+};
+
+const detailBlock = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 12,
+};
+
+const detailButtons = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginTop: 10,
+  marginBottom: 12,
 };
 
 const clientLink = {
   background: "#0f766e",
   color: "white",
-  padding: "9px 12px",
+  padding: "10px 14px",
   borderRadius: 8,
   textDecoration: "none",
   display: "inline-block",
   fontWeight: "bold",
-  fontSize: 14,
 };
 
 const whatsappButton = {
   background: "#16a34a",
   color: "white",
-  padding: "9px 12px",
+  padding: "10px 14px",
   borderRadius: 8,
   textDecoration: "none",
   display: "inline-block",
   fontWeight: "bold",
-  fontSize: 14,
 };
 
 const procedureBox = {
-  background: "white",
+  background: "#f8fafc",
   padding: 12,
   borderRadius: 12,
-  marginTop: 12,
   border: "1px solid #e5e7eb",
 };
 
@@ -1027,27 +1454,20 @@ const procedureText = {
   fontFamily: "Arial, sans-serif",
   margin: "8px 0 0",
   fontSize: 13,
-  lineHeight: 1.28,
+  lineHeight: 1.3,
   color: "#475569",
-};
-
-const buttonGroup = {
-  display: "flex",
-  gap: 7,
-  flexWrap: "wrap",
-  marginTop: 12,
 };
 
 const smallButton = {
   color: "white",
   border: "none",
-  padding: "9px 11px",
+  padding: "10px 12px",
   borderRadius: 8,
   cursor: "pointer",
   fontWeight: "bold",
-  fontSize: 13,
 };
 
 const muted = {
   color: "#64748b",
 };
+
