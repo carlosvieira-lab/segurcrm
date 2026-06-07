@@ -1111,7 +1111,7 @@ const timelineItems = createTimeline(
             )}
 
             <Link
-              href={`/tarefas?cliente=${client.id}`}
+              href={`/tarefas/compacto?cliente=${client.id}&origem=cliente`}
               style={taskShortcutButton}
             >
               + Nova tarefa
@@ -2059,7 +2059,7 @@ const timelineItems = createTimeline(
   </strong>
 </div>
 
-<Link href={`/tarefas?cliente=${client.id}`} style={statBoxLink}>
+<Link href={`/tarefas/compacto?cliente=${client.id}&origem=cliente`} style={statBoxLink}>
   <span style={statLabel}>Tarefas agendadas</span>
   <strong style={statValue}>
     {scheduledTasks.length}
@@ -2230,12 +2230,12 @@ const timelineItems = createTimeline(
           <h2 style={sectionTitle}>Timeline do Cliente</h2>
 
           <div style={timelineSummaryGrid}>
-            <Link href={`/tarefas?cliente=${client.id}`} style={timelineSummaryBoxLink}>
+            <Link href={`/tarefas/compacto?cliente=${client.id}&origem=cliente`} style={timelineSummaryBoxLink}>
               <span style={timelineSummaryLabel}>Tarefas abertas</span>
               <strong style={timelineSummaryValue}>{openTasks.length}</strong>
             </Link>
 
-            <Link href={`/tarefas?cliente=${client.id}`} style={timelineSummaryBoxLink}>
+            <Link href={`/tarefas/compacto?cliente=${client.id}&origem=cliente`} style={timelineSummaryBoxLink}>
               <span style={timelineSummaryLabel}>Tarefas agendadas</span>
               <strong style={timelineSummaryValue}>{scheduledTasks.length}</strong>
             </Link>
