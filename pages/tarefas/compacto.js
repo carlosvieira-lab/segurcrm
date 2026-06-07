@@ -182,6 +182,7 @@ export default function TarefasCompacto({ tasks }) {
     client_id: null,
     client_name: "",
     client_phone: "",
+    client_nif: "",
     description: "",
     category: "ADMINISTRATIVA",
     priority: "NORMAL",
@@ -209,6 +210,10 @@ export default function TarefasCompacto({ tasks }) {
         client_id: data.id,
         client_name: data.name || "",
         client_phone: data.phone || "",
+        client_nif: data.nif || "",
+        description:
+          current.description ||
+          `Tarefa criada a partir da ficha do cliente: ${data.name || ""}`,
       }));
     }
 
@@ -454,6 +459,15 @@ export default function TarefasCompacto({ tasks }) {
             <h2 style={formTitle}>{showEditTaskForm ? "Editar Tarefa" : "Nova Tarefa"}</h2>
 
             <form onSubmit={showEditTaskForm ? saveTask : createTask} style={formGrid}>
+              {!showEditTaskForm && taskForm.client_id && (
+                <div style={clientOriginBox}>
+                  <strong>👤 Cliente associado automaticamente</strong>
+                  <div>Nome: {taskForm.client_name}</div>
+                  <div>NIF: {taskForm.client_nif || "-"}</div>
+                  <div>Telefone: {taskForm.client_phone || "-"}</div>
+                  <div>Origem: Ficha de Cliente</div>
+                </div>
+              )}
               <input
                 style={input}
                 placeholder="Título da tarefa"
@@ -1075,6 +1089,17 @@ const input = {
   fontSize: 14,
   width: "100%",
   boxSizing: "border-box",
+};
+
+const clientOriginBox = {
+  gridColumn: "1 / -1",
+  background: "#dcfce7",
+  border: "1px solid #86efac",
+  color: "#166534",
+  padding: 12,
+  borderRadius: 12,
+  fontWeight: "bold",
+  lineHeight: 1.6,
 };
 
 const textarea = {
