@@ -1048,6 +1048,20 @@ const cancelledPolicies = policies.filter(
   (policy) => policy.status === "anulada"
 );
 
+const openTasks = tasks.filter(
+  (task) => task.status !== "concluida"
+);
+
+const scheduledTasks = openTasks.filter(
+  (task) => task.due_date
+);
+
+const activeOpportunities = opportunities.filter(
+  (opportunity) =>
+    opportunity.status !== "ganho" &&
+    opportunity.status !== "perdido"
+);
+
 const totalPremium = activePolicies.reduce(
   (sum, policy) => sum + Number(policy.annual_premium || 0),
   0
@@ -2045,6 +2059,20 @@ const timelineItems = createTimeline(
   </strong>
 </div>
 
+<Link href={`/tarefas?cliente=${client.id}`} style={statBoxLink}>
+  <span style={statLabel}>Tarefas agendadas</span>
+  <strong style={statValue}>
+    {scheduledTasks.length}
+  </strong>
+</Link>
+
+<Link href={`/oportunidades?cliente=${client.id}`} style={statBoxLink}>
+  <span style={statLabel}>Oportunidades abertas</span>
+  <strong style={statValue}>
+    {activeOpportunities.length}
+  </strong>
+</Link>
+
             <div style={statBox}>
               <span style={statLabel}>Sinistros</span>
               <strong style={statValue}>{claims.length}</strong>
@@ -2200,6 +2228,28 @@ const timelineItems = createTimeline(
 
         <section style={timelineCard}>
           <h2 style={sectionTitle}>Timeline do Cliente</h2>
+
+          <div style={timelineSummaryGrid}>
+            <Link href={`/tarefas?cliente=${client.id}`} style={timelineSummaryBoxLink}>
+              <span style={timelineSummaryLabel}>Tarefas abertas</span>
+              <strong style={timelineSummaryValue}>{openTasks.length}</strong>
+            </Link>
+
+            <Link href={`/tarefas?cliente=${client.id}`} style={timelineSummaryBoxLink}>
+              <span style={timelineSummaryLabel}>Tarefas agendadas</span>
+              <strong style={timelineSummaryValue}>{scheduledTasks.length}</strong>
+            </Link>
+
+            <Link href={`/oportunidades?cliente=${client.id}`} style={timelineSummaryBoxLink}>
+              <span style={timelineSummaryLabel}>Oportunidades abertas</span>
+              <strong style={timelineSummaryValue}>{activeOpportunities.length}</strong>
+            </Link>
+
+            <div style={timelineSummaryBox}>
+              <span style={timelineSummaryLabel}>Eventos na timeline</span>
+              <strong style={timelineSummaryValue}>{timelineItems.length}</strong>
+            </div>
+          </div>
 
           {timelineItems.length === 0 ? (
             <p>Sem histórico registado.</p>
@@ -2449,6 +2499,18 @@ const statBox = {
   display: "flex",
   flexDirection: "column",
   gap: 8,
+};
+
+const statBoxLink = {
+  background: "white",
+  padding: 18,
+  borderRadius: 14,
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  textDecoration: "none",
+  color: "#111827",
+  border: "1px solid #bfdbfe",
 };
 
 const statLabel = {
@@ -2826,6 +2888,44 @@ const timelineCard = {
   borderRadius: 18,
   marginBottom: 24,
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const timelineSummaryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 12,
+  marginBottom: 18,
+};
+
+const timelineSummaryBox = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  display: "grid",
+  gap: 6,
+};
+
+const timelineSummaryBoxLink = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 14,
+  padding: 14,
+  display: "grid",
+  gap: 6,
+  textDecoration: "none",
+  color: "#111827",
+};
+
+const timelineSummaryLabel = {
+  color: "#64748b",
+  fontSize: 13,
+  fontWeight: "bold",
+};
+
+const timelineSummaryValue = {
+  color: "#2563eb",
+  fontSize: 26,
 };
 
 const timelineList = {
