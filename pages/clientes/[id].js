@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -519,6 +519,13 @@ export default function ClientePage({ client, policies, allPolicies, claims, tas
 
   const [policyDuplicateWarning, setPolicyDuplicateWarning] = useState(null);
 
+  const [showCommercialCalculator, setShowCommercialCalculator] = useState(false);
+  const [calculatorForm, setCalculatorForm] = useState({
+    annual_premium: "",
+    annual_commission: "",
+    payment_frequency: "Mensal",
+  });
+
   const [showEditPolicyForm, setShowEditPolicyForm] = useState(false);
   const [editingPolicyId, setEditingPolicyId] = useState(null);
 
@@ -863,6 +870,36 @@ setTimeout(() => {
     }
   }
 
+  function calculatePaymentFromAnnual(value, frequency) {
+    const annualValue = parseDecimal(value);
+    const multiplier = getFrequencyMultiplier(frequency);
+
+    if (!multiplier) return 0;
+
+    return annualValue / multiplier;
+  }
+
+  function applyCalculatorToPolicyForm() {
+    setPolicyForm({
+      ...policyForm,
+      annual_premium: formatDecimalInput(
+        calculatePaymentFromAnnual(
+          calculatorForm.annual_premium,
+          calculatorForm.payment_frequency
+        )
+      ),
+      commission_per_payment: formatDecimalInput(
+        calculatePaymentFromAnnual(
+          calculatorForm.annual_commission,
+          calculatorForm.payment_frequency
+        )
+      ),
+      payment_frequency: calculatorForm.payment_frequency,
+    });
+
+    setShowPolicyForm(true);
+  }
+
   function checkPolicyDuplicate(policyNumber, insurerName) {
     const normalizedNewPolicy = normalizePolicyNumber(policyNumber);
 
@@ -1076,6 +1113,13 @@ const timelineItems = createTimeline(
             <button style={button} onClick={() => setShowPolicyForm(true)}>
               + Nova Apólice
             </button>
+
+            <button
+              style={calculatorShortcutButton}
+              onClick={() => setShowCommercialCalculator(!showCommercialCalculator)}
+            >
+              🧮 Calculadora
+            </button>
           </div>
         </div>
 {showEditClientForm && (
@@ -1270,6 +1314,164 @@ const timelineItems = createTimeline(
     </form>
   </section>
 )}
+        {showCommercialCalculator && (
+          <section style={calculatorCard}>
+            <div style={calculatorHeader}>
+              <div>
+                <h2 style={sectionTitle}>🧮 Calculadora Comercial</h2>
+                <p style={calculatorSubtitle}>
+                  Calcula prémio por pagamento, comissão por pagamento e percentagem de comissão antes de criar a apólice.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                style={cancelButton}
+                onClick={() => setShowCommercialCalculator(false)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={calculatorGrid}>
+              <div style={calculatorBox}>
+                <label style={fieldLabel}>
+                  Prémio anual
+                  <input
+                    style={input}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ex: 1200,00"
+                    value={calculatorForm.annual_premium}
+                    onChange={(e) =>
+                      setCalculatorForm({
+                        ...calculatorForm,
+                        annual_premium: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Fracionamento
+                  <select
+                    style={input}
+                    value={calculatorForm.payment_frequency}
+                    onChange={(e) =>
+                      setCalculatorForm({
+                        ...calculatorForm,
+                        payment_frequency: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="Mensal">Mensal</option>
+                    <option value="Trimestral">Trimestral</option>
+                    <option value="Semestral">Semestral</option>
+                    <option value="Anual">Anual</option>
+                  </select>
+                </label>
+
+                <div style={calculatorResult}>
+                  <span>Prémio por pagamento</span>
+                  <strong>
+                    {formatEuro(
+                      calculatePaymentFromAnnual(
+                        calculatorForm.annual_premium,
+                        calculatorForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </div>
+              </div>
+
+              <div style={calculatorBox}>
+                <label style={fieldLabel}>
+                  Comissão anual
+                  <input
+                    style={input}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ex: 180,00"
+                    value={calculatorForm.annual_commission}
+                    onChange={(e) =>
+                      setCalculatorForm({
+                        ...calculatorForm,
+                        annual_commission: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <div style={calculatorResult}>
+                  <span>Comissão por pagamento</span>
+                  <strong>
+                    {formatEuro(
+                      calculatePaymentFromAnnual(
+                        calculatorForm.annual_commission,
+                        calculatorForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </div>
+
+                <div style={calculatorResultPurple}>
+                  <span>Percentagem de comissão</span>
+                  <strong>
+                    {formatPercent(
+                      calculateCommissionPercentage(
+                        parseDecimal(calculatorForm.annual_premium),
+                        parseDecimal(calculatorForm.annual_commission)
+                      )
+                    )}
+                    %
+                  </strong>
+                </div>
+              </div>
+
+              <div style={calculatorBox}>
+                <h3 style={{ marginTop: 0 }}>Resumo para aplicar</h3>
+
+                <div style={calculatorSummaryLine}>
+                  <span>Fracionamento</span>
+                  <strong>{calculatorForm.payment_frequency}</strong>
+                </div>
+
+                <div style={calculatorSummaryLine}>
+                  <span>Prémio por pagamento</span>
+                  <strong>
+                    {formatEuro(
+                      calculatePaymentFromAnnual(
+                        calculatorForm.annual_premium,
+                        calculatorForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </div>
+
+                <div style={calculatorSummaryLine}>
+                  <span>Comissão por pagamento</span>
+                  <strong>
+                    {formatEuro(
+                      calculatePaymentFromAnnual(
+                        calculatorForm.annual_commission,
+                        calculatorForm.payment_frequency
+                      )
+                    )}
+                  </strong>
+                </div>
+
+                <button
+                  type="button"
+                  style={applyCalculatorButton}
+                  onClick={applyCalculatorToPolicyForm}
+                >
+                  Aplicar ao formulário da apólice
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {showPolicyForm && (
           <section style={card}>
             <h2>Nova Apólice</h2>
@@ -2313,6 +2515,91 @@ const opportunityShortcutButton = {
   fontWeight: "bold",
   textDecoration: "none",
   display: "inline-block",
+};
+
+const calculatorShortcutButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const calculatorCard = {
+  background: "linear-gradient(135deg, #f5f3ff, #ffffff)",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #ddd6fe",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const calculatorHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 18,
+};
+
+const calculatorSubtitle = {
+  color: "#6b7280",
+  margin: "8px 0 0",
+};
+
+const calculatorGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 14,
+};
+
+const calculatorBox = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  display: "grid",
+  gap: 12,
+};
+
+const calculatorResult = {
+  background: "#ecfdf5",
+  color: "#166534",
+  border: "1px solid #bbf7d0",
+  borderRadius: 12,
+  padding: 12,
+  display: "grid",
+  gap: 6,
+};
+
+const calculatorResultPurple = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+  border: "1px solid #ddd6fe",
+  borderRadius: 12,
+  padding: 12,
+  display: "grid",
+  gap: 6,
+};
+
+const calculatorSummaryLine = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  padding: "10px 0",
+  borderBottom: "1px solid #e5e7eb",
+};
+
+const applyCalculatorButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const card = {
