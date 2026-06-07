@@ -50,6 +50,61 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
+function isIsoDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
+}
+
+function toIsoDate(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function isValidDateParts(year, month, day) {
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+function parseSmartRenewalDate(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+  if (isIsoDate(text)) return text;
+
+  const match = text.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+
+  if (!match) return "";
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let year = match[3]
+    ? Number(match[3].length === 2 ? `20${match[3]}` : match[3])
+    : today.getFullYear();
+
+  if (!isValidDateParts(year, month, day)) return "";
+
+  let candidate = new Date(year, month - 1, day);
+  candidate.setHours(0, 0, 0, 0);
+
+  if (!match[3] && candidate < today) {
+    year += 1;
+  }
+
+  return toIsoDate(year, month, day);
+}
+
+function formatSmartDateHelp(date) {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
 function addMonths(dateString, months) {
   if (!dateString) return "";
   const date = new Date(dateString);
@@ -79,6 +134,7 @@ export default function Oportunidades({ opportunities, clients }) {
   const [clientPhone, setClientPhone] = useState("");
   const [opportunityText, setOpportunityText] = useState("");
   const [renewalDate, setRenewalDate] = useState("");
+  const [renewalDateInput, setRenewalDateInput] = useState("");
   const [contactDate, setContactDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [clientFound, setClientFound] = useState(false);
@@ -87,6 +143,21 @@ export default function Oportunidades({ opportunities, clients }) {
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
   }, [renewalDate]);
+
+  function handleRenewalDateInput(value) {
+    setRenewalDateInput(value);
+
+    const parsed = parseSmartRenewalDate(value);
+
+    if (parsed) {
+      setRenewalDate(parsed);
+      return;
+    }
+
+    if (!value) {
+      setRenewalDate("");
+    }
+  }
 
   useEffect(() => {
     async function loadClientFromQuery() {
@@ -297,17 +368,23 @@ export default function Oportunidades({ opportunities, clients }) {
     );
     if (insurance_type === null) return;
 
-    const renewal_date = prompt(
-      "Data de vencimento (AAAA-MM-DD)",
+    const renewal_date_raw = prompt(
+      "Data de vencimento (AAAA-MM-DD ou DD-MM)",
       item.renewal_date || ""
     );
-    if (renewal_date === null) return;
+    if (renewal_date_raw === null) return;
 
-    const contact_date = prompt(
-      "Data para contactar (AAAA-MM-DD)",
+    const renewal_date =
+      parseSmartRenewalDate(renewal_date_raw) || renewal_date_raw;
+
+    const contact_date_raw = prompt(
+      "Data para contactar (AAAA-MM-DD ou DD-MM)",
       item.contact_date || addMonths(renewal_date, -1) || ""
     );
-    if (contact_date === null) return;
+    if (contact_date_raw === null) return;
+
+    const contact_date =
+      parseSmartRenewalDate(contact_date_raw) || contact_date_raw;
 
     const status = prompt(
       "Estado (por contactar, contactado, ganho, perdido)",
@@ -541,11 +618,36 @@ export default function Oportunidades({ opportunities, clients }) {
 
             <label style={label}>Data de vencimento da apólice na congénere</label>
             <input
-              type="date"
+              type="text"
               style={input}
-              value={renewalDate}
-              onChange={(e) => setRenewalDate(e.target.value)}
+              value={renewalDateInput}
+              onChange={(e) => handleRenewalDateInput(e.target.value)}
+              onBlur={(e) => {
+                const parsed = parseSmartRenewalDate(e.target.value);
+
+                if (parsed) {
+                  setRenewalDateInput(formatSmartDateHelp(parsed));
+                  setRenewalDate(parsed);
+                }
+              }}
+              placeholder="Ex: 20-04, 20/08 ou 2026-08-20"
             />
+
+            {renewalDate && (
+              <div style={dateHelpBox}>
+                <strong>✓ Vencimento interpretado:</strong>{" "}
+                {formatSmartDateHelp(renewalDate)}
+                <br />
+                <strong>✓ Contacto automático:</strong>{" "}
+                {formatSmartDateHelp(contactDate)}
+              </div>
+            )}
+
+            {renewalDateInput && !renewalDate && (
+              <div style={dateWarningBox}>
+                ⚠ Não consegui interpretar a data. Usa formato 20-04, 20/04 ou 2026-08-20.
+              </div>
+            )}
 
             <label style={label}>Data automática para contacto</label>
             <input style={inputDisabled} value={contactDate || ""} readOnly />
@@ -779,6 +881,25 @@ const input = {
   borderRadius: 10,
   border: "1px solid #d1d5db",
   fontSize: 15,
+};
+
+const dateHelpBox = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  padding: 12,
+  borderRadius: 10,
+  fontWeight: "bold",
+  lineHeight: 1.6,
+};
+
+const dateWarningBox = {
+  background: "#fff7ed",
+  color: "#9a3412",
+  border: "1px solid #fdba74",
+  padding: 12,
+  borderRadius: 10,
+  fontWeight: "bold",
 };
 
 const inputDisabled = {
