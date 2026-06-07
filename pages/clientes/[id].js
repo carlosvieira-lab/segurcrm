@@ -51,6 +51,10 @@ export async function getServerSideProps({ params }) {
     .eq("client_id", id)
     .order("created_at", { ascending: false });
 
+  const { data: allPolicies } = await supabase
+    .from("policies")
+    .select("id, policy_number, insurer_id, client_id, status, branch, clients(id, name), insurers(name)");
+
   const { data: claims } = await supabase
     .from("claims")
     .select("*")
@@ -73,6 +77,7 @@ export async function getServerSideProps({ params }) {
     props: {
       client,
       policies: policies || [],
+      allPolicies: allPolicies || [],
       claims: claims || [],
       tasks: tasks || [],
       opportunities: opportunities || [],
@@ -314,6 +319,14 @@ function normalizeBranchName(branch) {
     .trim();
 }
 
+function normalizePolicyNumber(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s/g, "")
+    .toUpperCase()
+    .replace(/^0+/, "");
+}
+
 function getFundamentalBranchStatus(policies) {
   const activeBranches = new Set(
     policies
@@ -484,7 +497,7 @@ function timelineStyle(type) {
   };
 }
 
-export default function ClientePage({ client, policies, claims, tasks, opportunities }) {
+export default function ClientePage({ client, policies, allPolicies, claims, tasks, opportunities }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
 
   const [policyForm, setPolicyForm] = useState({
@@ -499,6 +512,8 @@ export default function ClientePage({ client, policies, claims, tasks, opportuni
     renewal_date: "",
     last_payment_date: "",
   });
+
+  const [policyDuplicateWarning, setPolicyDuplicateWarning] = useState(null);
 
   const [showEditPolicyForm, setShowEditPolicyForm] = useState(false);
   const [editingPolicyId, setEditingPolicyId] = useState(null);
@@ -836,8 +851,68 @@ setTimeout(() => {
     }
   }
 
+  function checkPolicyDuplicate(policyNumber, insurerName) {
+    const normalizedNewPolicy = normalizePolicyNumber(policyNumber);
+
+    if (!normalizedNewPolicy) {
+      setPolicyDuplicateWarning(null);
+      return null;
+    }
+
+    const matches = (allPolicies || []).filter((policy) => {
+      return normalizePolicyNumber(policy.policy_number) === normalizedNewPolicy;
+    });
+
+    if (matches.length === 0) {
+      setPolicyDuplicateWarning(null);
+      return null;
+    }
+
+    const sameInsurer = matches.find((policy) => {
+      return (
+        String(policy.insurers?.name || "").trim().toUpperCase() ===
+        String(insurerName || "").trim().toUpperCase()
+      );
+    });
+
+    const warning = {
+      matches,
+      sameInsurer: Boolean(sameInsurer),
+      sameInsurerPolicy: sameInsurer || null,
+    };
+
+    setPolicyDuplicateWarning(warning);
+    return warning;
+  }
+
   async function createPolicy(e) {
     e.preventDefault();
+
+    const duplicateWarning = checkPolicyDuplicate(
+      policyForm.policy_number,
+      policyForm.insurer_name
+    );
+
+    if (duplicateWarning?.sameInsurer) {
+      alert(
+        `Já existe uma apólice com este número na mesma seguradora.\n\nCliente: ${
+          duplicateWarning.sameInsurerPolicy?.clients?.name || "-"
+        }\nSeguradora: ${
+          duplicateWarning.sameInsurerPolicy?.insurers?.name || "-"
+        }\nEstado: ${
+          duplicateWarning.sameInsurerPolicy?.status || "-"
+        }\n\nA criação foi bloqueada para evitar duplicados.`
+      );
+      return;
+    }
+
+    if (duplicateWarning?.matches?.length > 0) {
+      const proceed = window.confirm(
+        "Atenção: já existe uma apólice com este número no CRM.\n\nA apólice encontrada pode ser de outra seguradora.\n\nQueres criar mesmo assim?"
+      );
+
+      if (!proceed) return;
+    }
 
     let insurerId = null;
 
@@ -1184,11 +1259,19 @@ const timelineItems = createTimeline(
                 style={input}
                 placeholder="Número da apólice"
                 value={policyForm.policy_number}
-                onChange={(e) =>
-                  setPolicyForm({
+                onChange={(e) => {
+                  const nextForm = {
                     ...policyForm,
                     policy_number: e.target.value,
-                  })
+                  };
+
+                  setPolicyForm(nextForm);
+                }}
+                onBlur={() =>
+                  checkPolicyDuplicate(
+                    policyForm.policy_number,
+                    policyForm.insurer_name
+                  )
                 }
                 required
               />
@@ -1227,12 +1310,19 @@ const timelineItems = createTimeline(
               <select
                 style={input}
                 value={policyForm.insurer_name}
-                onChange={(e) =>
-                  setPolicyForm({
+                onChange={(e) => {
+                  const nextForm = {
                     ...policyForm,
                     insurer_name: e.target.value,
-                  })
-                }
+                  };
+
+                  setPolicyForm(nextForm);
+
+                  checkPolicyDuplicate(
+                    nextForm.policy_number,
+                    nextForm.insurer_name
+                  );
+                }}
                 required
               >
                 <option value="">Selecionar seguradora</option>
@@ -1242,6 +1332,57 @@ const timelineItems = createTimeline(
                   </option>
                 ))}
               </select>
+
+              {policyDuplicateWarning && (
+                <div
+                  style={{
+                    ...duplicateWarningBox,
+                    ...(policyDuplicateWarning.sameInsurer
+                      ? duplicateWarningDanger
+                      : {}),
+                  }}
+                >
+                  <strong>
+                    {policyDuplicateWarning.sameInsurer
+                      ? "❌ Apólice já existe nesta seguradora"
+                      : "⚠️ Número de apólice já existe no CRM"}
+                  </strong>
+
+                  <div style={duplicateWarningList}>
+                    {policyDuplicateWarning.matches.map((match) => (
+                      <div key={match.id} style={duplicateWarningItem}>
+                        <span>
+                          <strong>Cliente:</strong>{" "}
+                          {match.clients?.name || "-"}
+                        </span>
+
+                        <span>
+                          <strong>Seguradora:</strong>{" "}
+                          {match.insurers?.name || "-"}
+                        </span>
+
+                        <span>
+                          <strong>Estado:</strong>{" "}
+                          {match.status || "-"}
+                        </span>
+
+                        <Link
+                          href={`/clientes/${match.client_id}`}
+                          style={duplicateWarningLink}
+                        >
+                          Abrir cliente
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p style={duplicateWarningText}>
+                    {policyDuplicateWarning.sameInsurer
+                      ? "A criação desta apólice será bloqueada para evitar duplicados."
+                      : "Se for uma apólice de outra seguradora, podes continuar após confirmação."}
+                  </p>
+                </div>
+              )}
 
               <input
                 style={input}
@@ -2151,6 +2292,53 @@ const badge = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
+  fontWeight: "bold",
+};
+
+const duplicateWarningBox = {
+  gridColumn: "1 / -1",
+  background: "#fef3c7",
+  border: "1px solid #f59e0b",
+  color: "#92400e",
+  borderRadius: 14,
+  padding: 14,
+  display: "grid",
+  gap: 10,
+};
+
+const duplicateWarningDanger = {
+  background: "#fee2e2",
+  border: "1px solid #dc2626",
+  color: "#991b1b",
+};
+
+const duplicateWarningList = {
+  display: "grid",
+  gap: 8,
+};
+
+const duplicateWarningItem = {
+  background: "white",
+  borderRadius: 10,
+  padding: 10,
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const duplicateWarningLink = {
+  background: "#2563eb",
+  color: "white",
+  padding: "7px 10px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const duplicateWarningText = {
+  margin: 0,
+  fontSize: 13,
   fontWeight: "bold",
 };
 
