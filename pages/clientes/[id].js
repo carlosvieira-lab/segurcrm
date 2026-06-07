@@ -327,6 +327,10 @@ function normalizePolicyNumber(value) {
     .replace(/^0+/, "");
 }
 
+function isAutomobileBranch(branch) {
+  return normalizeBranchName(branch) === "AUTOMOVEL";
+}
+
 function getFundamentalBranchStatus(policies) {
   const activeBranches = new Set(
     policies
@@ -737,6 +741,14 @@ setTimeout(() => {
       return;
     }
 
+    if (
+      isAutomobileBranch(editPolicyForm.branch) &&
+      !String(editPolicyForm.license_plate || "").trim()
+    ) {
+      alert("Nas apólices de ramo AUTOMÓVEL é obrigatório preencher a matrícula.");
+      return;
+    }
+
     let insurerId = null;
 
     if (editPolicyForm.insurer_name) {
@@ -912,6 +924,14 @@ setTimeout(() => {
       );
 
       if (!proceed) return;
+    }
+
+    if (
+      isAutomobileBranch(policyForm.branch) &&
+      !String(policyForm.license_plate || "").trim()
+    ) {
+      alert("Nas apólices de ramo AUTOMÓVEL é obrigatório preencher a matrícula.");
+      return;
     }
 
     let insurerId = null;
@@ -1296,8 +1316,18 @@ const timelineItems = createTimeline(
               </select>
 
               <input
-                style={input}
-                placeholder="Matrícula"
+                style={{
+                  ...input,
+                  ...(isAutomobileBranch(policyForm.branch) &&
+                  !String(policyForm.license_plate || "").trim()
+                    ? requiredAutoInput
+                    : {}),
+                }}
+                placeholder={
+                  isAutomobileBranch(policyForm.branch)
+                    ? "Matrícula obrigatória"
+                    : "Matrícula"
+                }
                 value={policyForm.license_plate}
                 onChange={(e) =>
                   setPolicyForm({
@@ -1305,7 +1335,15 @@ const timelineItems = createTimeline(
                     license_plate: e.target.value,
                   })
                 }
+                required={isAutomobileBranch(policyForm.branch)}
               />
+
+              {isAutomobileBranch(policyForm.branch) &&
+                !String(policyForm.license_plate || "").trim() && (
+                  <div style={autoPlateWarning}>
+                    ⚠ Matrícula obrigatória para apólices AUTOMÓVEL.
+                  </div>
+                )}
 
               <select
                 style={input}
@@ -1540,8 +1578,18 @@ const timelineItems = createTimeline(
               </select>
 
               <input
-                style={input}
-                placeholder="Matrícula"
+                style={{
+                  ...input,
+                  ...(isAutomobileBranch(editPolicyForm.branch) &&
+                  !String(editPolicyForm.license_plate || "").trim()
+                    ? requiredAutoInput
+                    : {}),
+                }}
+                placeholder={
+                  isAutomobileBranch(editPolicyForm.branch)
+                    ? "Matrícula obrigatória"
+                    : "Matrícula"
+                }
                 value={editPolicyForm.license_plate}
                 onChange={(e) =>
                   setEditPolicyForm({
@@ -1549,7 +1597,15 @@ const timelineItems = createTimeline(
                     license_plate: e.target.value,
                   })
                 }
+                required={isAutomobileBranch(editPolicyForm.branch)}
               />
+
+              {isAutomobileBranch(editPolicyForm.branch) &&
+                !String(editPolicyForm.license_plate || "").trim() && (
+                  <div style={autoPlateWarning}>
+                    ⚠ Matrícula obrigatória para apólices AUTOMÓVEL.
+                  </div>
+                )}
 
               <select
                 style={input}
@@ -2292,6 +2348,21 @@ const badge = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
+  fontWeight: "bold",
+};
+
+const requiredAutoInput = {
+  border: "2px solid #dc2626",
+  background: "#fff7ed",
+};
+
+const autoPlateWarning = {
+  gridColumn: "1 / -1",
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  color: "#9a3412",
+  padding: 12,
+  borderRadius: 12,
   fontWeight: "bold",
 };
 
