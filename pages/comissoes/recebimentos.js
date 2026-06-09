@@ -933,3 +933,305 @@ const chartTrack = {
   overflow: "hidden",
   border: "1px solid #e5e7eb",
 };
+
+const chartCenterLine = {
+  position: "absolute",
+  left: "50%",
+  top: 0,
+  bottom: 0,
+  width: 2,
+  background: "#94a3b8",
+  zIndex: 2,
+};
+
+const chartBarPositive = {
+  position: "absolute",
+  left: "50%",
+  top: 0,
+  bottom: 0,
+  background: "#16a34a",
+  borderRadius: "0 999px 999px 0",
+};
+
+const chartBarNegative = {
+  position: "absolute",
+  right: "50%",
+  top: 0,
+  bottom: 0,
+  background: "#dc2626",
+  borderRadius: "999px 0 0 999px",
+};
+
+const chartValue = {
+  textAlign: "right",
+  fontWeight: "bold",
+};
+
+const baselineCard = {
+  background: "linear-gradient(135deg, #fef3c7, #fffbeb)",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #f59e0b",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const sectionCard = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const sectionTitle = {
+  marginTop: 0,
+};
+
+const dailyForm = {
+  display: "grid",
+  gap: 14,
+};
+
+const receiptLinesGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 14,
+};
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  color: "#374151",
+  fontSize: 13,
+  fontWeight: "bold",
+};
+
+const input = {
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 14,
+  background: "white",
+};
+
+const smallInput = {
+  padding: 9,
+  borderRadius: 8,
+  border: "1px solid #d1d5db",
+  fontSize: 13,
+  width: "100%",
+  minWidth: 95,
+  boxSizing: "border-box",
+};
+
+const textarea = {
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  minHeight: 70,
+  fontSize: 14,
+  width: "100%",
+  boxSizing: "border-box",
+  fontFamily: "Arial, sans-serif",
+};
+
+const dailyTotalBox = {
+  background: "white",
+  padding: 16,
+  borderRadius: 14,
+  border: "1px solid #bfdbfe",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  fontSize: 18,
+};
+
+const button = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const baselineButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const baselineHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
+  marginBottom: 18,
+};
+
+const baselineTableWrap = {
+  overflowX: "auto",
+  marginBottom: 16,
+};
+
+const monthlyGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+  gap: 16,
+};
+
+const monthCard = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  padding: 16,
+  borderRadius: 16,
+};
+
+const monthTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const monthTitle = {
+  margin: 0,
+};
+
+const differenceBadge = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontWeight: "bold",
+  fontSize: 13,
+};
+
+const positiveBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+};
+
+const negativeBadge = {
+  background: "#fee2e2",
+  color: "#991b1b",
+};
+
+const monthValues = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const smallLabel = {
+  color: "#6b7280",
+  display: "block",
+  fontSize: 12,
+  marginBottom: 4,
+};
+
+const lineList = {
+  display: "grid",
+  gap: 7,
+};
+
+const lineRow = {
+  display: "grid",
+  gridTemplateColumns: "1.2fr 0.8fr 0.9fr",
+  gap: 8,
+  borderTop: "1px solid #e5e7eb",
+  paddingTop: 7,
+  fontSize: 13,
+};
+
+const lineExecutionRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.7fr",
+  gap: 10,
+  borderTop: "1px solid #e5e7eb",
+  paddingTop: 10,
+  fontSize: 13,
+};
+
+const lineExecutionValues = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "flex-end",
+};
+
+const executionBadge = {
+  padding: "5px 9px",
+  borderRadius: 999,
+  fontWeight: "bold",
+  fontSize: 12,
+};
+
+const executionOkBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+};
+
+const executionMissingBadge = {
+  background: "#fee2e2",
+  color: "#991b1b",
+};
+
+const missingValue = {
+  fontWeight: "bold",
+};
+
+const tableWrap = {
+  overflowX: "auto",
+};
+
+const table = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 14,
+};
+
+const th = {
+  textAlign: "left",
+  padding: "11px 10px",
+  borderBottom: "1px solid #e5e7eb",
+  color: "#374151",
+  background: "#f9fafb",
+  whiteSpace: "nowrap",
+};
+
+const td = {
+  padding: "11px 10px",
+  borderBottom: "1px solid #e5e7eb",
+};
+
+const moneyValue = {
+  color: "#16a34a",
+};
+
+const deleteButton = {
+  background: "#dc2626",
+  color: "white",
+  border: "none",
+  padding: "8px 11px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const muted = {
+  color: "#6b7280",
+};
+
+const smallMuted = {
+  color: "#64748b",
+  fontSize: 12,
+};
