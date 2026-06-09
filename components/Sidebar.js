@@ -53,6 +53,11 @@ export default function Sidebar({ active }) {
           <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
           <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
           <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
+          <MenuItem
+            href="/comissoes/recebimentos"
+            label="Recebimentos Comissões"
+            active={active === "recebimentos-comissoes"}
+          />
           <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
           <MenuItem href="/importacoes" label="Importações" active={active === "importacoes"} />
           <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
