@@ -167,6 +167,33 @@ function getElapsedMonthsForYear(year) {
   return today.getMonth() + 1;
 }
 
+function getDaysInMonth(year, month) {
+  return new Date(Number(year), Number(month), 0).getDate();
+}
+
+function getElapsedDaysForMonth(year, month) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+
+  if (Number(year) < currentYear) return getDaysInMonth(year, month);
+  if (Number(year) > currentYear) return 0;
+
+  if (Number(month) < currentMonth) return getDaysInMonth(year, month);
+  if (Number(month) > currentMonth) return 0;
+
+  return today.getDate();
+}
+
+function calculateProjectedMonthTotal(currentTotal, year, month) {
+  const daysInMonth = getDaysInMonth(year, month);
+  const elapsedDays = getElapsedDaysForMonth(year, month);
+
+  if (!elapsedDays || elapsedDays <= 0) return 0;
+
+  return (Number(currentTotal || 0) / elapsedDays) * daysInMonth;
+}
+
 function buildMonthlyResults(receipts, baselines, selectedYear) {
   const baselineMap = buildBaselineMap(baselines);
 
@@ -191,6 +218,14 @@ function buildMonthlyResults(receipts, baselines, selectedYear) {
     const currentTotal = lineResults.reduce((sum, item) => sum + item.current, 0);
     const previousTotal = lineResults.reduce((sum, item) => sum + item.previous, 0);
     const difference = currentTotal - previousTotal;
+    const projectedTotal = calculateProjectedMonthTotal(
+      currentTotal,
+      selectedYear,
+      month
+    );
+    const projectedDifference = projectedTotal - previousTotal;
+    const projectedPercentage =
+      previousTotal > 0 ? (projectedTotal / previousTotal) * 100 : 0;
 
     return {
       month,
@@ -199,6 +234,9 @@ function buildMonthlyResults(receipts, baselines, selectedYear) {
       currentTotal,
       previousTotal,
       difference,
+      projectedTotal,
+      projectedDifference,
+      projectedPercentage,
       percentage: previousTotal > 0 ? (currentTotal / previousTotal) * 100 : 0,
     };
   });
@@ -751,6 +789,41 @@ export default function RecebimentosComissoes({ receipts, baselines }) {
                   </div>
                 </div>
 
+                <div style={projectionBox}>
+                  <div>
+                    <span style={smallLabel}>Projeção fim do mês</span>
+                    <strong>{formatEuro(month.projectedTotal)}</strong>
+                  </div>
+
+                  <div>
+                    <span style={smallLabel}>Diferença projetada</span>
+                    <strong
+                      style={{
+                        color:
+                          month.projectedDifference >= 0
+                            ? "#15803d"
+                            : "#dc2626",
+                      }}
+                    >
+                      {formatEuro(month.projectedDifference)}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={smallLabel}>Execução projetada</span>
+                    <strong
+                      style={{
+                        color:
+                          month.projectedPercentage >= 100
+                            ? "#15803d"
+                            : "#dc2626",
+                      }}
+                    >
+                      {month.projectedPercentage.toFixed(1)}%
+                    </strong>
+                  </div>
+                </div>
+
                 <div style={lineList}>
                   {month.lineResults.map((line) => (
                     <div key={line.key} style={lineExecutionRow}>
@@ -1185,6 +1258,17 @@ const smallLabel = {
   display: "block",
   fontSize: 12,
   marginBottom: 4,
+};
+
+const projectionBox = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 12,
+  padding: 12,
+  display: "grid",
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 10,
+  marginBottom: 12,
 };
 
 const lineList = {
