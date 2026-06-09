@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -81,6 +80,82 @@ function calculateAnnualCommission(policy) {
   if (frequency === "semestral") return commission * 2;
 
   return commission;
+}
+
+function calculatePolicyAge(startDate) {
+  if (!startDate) return {
+    years: 0,
+    months: 0,
+    label: "-",
+  };
+
+  const today = new Date();
+  const date = new Date(startDate);
+
+  let years = today.getFullYear() - date.getFullYear();
+  let months = today.getMonth() - date.getMonth();
+
+  if (today.getDate() < date.getDate()) {
+    months -= 1;
+  }
+
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  const label =
+    years <= 0
+      ? `${months} meses`
+      : months === 0
+      ? `${years} anos`
+      : `${years} anos e ${months} meses`;
+
+  return {
+    years,
+    months,
+    label,
+  };
+}
+
+function buildEmailLink(email, clientName) {
+  if (!email || email === "-") return "";
+
+  const subject = "Revisão da carteira de seguros";
+  const body = `Boa tarde ${clientName || ""},\n\nFala Carlos Vieira da Loja de Seguros de Trajouce.\n\nEstou a rever a sua carteira de seguros e gostava de confirmar alguns dados consigo.\n\nObrigado.`;
+
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function buildOldPoliciesReport(policies) {
+  return policies
+    .filter(
+      (policy) =>
+        policy.status !== "anulada" &&
+        policy.start_date &&
+        policy.client_id
+    )
+    .map((policy) => {
+      const age = calculatePolicyAge(policy.start_date);
+
+      return {
+        id: policy.id,
+        clientId: policy.client_id,
+        clientName: policy.clients?.name || "Sem cliente",
+        clientNif: policy.clients?.nif || "-",
+        clientPhone: policy.clients?.phone || "-",
+        clientEmail: policy.clients?.email || "-",
+        policyNumber: policy.policy_number || "-",
+        branch: policy.branch || "-",
+        insurerName: policy.insurers?.name || "-",
+        startDate: policy.start_date,
+        ageLabel: age.label,
+        ageYears: age.years,
+        annualPremium: Number(policy.annual_premium || 0),
+      };
+    })
+    .sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0))
+    .slice(0, 20);
 }
 
 function buildClientsWithoutHomeInsuranceReport(clients, policies) {
@@ -530,6 +605,8 @@ export default function Relatorios({ clients, policies, opportunities }) {
     warnings: portfolioAudit.filter((policy) => policy.warning).length,
   };
 
+  const oldPolicies = buildOldPoliciesReport(policies);
+
   const selectedReportInfo = reportOptions.find(
     (report) => report.value === selectedReport
   );
@@ -760,6 +837,42 @@ export default function Relatorios({ clients, policies, opportunities }) {
     );
   }
 
+  function exportOldPoliciesCsv() {
+    const header = [
+      "Posição",
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+      "Seguradora",
+      "Ramo",
+      "Nº Apólice",
+      "Data início",
+      "Antiguidade",
+      "Prémio anual",
+    ];
+
+    const rows = oldPolicies.map((policy, index) => [
+      index + 1,
+      policy.clientName,
+      policy.clientNif,
+      policy.clientPhone,
+      policy.clientEmail,
+      policy.insurerName,
+      policy.branch,
+      policy.policyNumber,
+      formatDate(policy.startDate),
+      policy.ageLabel,
+      policy.annualPremium.toFixed(2),
+    ]);
+
+    exportCsv(
+      "20_apolices_mais_antigas.csv",
+      header,
+      rows
+    );
+  }
+
   function exportSelectedReport() {
     if (selectedReport === "topClientesPremio") {
       exportTopClientsPremiumCsv();
@@ -798,6 +911,11 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
     if (selectedReport === "auditoriaCarteira") {
       exportPortfolioAuditCsv();
+      return;
+    }
+
+    if (selectedReport === "apolicesAntigas") {
+      exportOldPoliciesCsv();
     }
   }
 
@@ -1300,6 +1418,102 @@ export default function Relatorios({ clients, policies, opportunities }) {
             )}
           </section>
         )}
+
+        {selectedReport === "apolicesAntigas" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              20 apólices mais antigas
+            </h2>
+
+            <p style={muted}>
+              Lista das apólices em vigor com data de início mais antiga, com contacto rápido e abertura da ficha do cliente.
+            </p>
+
+            {oldPolicies.length === 0 ? (
+              <p style={muted}>
+                Sem apólices em vigor com data de início preenchida.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderOldPolicies}>
+                  <span>#</span>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Apólice</span>
+                  <span>Ramo</span>
+                  <span>Seguradora</span>
+                  <span>Data início</span>
+                  <span>Antiguidade</span>
+                  <span>Ações</span>
+                </div>
+
+                {oldPolicies.map((policy, index) => {
+                  const whatsappLink = buildWhatsappLink(policy.clientPhone);
+                  const emailLink = buildEmailLink(policy.clientEmail, policy.clientName);
+
+                  return (
+                    <div
+                      key={policy.id}
+                      style={tableRowOldPolicies}
+                    >
+                      <strong>{index + 1}</strong>
+
+                      <div>
+                        <strong>{policy.clientName}</strong>
+                        <div style={smallMuted}>
+                          Tel: {policy.clientPhone || "-"} · Email: {policy.clientEmail || "-"}
+                        </div>
+                      </div>
+
+                      <span>{policy.clientNif}</span>
+                      <span>{policy.policyNumber}</span>
+                      <span>{policy.branch}</span>
+                      <span>{policy.insurerName}</span>
+                      <strong>{formatDate(policy.startDate)}</strong>
+
+                      <span style={ageBadge}>
+                        {policy.ageLabel}
+                      </span>
+
+                      <div style={oldPolicyActions}>
+                        <Link
+                          href={`/clientes/${policy.clientId}`}
+                          style={openClientButton}
+                        >
+                          Abrir ficha
+                        </Link>
+
+                        {whatsappLink ? (
+                          <a
+                            href={whatsappLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={whatsappButton}
+                          >
+                            WhatsApp
+                          </a>
+                        ) : (
+                          <span style={disabledAction}>Sem WhatsApp</span>
+                        )}
+
+                        {emailLink ? (
+                          <a
+                            href={emailLink}
+                            style={emailButton}
+                          >
+                            Email
+                          </a>
+                        ) : (
+                          <span style={disabledAction}>Sem Email</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );
@@ -1389,6 +1603,11 @@ const reportOptions = [
     value: "clientesAte40",
     label: "Clientes até 40 anos",
     description: "Clientes com idade até 40 anos.",
+  },
+  {
+    value: "apolicesAntigas",
+    label: "20 apólices mais antigas",
+    description: "Apólices em vigor com maior antiguidade, com ficha, WhatsApp e email.",
   },
 ];
 
@@ -1723,6 +1942,64 @@ const whatsappButton = {
   textDecoration: "none",
   fontWeight: "bold",
   textAlign: "center",
+};
+
+const emailButton = {
+  background: "#0f766e",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const disabledAction = {
+  background: "#e5e7eb",
+  color: "#6b7280",
+  padding: "9px 12px",
+  borderRadius: 8,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const ageBadge = {
+  background: "#fef3c7",
+  color: "#92400e",
+  padding: "7px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const oldPolicyActions = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const tableHeaderOldPolicies = {
+  display: "grid",
+  gridTemplateColumns: "0.35fr 2fr 0.9fr 1.1fr 0.9fr 1.1fr 1fr 1fr 2.4fr",
+  gap: 10,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 13,
+  minWidth: 1450,
+};
+
+const tableRowOldPolicies = {
+  display: "grid",
+  gridTemplateColumns: "0.35fr 2fr 0.9fr 1.1fr 0.9fr 1.1fr 1fr 1fr 2.4fr",
+  gap: 10,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+  minWidth: 1450,
+  fontSize: 13,
 };
 
 const badgeExisting = {
