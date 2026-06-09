@@ -82,8 +82,60 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
+function parsePolicyStartDate(startDate) {
+  if (!startDate) return null;
+
+  const text = String(startDate).trim();
+
+  if (!text) return null;
+
+  let date = null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const [year, month, day] = text.slice(0, 10).split("-").map(Number);
+    date = new Date(year, month - 1, day);
+  } else if (/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(text)) {
+    const [dayRaw, monthRaw, yearRaw] = text.split(/[\/\-.]/);
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    let year = Number(yearRaw);
+
+    if (yearRaw.length === 2) {
+      year = year >= 50 ? 1900 + year : 2000 + year;
+    }
+
+    if (yearRaw.length === 1) {
+      year = 2000 + year;
+    }
+
+    date = new Date(year, month - 1, day);
+  } else {
+    date = new Date(text);
+  }
+
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  const year = date.getFullYear();
+
+  if (year < 1900 || year > new Date().getFullYear() + 1) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatPolicyStartDate(startDate) {
+  const date = parsePolicyStartDate(startDate);
+
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat("pt-PT").format(date);
+}
+
 function calculatePolicyAgeFromStartDate(startDate) {
-  if (!startDate) {
+  const start = parsePolicyStartDate(startDate);
+
+  if (!start) {
     return {
       years: 0,
       months: 0,
@@ -92,7 +144,6 @@ function calculatePolicyAgeFromStartDate(startDate) {
   }
 
   const today = new Date();
-  const start = new Date(startDate);
 
   let years = today.getFullYear() - start.getFullYear();
   let months = today.getMonth() - start.getMonth();
@@ -132,13 +183,16 @@ function buildEmailLink(email, clientName) {
 function buildOldPoliciesReport(policies) {
   return policies
     .filter((policy) => {
+      const parsedStartDate = parsePolicyStartDate(policy.start_date);
+
       return (
         policy.status !== "anulada" &&
-        policy.start_date &&
+        parsedStartDate &&
         policy.client_id
       );
     })
     .map((policy) => {
+      const parsedStartDate = parsePolicyStartDate(policy.start_date);
       const age = calculatePolicyAgeFromStartDate(policy.start_date);
 
       return {
@@ -151,14 +205,13 @@ function buildOldPoliciesReport(policies) {
         policyNumber: policy.policy_number || "-",
         branch: policy.branch || "-",
         insurerName: policy.insurers?.name || "-",
-        startDate: policy.start_date,
+        startDate: parsedStartDate,
+        startDateRaw: policy.start_date,
         ageLabel: age.label,
         annualPremium: Number(policy.annual_premium || 0),
       };
     })
-    .sort((a, b) => {
-      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
-    })
+    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
     .slice(0, 20);
 }
 
@@ -865,7 +918,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
       policy.insurerName,
       policy.branch,
       policy.policyNumber,
-      formatDate(policy.startDate),
+      formatPolicyStartDate(policy.startDate),
       policy.ageLabel,
       policy.annualPremium.toFixed(2),
     ]);
@@ -1430,12 +1483,12 @@ export default function Relatorios({ clients, policies, opportunities }) {
             </h2>
 
             <p style={muted}>
-              Este relatório usa exclusivamente a <strong>data de início da apólice</strong>. Apólices sem data de início ou anuladas ficam excluídas.
+              Este relatório usa a <strong>data de início da apólice</strong>. Apólices anuladas, sem data ou com ano inválido ficam excluídas.
             </p>
 
             {oldPolicies.length === 0 ? (
               <p style={muted}>
-                Sem apólices em vigor com data de início preenchida.
+                Sem apólices em vigor com data de início válida.
               </p>
             ) : (
               <div style={table}>
@@ -1453,10 +1506,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
                 {oldPolicies.map((policy, index) => {
                   const whatsappLink = buildWhatsappLink(policy.clientPhone);
-                  const emailLink = buildEmailLink(
-                    policy.clientEmail,
-                    policy.clientName
-                  );
+                  const emailLink = buildEmailLink(policy.clientEmail, policy.clientName);
 
                   return (
                     <div key={policy.id} style={tableRowOldPolicies}>
@@ -1473,28 +1523,16 @@ export default function Relatorios({ clients, policies, opportunities }) {
                       <span>{policy.policyNumber}</span>
                       <span>{policy.branch}</span>
                       <span>{policy.insurerName}</span>
-
-                      <strong style={startDateValue}>
-                        {formatDate(policy.startDate)}
-                      </strong>
-
+                      <strong style={startDateValue}>{formatPolicyStartDate(policy.startDate)}</strong>
                       <span style={ageBadge}>{policy.ageLabel}</span>
 
                       <div style={oldPolicyActions}>
-                        <Link
-                          href={`/clientes/${policy.clientId}`}
-                          style={openClientButton}
-                        >
+                        <Link href={`/clientes/${policy.clientId}`} style={openClientButton}>
                           Abrir ficha
                         </Link>
 
                         {whatsappLink ? (
-                          <a
-                            href={whatsappLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={whatsappButton}
-                          >
+                          <a href={whatsappLink} target="_blank" rel="noreferrer" style={whatsappButton}>
                             WhatsApp
                           </a>
                         ) : (
@@ -1609,7 +1647,7 @@ const reportOptions = [
   {
     value: "apolicesAntigas",
     label: "20 apólices mais antigas",
-    description: "Ordena exclusivamente pela data de início da apólice.",
+    description: "Ordena pela data de início da apólice e exclui anos inválidos.",
   },
 ];
 
