@@ -82,20 +82,22 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
-function calculatePolicyAge(startDate) {
-  if (!startDate) return {
-    years: 0,
-    months: 0,
-    label: "-",
-  };
+function calculatePolicyAgeFromStartDate(startDate) {
+  if (!startDate) {
+    return {
+      years: 0,
+      months: 0,
+      label: "-",
+    };
+  }
 
   const today = new Date();
-  const date = new Date(startDate);
+  const start = new Date(startDate);
 
-  let years = today.getFullYear() - date.getFullYear();
-  let months = today.getMonth() - date.getMonth();
+  let years = today.getFullYear() - start.getFullYear();
+  let months = today.getMonth() - start.getMonth();
 
-  if (today.getDate() < date.getDate()) {
+  if (today.getDate() < start.getDate()) {
     months -= 1;
   }
 
@@ -129,14 +131,15 @@ function buildEmailLink(email, clientName) {
 
 function buildOldPoliciesReport(policies) {
   return policies
-    .filter(
-      (policy) =>
+    .filter((policy) => {
+      return (
         policy.status !== "anulada" &&
         policy.start_date &&
         policy.client_id
-    )
+      );
+    })
     .map((policy) => {
-      const age = calculatePolicyAge(policy.start_date);
+      const age = calculatePolicyAgeFromStartDate(policy.start_date);
 
       return {
         id: policy.id,
@@ -150,11 +153,12 @@ function buildOldPoliciesReport(policies) {
         insurerName: policy.insurers?.name || "-",
         startDate: policy.start_date,
         ageLabel: age.label,
-        ageYears: age.years,
         annualPremium: Number(policy.annual_premium || 0),
       };
     })
-    .sort((a, b) => new Date(a.startDate || 0) - new Date(b.startDate || 0))
+    .sort((a, b) => {
+      return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+    })
     .slice(0, 20);
 }
 
@@ -847,7 +851,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
       "Seguradora",
       "Ramo",
       "Nº Apólice",
-      "Data início",
+      "Data início da apólice",
       "Antiguidade",
       "Prémio anual",
     ];
@@ -867,7 +871,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
     ]);
 
     exportCsv(
-      "20_apolices_mais_antigas.csv",
+      "20_apolices_mais_antigas_por_data_inicio.csv",
       header,
       rows
     );
@@ -1422,11 +1426,11 @@ export default function Relatorios({ clients, policies, opportunities }) {
         {selectedReport === "apolicesAntigas" && (
           <section style={panel}>
             <h2 style={panelTitle}>
-              20 apólices mais antigas
+              20 apólices mais antigas por data de início
             </h2>
 
             <p style={muted}>
-              Lista das apólices em vigor com data de início mais antiga, com contacto rápido e abertura da ficha do cliente.
+              Este relatório usa exclusivamente a <strong>data de início da apólice</strong>. Apólices sem data de início ou anuladas ficam excluídas.
             </p>
 
             {oldPolicies.length === 0 ? (
@@ -1449,13 +1453,13 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
                 {oldPolicies.map((policy, index) => {
                   const whatsappLink = buildWhatsappLink(policy.clientPhone);
-                  const emailLink = buildEmailLink(policy.clientEmail, policy.clientName);
+                  const emailLink = buildEmailLink(
+                    policy.clientEmail,
+                    policy.clientName
+                  );
 
                   return (
-                    <div
-                      key={policy.id}
-                      style={tableRowOldPolicies}
-                    >
+                    <div key={policy.id} style={tableRowOldPolicies}>
                       <strong>{index + 1}</strong>
 
                       <div>
@@ -1469,11 +1473,12 @@ export default function Relatorios({ clients, policies, opportunities }) {
                       <span>{policy.policyNumber}</span>
                       <span>{policy.branch}</span>
                       <span>{policy.insurerName}</span>
-                      <strong>{formatDate(policy.startDate)}</strong>
 
-                      <span style={ageBadge}>
-                        {policy.ageLabel}
-                      </span>
+                      <strong style={startDateValue}>
+                        {formatDate(policy.startDate)}
+                      </strong>
+
+                      <span style={ageBadge}>{policy.ageLabel}</span>
 
                       <div style={oldPolicyActions}>
                         <Link
@@ -1497,10 +1502,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
                         )}
 
                         {emailLink ? (
-                          <a
-                            href={emailLink}
-                            style={emailButton}
-                          >
+                          <a href={emailLink} style={emailButton}>
                             Email
                           </a>
                         ) : (
@@ -1607,7 +1609,7 @@ const reportOptions = [
   {
     value: "apolicesAntigas",
     label: "20 apólices mais antigas",
-    description: "Apólices em vigor com maior antiguidade, com ficha, WhatsApp e email.",
+    description: "Ordena exclusivamente pela data de início da apólice.",
   },
 ];
 
@@ -1961,6 +1963,10 @@ const disabledAction = {
   borderRadius: 8,
   fontWeight: "bold",
   textAlign: "center",
+};
+
+const startDateValue = {
+  color: "#1d4ed8",
 };
 
 const ageBadge = {
