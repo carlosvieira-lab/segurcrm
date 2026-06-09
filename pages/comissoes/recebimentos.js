@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../../components/Sidebar";
 
@@ -419,6 +419,75 @@ export default function RecebimentosComissoes({ receipts, baselines }) {
           />
         </section>
 
+        <section style={sectionCard}>
+          <h2 style={sectionTitle}>Gráfico diferencial {selectedYear} vs {selectedYear - 1}</h2>
+
+          <div style={chartLegend}>
+            <span style={legendItem}>
+              <span style={legendDotPositive}></span>
+              Diferença positiva
+            </span>
+
+            <span style={legendItem}>
+              <span style={legendDotNegative}></span>
+              Diferença negativa
+            </span>
+          </div>
+
+          <div style={differenceChart}>
+            {monthlyResults.map((month) => {
+              const maxDifference =
+                Math.max(
+                  ...monthlyResults.map((item) =>
+                    Math.abs(Number(item.difference || 0))
+                  ),
+                  1
+                );
+
+              const widthPercent =
+                Math.min(
+                  100,
+                  (Math.abs(Number(month.difference || 0)) / maxDifference) * 100
+                );
+
+              return (
+                <div key={`chart-${month.month}`} style={chartRow}>
+                  <div style={chartMonth}>{month.monthName.slice(0, 3)}</div>
+
+                  <div style={chartTrack}>
+                    <div style={chartCenterLine}></div>
+
+                    {month.difference >= 0 ? (
+                      <div
+                        style={{
+                          ...chartBarPositive,
+                          width: `${widthPercent / 2}%`,
+                        }}
+                      ></div>
+                    ) : (
+                      <div
+                        style={{
+                          ...chartBarNegative,
+                          width: `${widthPercent / 2}%`,
+                        }}
+                      ></div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      ...chartValue,
+                      color: month.difference >= 0 ? "#15803d" : "#dc2626",
+                    }}
+                  >
+                    {formatEuro(month.difference)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         <section style={formCard}>
           <h2 style={sectionTitle}>Registo diário</h2>
           <p style={muted}>
@@ -762,6 +831,95 @@ const formCard = {
   marginBottom: 24,
   border: "1px solid #bfdbfe",
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const chartLegend = {
+  display: "flex",
+  gap: 18,
+  flexWrap: "wrap",
+  marginBottom: 18,
+};
+
+const legendItem = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#475569",
+  fontWeight: "bold",
+  fontSize: 13,
+};
+
+const legendDotPositive = {
+  width: 12,
+  height: 12,
+  borderRadius: 999,
+  background: "#16a34a",
+};
+
+const legendDotNegative = {
+  width: 12,
+  height: 12,
+  borderRadius: 999,
+  background: "#dc2626",
+};
+
+const differenceChart = {
+  display: "grid",
+  gap: 12,
+};
+
+const chartRow = {
+  display: "grid",
+  gridTemplateColumns: "54px 1fr 120px",
+  gap: 12,
+  alignItems: "center",
+};
+
+const chartMonth = {
+  fontWeight: "bold",
+  color: "#334155",
+};
+
+const chartTrack = {
+  position: "relative",
+  height: 24,
+  background: "#f1f5f9",
+  borderRadius: 999,
+  overflow: "hidden",
+  border: "1px solid #e5e7eb",
+};
+
+const chartCenterLine = {
+  position: "absolute",
+  left: "50%",
+  top: 0,
+  bottom: 0,
+  width: 2,
+  background: "#94a3b8",
+  zIndex: 2,
+};
+
+const chartBarPositive = {
+  position: "absolute",
+  left: "50%",
+  top: 0,
+  bottom: 0,
+  background: "#16a34a",
+  borderRadius: "0 999px 999px 0",
+};
+
+const chartBarNegative = {
+  position: "absolute",
+  right: "50%",
+  top: 0,
+  bottom: 0,
+  background: "#dc2626",
+  borderRadius: "999px 0 0 999px",
+};
+
+const chartValue = {
+  textAlign: "right",
+  fontWeight: "bold",
 };
 
 const baselineCard = {
