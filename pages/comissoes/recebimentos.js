@@ -145,6 +145,18 @@ function getBaselineValue(baseline, lineKey) {
   return Number(baseline[lineKey] || 0);
 }
 
+function calculateExecutionPercentage(current, previous) {
+  const base = Number(previous || 0);
+
+  if (!base || base <= 0) return 0;
+
+  return (Number(current || 0) / base) * 100;
+}
+
+function calculateMissingAmount(current, previous) {
+  return Math.max(Number(previous || 0) - Number(current || 0), 0);
+}
+
 function buildMonthlyResults(receipts, baselines, selectedYear) {
   const baselineMap = buildBaselineMap(baselines);
 
@@ -161,6 +173,8 @@ function buildMonthlyResults(receipts, baselines, selectedYear) {
         current,
         previous,
         difference: current - previous,
+        missing: calculateMissingAmount(current, previous),
+        execution: calculateExecutionPercentage(current, previous),
       };
     });
 
@@ -689,10 +703,41 @@ export default function RecebimentosComissoes({ receipts, baselines }) {
 
                 <div style={lineList}>
                   {month.lineResults.map((line) => (
-                    <div key={line.key} style={lineRow}>
-                      <span>{line.label}</span>
-                      <strong>{formatEuro(line.current)}</strong>
-                      <span style={smallMuted}>Base: {formatEuro(line.previous)}</span>
+                    <div key={line.key} style={lineExecutionRow}>
+                      <div>
+                        <strong>{line.label}</strong>
+                        <div style={smallMuted}>
+                          Base {selectedYear - 1}: {formatEuro(line.previous)}
+                        </div>
+                      </div>
+
+                      <div style={lineExecutionValues}>
+                        <span>
+                          Recebido: <strong>{formatEuro(line.current)}</strong>
+                        </span>
+
+                        <span
+                          style={{
+                            ...executionBadge,
+                            ...(line.execution >= 100
+                              ? executionOkBadge
+                              : executionMissingBadge),
+                          }}
+                        >
+                          {line.execution.toFixed(1)}%
+                        </span>
+
+                        <span
+                          style={{
+                            ...missingValue,
+                            color: line.missing <= 0 ? "#15803d" : "#dc2626",
+                          }}
+                        >
+                          {line.missing <= 0
+                            ? "Objetivo superado"
+                            : `Falta ${formatEuro(line.missing)}`}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -887,268 +932,4 @@ const chartTrack = {
   borderRadius: 999,
   overflow: "hidden",
   border: "1px solid #e5e7eb",
-};
-
-const chartCenterLine = {
-  position: "absolute",
-  left: "50%",
-  top: 0,
-  bottom: 0,
-  width: 2,
-  background: "#94a3b8",
-  zIndex: 2,
-};
-
-const chartBarPositive = {
-  position: "absolute",
-  left: "50%",
-  top: 0,
-  bottom: 0,
-  background: "#16a34a",
-  borderRadius: "0 999px 999px 0",
-};
-
-const chartBarNegative = {
-  position: "absolute",
-  right: "50%",
-  top: 0,
-  bottom: 0,
-  background: "#dc2626",
-  borderRadius: "999px 0 0 999px",
-};
-
-const chartValue = {
-  textAlign: "right",
-  fontWeight: "bold",
-};
-
-const baselineCard = {
-  background: "linear-gradient(135deg, #fef3c7, #fffbeb)",
-  padding: 24,
-  borderRadius: 18,
-  marginBottom: 24,
-  border: "1px solid #f59e0b",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const sectionCard = {
-  background: "white",
-  padding: 24,
-  borderRadius: 18,
-  marginBottom: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
-
-const sectionTitle = {
-  marginTop: 0,
-};
-
-const dailyForm = {
-  display: "grid",
-  gap: 14,
-};
-
-const receiptLinesGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: 14,
-};
-
-const fieldLabel = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  color: "#374151",
-  fontSize: 13,
-  fontWeight: "bold",
-};
-
-const input = {
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  fontSize: 14,
-  background: "white",
-};
-
-const smallInput = {
-  padding: 9,
-  borderRadius: 8,
-  border: "1px solid #d1d5db",
-  fontSize: 13,
-  width: "100%",
-  minWidth: 95,
-  boxSizing: "border-box",
-};
-
-const textarea = {
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  minHeight: 70,
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box",
-  fontFamily: "Arial, sans-serif",
-};
-
-const dailyTotalBox = {
-  background: "white",
-  padding: 16,
-  borderRadius: 14,
-  border: "1px solid #bfdbfe",
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  fontSize: 18,
-};
-
-const button = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const baselineButton = {
-  background: "#7c3aed",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const baselineHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 16,
-  alignItems: "flex-start",
-  marginBottom: 18,
-};
-
-const baselineTableWrap = {
-  overflowX: "auto",
-  marginBottom: 16,
-};
-
-const monthlyGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
-  gap: 16,
-};
-
-const monthCard = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  padding: 16,
-  borderRadius: 16,
-};
-
-const monthTop = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 12,
-};
-
-const monthTitle = {
-  margin: 0,
-};
-
-const differenceBadge = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontWeight: "bold",
-  fontSize: 13,
-};
-
-const positiveBadge = {
-  background: "#dcfce7",
-  color: "#166534",
-};
-
-const negativeBadge = {
-  background: "#fee2e2",
-  color: "#991b1b",
-};
-
-const monthValues = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
-  gap: 10,
-  marginBottom: 12,
-};
-
-const smallLabel = {
-  color: "#6b7280",
-  display: "block",
-  fontSize: 12,
-  marginBottom: 4,
-};
-
-const lineList = {
-  display: "grid",
-  gap: 7,
-};
-
-const lineRow = {
-  display: "grid",
-  gridTemplateColumns: "1.2fr 0.8fr 0.9fr",
-  gap: 8,
-  borderTop: "1px solid #e5e7eb",
-  paddingTop: 7,
-  fontSize: 13,
-};
-
-const tableWrap = {
-  overflowX: "auto",
-};
-
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 14,
-};
-
-const th = {
-  textAlign: "left",
-  padding: "11px 10px",
-  borderBottom: "1px solid #e5e7eb",
-  color: "#374151",
-  background: "#f9fafb",
-  whiteSpace: "nowrap",
-};
-
-const td = {
-  padding: "11px 10px",
-  borderBottom: "1px solid #e5e7eb",
-};
-
-const moneyValue = {
-  color: "#16a34a",
-};
-
-const deleteButton = {
-  background: "#dc2626",
-  color: "white",
-  border: "none",
-  padding: "8px 11px",
-  borderRadius: 8,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const muted = {
-  color: "#6b7280",
-};
-
-const smallMuted = {
-  color: "#64748b",
-  fontSize: 12,
 };
