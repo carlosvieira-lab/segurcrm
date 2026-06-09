@@ -157,6 +157,16 @@ function calculateMissingAmount(current, previous) {
   return Math.max(Number(previous || 0) - Number(current || 0), 0);
 }
 
+function getElapsedMonthsForYear(year) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+
+  if (Number(year) < currentYear) return 12;
+  if (Number(year) > currentYear) return 0;
+
+  return today.getMonth() + 1;
+}
+
 function buildMonthlyResults(receipts, baselines, selectedYear) {
   const baselineMap = buildBaselineMap(baselines);
 
@@ -259,6 +269,28 @@ export default function RecebimentosComissoes({ receipts, baselines }) {
   );
 
   const yearDifference = yearTotal - previousYearTotal;
+
+  const elapsedMonths = Math.max(getElapsedMonthsForYear(selectedYear), 1);
+
+  const currentElapsedTotal = monthlyResults
+    .slice(0, elapsedMonths)
+    .reduce((sum, month) => sum + month.currentTotal, 0);
+
+  const previousElapsedTotal = monthlyResults
+    .slice(0, elapsedMonths)
+    .reduce((sum, month) => sum + month.previousTotal, 0);
+
+  const averageMonthlyCurrent = currentElapsedTotal / elapsedMonths;
+  const averageMonthlyPrevious = previousElapsedTotal / elapsedMonths;
+
+  const averageGrowthPercent =
+    averageMonthlyPrevious > 0
+      ? ((averageMonthlyCurrent - averageMonthlyPrevious) /
+          averageMonthlyPrevious) *
+        100
+      : 0;
+
+  const projectedAnnualTotal = averageMonthlyCurrent * 12;
 
   const availableYears = useMemo(() => {
     const years = new Set([currentYear, currentYear - 1]);
@@ -430,6 +462,24 @@ export default function RecebimentosComissoes({ receipts, baselines }) {
             title="% face ao ano anterior"
             value={`${previousYearTotal > 0 ? ((yearTotal / previousYearTotal) * 100).toFixed(1) : "0.0"}%`}
             color="#7c3aed"
+          />
+
+          <StatCard
+            title={`Média mensal ${selectedYear}`}
+            value={formatEuro(averageMonthlyCurrent)}
+            color="#0f766e"
+          />
+
+          <StatCard
+            title={`Crescimento médio vs ${selectedYear - 1}`}
+            value={`${averageGrowthPercent >= 0 ? "+" : ""}${averageGrowthPercent.toFixed(1)}%`}
+            color={averageGrowthPercent >= 0 ? "#16a34a" : "#dc2626"}
+          />
+
+          <StatCard
+            title="Projeção anual"
+            value={formatEuro(projectedAnnualTotal)}
+            color="#f59e0b"
           />
         </section>
 
