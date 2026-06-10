@@ -55,6 +55,7 @@ export async function getServerSideProps() {
       branch,
       status,
       start_date,
+      policy_issue_date,
       created_at,
       annual_premium,
       clients(id, name, nif),
@@ -136,6 +137,10 @@ function parseThresholdsText(text) {
 }
 
 function getPolicyCampaignDate(policy, campaign) {
+  if (campaign.date_basis === "policy_issue_date") {
+    return policy.policy_issue_date || null;
+  }
+
   if (campaign.date_basis === "created_at") {
     return policy.created_at || null;
   }
@@ -144,7 +149,8 @@ function getPolicyCampaignDate(policy, campaign) {
 }
 
 function getDateBasisLabel(dateBasis) {
-  if (dateBasis === "created_at") return "Data de criação no CRM";
+  if (dateBasis === "policy_issue_date") return "Data de emissão da apólice";
+  if (dateBasis === "created_at") return "Data de entrada no CRM";
   return "Data de início da apólice";
 }
 
@@ -547,7 +553,8 @@ export default function Campanhas({ campaigns, contributions, policies }) {
                   }
                 >
                   <option value="start_date">Data de início da apólice</option>
-                  <option value="created_at">Data de criação no CRM</option>
+                  <option value="policy_issue_date">Data de emissão da apólice</option>
+                  <option value="created_at">Data de entrada no CRM</option>
                 </select>
               </label>
 
@@ -870,7 +877,8 @@ function CampaignList({
                       }
                     >
                       <option value="start_date">Data início apólice</option>
-                      <option value="created_at">Data criação CRM</option>
+                      <option value="policy_issue_date">Data emissão apólice</option>
+                      <option value="created_at">Data entrada CRM</option>
                     </select>
                   </label>
 
@@ -1339,3 +1347,5 @@ const printFooter = {
   color: "#64748b",
   fontSize: 13,
 };
+
+                      
