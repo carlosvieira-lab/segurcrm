@@ -14,7 +14,6 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const insurers = ["REAL VIDA", "GENERALI", "ZURICH", "AGEAS", "ALLIANZ", "OUTRA"];
-const branches = ["VIDA", "SAÚDE", "SAUDE", "AUTO", "AUTOMÓVEL", "CASA", "ACIDENTES", "EMPRESAS"];
 const monthNames = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -27,8 +26,9 @@ export async function getServerSideProps() {
     .order("start_date", { ascending: false });
 
   const { data: contributions } = await supabase
-    .from("campaign_external_contributions")
-    .select("*");
+    .from("campaign_external_policy_items")
+    .select("*")
+    .order("created_at", { ascending: true });
 
   const { data: policies } = await supabase
     .from("policies")
@@ -119,6 +119,14 @@ function parseThresholdsText(text) {
     .sort((a, b) => a.target - b.target);
 }
 
+function getUniqueBranches(policies) {
+  return [...new Set(
+    policies
+      .map((policy) => String(policy.branch || "").trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b));
+}
+
 function getPolicyCampaignDate(policy, campaign) {
   if (campaign.date_basis === "created_at") {
     return policy.created_at || null;
@@ -170,7 +178,7 @@ function calculateCampaignResult(campaign, policies, contributions) {
   );
 
   const externalPremium = campaignContributions.reduce(
-    (sum, contribution) => sum + Number(contribution.premium_amount || 0),
+    (sum, contribution) => sum + Number(contribution.annual_premium || 0),
     0
   );
 
@@ -208,37 +216,15 @@ function calculateCampaignResult(campaign, policies, contributions) {
     missingToNext: nextThreshold
       ? Math.max(nextThreshold.target - totalPremium, 0)
       : 0,
+    campaignContributions,
   };
 }
 
-function buildInitialContributionForms(campaigns, contributions) {
-  const forms = {};
-
-  campaigns.forEach((campaign) => {
-    const contribution = contributions.find(
-      (item) =>
-        item.campaign_id === campaign.id &&
-        normalizeText(item.contributor_name) === "DELIA"
-    );
-
-    forms[campaign.id] = {
-      contributor_name: "Délia",
-      premium_amount: contribution?.premium_amount
-        ? String(contribution.premium_amount).replace(".", ",")
-        : "",
-      policies_count: contribution?.policies_count || "",
-      notes: contribution?.notes || "",
-    };
-  });
-
-  return forms;
-}
-
-function buildInitialCampaignForm() {
+function buildInitialCampaignForm(availableBranches) {
   return {
     name: "",
     insurer_name: "REAL VIDA",
-    product_branches: ["VIDA", "SAÚDE"],
+    product_branches: availableBranches.slice(0, 0),
     start_date: todayIso(),
     end_date: todayIso(),
     date_basis: "start_date",
@@ -250,12 +236,14 @@ function buildInitialCampaignForm() {
 }
 
 export default function Campanhas({ campaigns, contributions, policies }) {
+  const availableBranches = useMemo(() => getUniqueBranches(policies), [policies]);
+
   const [showNewForm, setShowNewForm] = useState(false);
-  const [newCampaign, setNewCampaign] = useState(buildInitialCampaignForm);
-  const [forms, setForms] = useState(() =>
-    buildInitialContributionForms(campaigns, contributions)
+  const [newCampaign, setNewCampaign] = useState(() =>
+    buildInitialCampaignForm(availableBranches)
   );
   const [savingCampaignId, setSavingCampaignId] = useState(null);
+  const [externalForms, setExternalForms] = useState({});
 
   const activeCampaigns = campaigns.filter(
     (campaign) => campaign.is_active && campaign.payment_status !== "pago"
@@ -263,6 +251,18 @@ export default function Campanhas({ campaigns, contributions, policies }) {
   const paidCampaigns = campaigns.filter(
     (campaign) => campaign.payment_status === "pago"
   );
+
+  function getExternalForm(campaignId) {
+    return (
+      externalForms[campaignId] || {
+        contributor_name: "Délia",
+        client_name: "",
+        policy_number: "",
+        annual_premium: "",
+        notes: "",
+      }
+    );
+  }
 
   async function createCampaign(event) {
     event.preventDefault();
@@ -300,25 +300,45 @@ export default function Campanhas({ campaigns, contributions, policies }) {
     window.location.reload();
   }
 
-  async function saveExternalContribution(campaignId) {
-    const form = forms[campaignId] || {};
+  async function addExternalPolicy(campaignId) {
+    const form = getExternalForm(campaignId);
+
+    if (!form.client_name || !form.annual_premium) {
+      alert("Preenche pelo menos o nome do cliente e o prémio anual.");
+      return;
+    }
+
     setSavingCampaignId(campaignId);
 
     const { error } = await supabase
-      .from("campaign_external_contributions")
-      .upsert(
-        {
-          campaign_id: campaignId,
-          contributor_name: form.contributor_name || "Délia",
-          premium_amount: parseDecimal(form.premium_amount),
-          policies_count: Number(form.policies_count || 0),
-          notes: form.notes || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "campaign_id,contributor_name" }
-      );
+      .from("campaign_external_policy_items")
+      .insert({
+        campaign_id: campaignId,
+        contributor_name: form.contributor_name || "Délia",
+        client_name: form.client_name,
+        policy_number: form.policy_number || null,
+        annual_premium: parseDecimal(form.annual_premium),
+        notes: form.notes || null,
+      });
 
     setSavingCampaignId(null);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function deleteExternalPolicy(itemId) {
+    const ok = window.confirm("Eliminar esta contribuição externa?");
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("campaign_external_policy_items")
+      .delete()
+      .eq("id", itemId);
 
     if (error) {
       alert(error.message);
@@ -377,6 +397,7 @@ export default function Campanhas({ campaigns, contributions, policies }) {
         acc.totalBonus += result.currentBonus;
         acc.totalPremium += result.totalPremium;
         acc.totalPolicies += result.matchingPolicies.length;
+        acc.externalPolicies += result.campaignContributions.length;
         return acc;
       },
       {
@@ -385,6 +406,7 @@ export default function Campanhas({ campaigns, contributions, policies }) {
         paidBonus: 0,
         pendingBonus: 0,
         totalPolicies: 0,
+        externalPolicies: 0,
       }
     );
   }, [campaigns, policies, contributions]);
@@ -409,10 +431,10 @@ export default function Campanhas({ campaigns, contributions, policies }) {
 
         <section style={summaryGrid}>
           <Summary title="Campanhas ativas" value={activeCampaigns.length} />
-          <Summary title="Apólices contabilizadas" value={totals.totalPolicies} />
+          <Summary title="Apólices CRM" value={totals.totalPolicies} />
+          <Summary title="Apólices Délia" value={totals.externalPolicies} />
           <Summary title="Prémio em campanha" value={formatEuro(totals.totalPremium)} />
           <Summary title="Prémios previstos" value={formatEuro(totals.totalBonus)} />
-          <Summary title="Prémios pagos" value={formatEuro(totals.paidBonus)} />
           <Summary title="Por receber" value={formatEuro(totals.pendingBonus)} />
         </section>
 
@@ -536,9 +558,9 @@ export default function Campanhas({ campaigns, contributions, policies }) {
               </label>
 
               <div style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
-                Produtos em campanha
+                Produtos/Ramos em campanha
                 <div style={branchGrid}>
-                  {branches.map((branch) => (
+                  {availableBranches.map((branch) => (
                     <label key={branch} style={checkLabel}>
                       <input
                         type="checkbox"
@@ -603,10 +625,13 @@ export default function Campanhas({ campaigns, contributions, policies }) {
           campaigns={activeCampaigns}
           policies={policies}
           contributions={contributions}
-          forms={forms}
-          setForms={setForms}
+          availableBranches={availableBranches}
+          externalForms={externalForms}
+          setExternalForms={setExternalForms}
+          getExternalForm={getExternalForm}
           savingCampaignId={savingCampaignId}
-          saveExternalContribution={saveExternalContribution}
+          addExternalPolicy={addExternalPolicy}
+          deleteExternalPolicy={deleteExternalPolicy}
           markPaid={markPaid}
           markPending={markPending}
           updateCampaign={updateCampaign}
@@ -617,10 +642,13 @@ export default function Campanhas({ campaigns, contributions, policies }) {
           campaigns={paidCampaigns}
           policies={policies}
           contributions={contributions}
-          forms={forms}
-          setForms={setForms}
+          availableBranches={availableBranches}
+          externalForms={externalForms}
+          setExternalForms={setExternalForms}
+          getExternalForm={getExternalForm}
           savingCampaignId={savingCampaignId}
-          saveExternalContribution={saveExternalContribution}
+          addExternalPolicy={addExternalPolicy}
+          deleteExternalPolicy={deleteExternalPolicy}
           markPaid={markPaid}
           markPending={markPending}
           updateCampaign={updateCampaign}
@@ -644,10 +672,13 @@ function CampaignList({
   campaigns,
   policies,
   contributions,
-  forms,
-  setForms,
+  availableBranches,
+  externalForms,
+  setExternalForms,
+  getExternalForm,
   savingCampaignId,
-  saveExternalContribution,
+  addExternalPolicy,
+  deleteExternalPolicy,
   markPaid,
   markPending,
   updateCampaign,
@@ -665,7 +696,7 @@ function CampaignList({
             policies,
             contributions
           );
-          const form = forms[campaign.id] || {};
+          const form = getExternalForm(campaign.id);
 
           return (
             <section key={campaign.id} style={campaignCard}>
@@ -709,9 +740,10 @@ function CampaignList({
 
               <div style={campaignStatsGrid}>
                 <Mini title="Prémio CRM" value={formatEuro(result.internalPremium)} />
-                <Mini title="Délia" value={formatEuro(result.externalPremium)} />
+                <Mini title="Prémio Délia" value={formatEuro(result.externalPremium)} />
                 <Mini title="Total campanha" value={formatEuro(result.totalPremium)} />
                 <Mini title="Apólices CRM" value={result.matchingPolicies.length} />
+                <Mini title="Apólices Délia" value={result.campaignContributions.length} />
                 <Mini title="Patamar" value={formatEuro(result.currentTarget)} />
                 <Mini
                   title="Próximo"
@@ -733,34 +765,26 @@ function CampaignList({
                 </div>
               )}
 
-              <div style={thresholdGrid}>
-                {result.thresholds.map((threshold) => {
-                  const achieved = result.totalPremium >= threshold.target;
-
-                  return (
-                    <div
-                      key={`${campaign.id}-${threshold.target}`}
-                      style={{
-                        ...thresholdBox,
-                        ...(achieved ? thresholdBoxAchieved : {}),
-                      }}
-                    >
-                      <span style={summaryLabel}>
-                        {formatEuro(threshold.target)}
-                      </span>
-                      <strong>{formatEuro(threshold.bonus)}</strong>
-                      <span style={smallMuted}>
-                        {achieved ? "Atingido" : "Por atingir"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <section style={paymentCard}>
-                <h4 style={sectionTitle}>Pagamento da seguradora</h4>
+              <section style={settingsCard}>
+                <h4 style={sectionTitle}>Definições editáveis da campanha</h4>
 
                 <div style={externalGrid}>
+                  <label style={fieldLabel}>
+                    Critério
+                    <select
+                      style={input}
+                      value={campaign.date_basis || "start_date"}
+                      onChange={(event) =>
+                        updateCampaign(campaign, {
+                          date_basis: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="start_date">Data início apólice</option>
+                      <option value="created_at">Data criação CRM</option>
+                    </select>
+                  </label>
+
                   <label style={fieldLabel}>
                     Mês pagamento
                     <select
@@ -793,23 +817,36 @@ function CampaignList({
                       }
                     />
                   </label>
+                </div>
 
-                  <label style={fieldLabel}>
-                    Critério
-                    <select
-                      style={input}
-                      value={campaign.date_basis || "start_date"}
-                      onChange={(event) =>
-                        updateCampaign(campaign, {
-                          date_basis: event.target.value,
-                        })
-                      }
-                    >
-                      <option value="start_date">Data início apólice</option>
-                      <option value="created_at">Data criação CRM</option>
-                    </select>
-                  </label>
+                <div style={branchEditor}>
+                  <strong>Produtos/Ramos que contam</strong>
 
+                  <div style={branchGrid}>
+                    {availableBranches.map((branch) => (
+                      <label key={`${campaign.id}-${branch}`} style={checkLabel}>
+                        <input
+                          type="checkbox"
+                          checked={(campaign.product_branches || []).includes(branch)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            const current = campaign.product_branches || [];
+                            const next = checked
+                              ? [...current, branch]
+                              : current.filter((item) => item !== branch);
+
+                            updateCampaign(campaign, {
+                              product_branches: next,
+                            });
+                          }}
+                        />
+                        {branch}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={buttonRow}>
                   {campaign.payment_status === "pago" ? (
                     <button
                       style={secondaryButton}
@@ -830,21 +867,21 @@ function CampaignList({
               </section>
 
               <section style={externalCard}>
-                <h4 style={sectionTitle}>Contributo externo — Délia</h4>
+                <h4 style={sectionTitle}>Contribuição externa — Délia</h4>
 
                 <div style={externalGrid}>
                   <label style={fieldLabel}>
-                    Prémio anual contribuído
+                    Nome cliente
                     <input
                       style={input}
-                      value={form.premium_amount}
-                      placeholder="Ex: 1000,00"
+                      value={form.client_name}
+                      placeholder="Nome do cliente"
                       onChange={(event) =>
-                        setForms({
-                          ...forms,
+                        setExternalForms({
+                          ...externalForms,
                           [campaign.id]: {
                             ...form,
-                            premium_amount: event.target.value,
+                            client_name: event.target.value,
                           },
                         })
                       }
@@ -852,18 +889,35 @@ function CampaignList({
                   </label>
 
                   <label style={fieldLabel}>
-                    Nº apólices
+                    Nº apólice
                     <input
                       style={input}
-                      type="number"
-                      value={form.policies_count}
-                      placeholder="Ex: 2"
+                      value={form.policy_number}
+                      placeholder="Nº apólice"
                       onChange={(event) =>
-                        setForms({
-                          ...forms,
+                        setExternalForms({
+                          ...externalForms,
                           [campaign.id]: {
                             ...form,
-                            policies_count: event.target.value,
+                            policy_number: event.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+
+                  <label style={fieldLabel}>
+                    Prémio anual
+                    <input
+                      style={input}
+                      value={form.annual_premium}
+                      placeholder="Ex: 1000,00"
+                      onChange={(event) =>
+                        setExternalForms({
+                          ...externalForms,
+                          [campaign.id]: {
+                            ...form,
+                            annual_premium: event.target.value,
                           },
                         })
                       }
@@ -875,10 +929,10 @@ function CampaignList({
                     <input
                       style={input}
                       value={form.notes}
-                      placeholder="Ex: produção externa"
+                      placeholder="Opcional"
                       onChange={(event) =>
-                        setForms({
-                          ...forms,
+                        setExternalForms({
+                          ...externalForms,
                           [campaign.id]: {
                             ...form,
                             notes: event.target.value,
@@ -891,14 +945,42 @@ function CampaignList({
                   <button
                     type="button"
                     style={button}
-                    onClick={() => saveExternalContribution(campaign.id)}
+                    onClick={() => addExternalPolicy(campaign.id)}
                     disabled={savingCampaignId === campaign.id}
                   >
                     {savingCampaignId === campaign.id
                       ? "A guardar..."
-                      : "Guardar Délia"}
+                      : "Adicionar apólice Délia"}
                   </button>
                 </div>
+
+                {result.campaignContributions.length > 0 && (
+                  <div style={tableCompact}>
+                    <div style={externalHeader}>
+                      <span>Cliente</span>
+                      <span>Apólice</span>
+                      <span>Prémio anual</span>
+                      <span>Ação</span>
+                    </div>
+
+                    {result.campaignContributions.map((item) => (
+                      <div key={item.id} style={externalRow}>
+                        <strong>{item.client_name}</strong>
+                        <span>{item.policy_number || "-"}</span>
+                        <strong style={moneyValue}>
+                          {formatEuro(item.annual_premium)}
+                        </strong>
+                        <button
+                          type="button"
+                          style={deleteButton}
+                          onClick={() => deleteExternalPolicy(item.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section style={policiesCard}>
@@ -970,10 +1052,10 @@ const main = { flex: 1, padding: 40 };
 const header = { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 26 };
 const title = { fontSize: 42, margin: 0 };
 const subtitle = { color: "#6b7280", marginTop: 8 };
-const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16, marginBottom: 24 };
+const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 16, marginBottom: 24 };
 const summaryBox = { background: "white", padding: 18, borderRadius: 16, display: "grid", gap: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
 const summaryLabel = { color: "#6b7280", fontSize: 13, fontWeight: "bold" };
-const summaryValue = { color: "#2563eb", fontSize: 28 };
+const summaryValue = { color: "#2563eb", fontSize: 26 };
 const listSection = { marginBottom: 28 };
 const formCard = { background: "#eff6ff", border: "1px solid #bfdbfe", padding: 24, borderRadius: 18, marginBottom: 24 };
 const newFormGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 };
@@ -985,33 +1067,36 @@ const tagRow = { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 };
 const tag = { background: "#dbeafe", color: "#1d4ed8", padding: "6px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
 const bonusBox = { background: "#dcfce7", border: "1px solid #86efac", padding: 16, borderRadius: 16, minWidth: 190, display: "grid", gap: 8 };
 const bonusValue = { color: "#166534", fontSize: 30 };
-const campaignStatsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 };
+const campaignStatsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 };
 const miniBox = { background: "#f9fafb", padding: 14, borderRadius: 14, border: "1px solid #e5e7eb", display: "grid", gap: 6 };
-const miniValue = { fontSize: 22, color: "#111827" };
+const miniValue = { fontSize: 21, color: "#111827" };
 const progressInfo = { background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e", padding: 14, borderRadius: 12, marginBottom: 16 };
 const successInfo = { background: "#dcfce7", border: "1px solid #86efac", color: "#166534", padding: 14, borderRadius: 12, marginBottom: 16, fontWeight: "bold" };
-const thresholdGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 };
-const thresholdBox = { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 14, padding: 12, display: "grid", gap: 6 };
-const thresholdBoxAchieved = { background: "#dcfce7", border: "1px solid #86efac" };
+const settingsCard = { background: "#f8fafc", border: "1px solid #e2e8f0", padding: 18, borderRadius: 16, marginBottom: 20 };
 const externalCard = { background: "#eff6ff", border: "1px solid #bfdbfe", padding: 18, borderRadius: 16, marginBottom: 20 };
-const paymentCard = { background: "#fef3c7", border: "1px solid #f59e0b", padding: 18, borderRadius: 16, marginBottom: 20 };
 const policiesCard = { background: "#f9fafb", border: "1px solid #e5e7eb", padding: 18, borderRadius: 16 };
 const sectionTitle = { marginTop: 0 };
-const externalGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "end" };
+const externalGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, alignItems: "end" };
 const fieldLabel = { display: "flex", flexDirection: "column", gap: 6, color: "#374151", fontWeight: "bold", fontSize: 13 };
-const branchGrid = { display: "flex", gap: 10, flexWrap: "wrap" };
+const branchGrid = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 };
+const branchEditor = { marginTop: 18 };
 const checkLabel = { display: "flex", alignItems: "center", gap: 6, background: "white", border: "1px solid #d1d5db", borderRadius: 10, padding: "9px 11px", fontWeight: "bold" };
 const input = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "white" };
 const textarea = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "white", minHeight: 86, fontFamily: "Arial, sans-serif" };
 const button = { background: "#111827", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const paidButton = { background: "#16a34a", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const secondaryButton = { background: "#6b7280", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
+const deleteButton = { background: "#dc2626", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
 const paidBadge = { background: "#bbf7d0", color: "#166534", padding: "6px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
 const pendingBadge = { background: "#fee2e2", color: "#991b1b", padding: "6px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
 const paidInfo = { color: "#166534", fontWeight: "bold" };
+const buttonRow = { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 16 };
 const table = { display: "grid", gap: 8, overflowX: "auto" };
 const tableHeader = { display: "grid", gridTemplateColumns: "2fr 1fr 1.1fr 1fr 1fr 1.1fr 1fr", gap: 10, background: "#e5e7eb", padding: "12px 14px", borderRadius: 12, fontWeight: "bold", minWidth: 1050 };
 const tableRow = { display: "grid", gridTemplateColumns: "2fr 1fr 1.1fr 1fr 1fr 1.1fr 1fr", gap: 10, padding: "12px 14px", borderBottom: "1px solid #e5e7eb", alignItems: "center", minWidth: 1050 };
+const tableCompact = { display: "grid", gap: 8, marginTop: 16 };
+const externalHeader = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1fr 0.8fr", gap: 10, background: "#dbeafe", padding: "10px 12px", borderRadius: 10, fontWeight: "bold" };
+const externalRow = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1fr 0.8fr", gap: 10, padding: "10px 12px", borderBottom: "1px solid #bfdbfe", alignItems: "center" };
 const clientButton = { background: "#2563eb", color: "white", padding: "8px 10px", borderRadius: 8, textDecoration: "none", fontWeight: "bold", textAlign: "center" };
 const moneyValue = { color: "#16a34a" };
 const muted = { color: "#6b7280" };
