@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -395,10 +395,10 @@ function createTimeline(client, policies, tasks, opportunities, claims) {
 
   policies.forEach((policy) => {
     items.push({
-      date: policy.created_at || policy.start_date,
+      date: policy.created_at || policy.policy_issue_date || policy.start_date,
       type: "APÓLICE",
-      title: `Apólice ${policy.branch || ""} criada`,
-      description: `${policy.policy_number || "Sem nº"} · ${policy.insurers?.name || "Sem seguradora"}`,
+      title: `Apólice ${policy.branch || ""} registada no CRM`,
+      description: `${policy.policy_number || "Sem nº"} · ${policy.insurers?.name || "Sem seguradora"} · Emissão: ${formatDate(policy.policy_issue_date)} · Início: ${formatDate(policy.start_date)}`,
     });
 
     if (policy.status === "anulada" && policy.cancelled_at) {
@@ -512,6 +512,7 @@ export default function ClientePage({ client, policies, allPolicies, claims, tas
     annual_premium: "",
     commission_per_payment: "",
     payment_frequency: "Mensal",
+    policy_issue_date: "",
     start_date: "",
     renewal_date: "",
     last_payment_date: "",
@@ -537,6 +538,7 @@ const [editPolicyForm, setEditPolicyForm] = useState({
   annual_premium: "",
   commission_per_payment: "",
   payment_frequency: "Mensal",
+  policy_issue_date: "",
   start_date: "",
   renewal_date: "",
   last_payment_date: "",
@@ -732,6 +734,7 @@ setTimeout(() => {
       annual_premium: formatDecimalInput(calculatePremiumPerPayment(policy)),
       commission_per_payment: formatDecimalInput(policy.commission_per_payment),
       payment_frequency: policy.payment_frequency || "Mensal",
+      policy_issue_date: policy.policy_issue_date || "",
       start_date: policy.start_date || "",
       renewal_date: policy.renewal_date || "",
       last_payment_date: policy.last_payment_date || "",
@@ -784,6 +787,7 @@ setTimeout(() => {
       annual_premium: calculateAnnualPremiumFromPayment(editPolicyForm.annual_premium, editPolicyForm.payment_frequency),
       commission_per_payment: cleanNumber(editPolicyForm.commission_per_payment),
       payment_frequency: editPolicyForm.payment_frequency,
+      policy_issue_date: cleanDate(editPolicyForm.policy_issue_date),
       start_date: cleanDate(editPolicyForm.start_date),
       renewal_date: cleanDate(editPolicyForm.renewal_date),
       last_payment_date: cleanDate(editPolicyForm.last_payment_date),
@@ -1027,6 +1031,7 @@ setTimeout(() => {
       annual_premium: calculateAnnualPremiumFromPayment(policyForm.annual_premium, policyForm.payment_frequency),
       commission_per_payment: cleanNumber(policyForm.commission_per_payment),
       payment_frequency: policyForm.payment_frequency,
+      policy_issue_date: cleanDate(policyForm.policy_issue_date),
       start_date: cleanDate(policyForm.start_date),
       renewal_date: renewalDate,
       next_payment_date: nextPaymentDate,
@@ -1725,6 +1730,21 @@ const timelineItems = createTimeline(
               </div>
 
               <label style={fieldLabel}>
+                Data emissão
+                <input
+                  style={input}
+                  type="date"
+                  value={policyForm.policy_issue_date}
+                  onChange={(e) =>
+                    setPolicyForm({
+                      ...policyForm,
+                      policy_issue_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
+
+              <label style={fieldLabel}>
                 Data início
                 <input
                   style={input}
@@ -1927,6 +1947,21 @@ const timelineItems = createTimeline(
                   % comissão
                 </span>
               </div>
+
+              <label style={fieldLabel}>
+                Data emissão
+                <input
+                  style={input}
+                  type="date"
+                  value={editPolicyForm.policy_issue_date}
+                  onChange={(e) =>
+                    setEditPolicyForm({
+                      ...editPolicyForm,
+                      policy_issue_date: e.target.value,
+                    })
+                  }
+                />
+              </label>
 
               <label style={fieldLabel}>
                 Data início
@@ -2345,6 +2380,14 @@ const timelineItems = createTimeline(
                     )}
                     % comissão
                   </div>
+
+                  <p>
+                    <strong>Data emissão:</strong> {formatDate(policy.policy_issue_date)}
+                  </p>
+
+                  <p>
+                    <strong>Data início:</strong> {formatDate(policy.start_date)}
+                  </p>
 
                   <p>
                     <strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}
