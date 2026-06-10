@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -14,6 +14,22 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const insurers = ["REAL VIDA", "GENERALI", "ZURICH", "AGEAS", "ALLIANZ", "OUTRA"];
+
+const branchList = [
+  "AUTOMÓVEL",
+  "CASA",
+  "SAUDE",
+  "ATCO",
+  "ATCP",
+  "MREMP",
+  "VIDA",
+  "APS",
+  "FINANCEIROS",
+  "VIAGEM",
+  "CAES E GATOS",
+  "OUTROS",
+];
+
 const monthNames = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -119,14 +135,6 @@ function parseThresholdsText(text) {
     .sort((a, b) => a.target - b.target);
 }
 
-function getUniqueBranches(policies) {
-  return [...new Set(
-    policies
-      .map((policy) => String(policy.branch || "").trim())
-      .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b));
-}
-
 function getPolicyCampaignDate(policy, campaign) {
   if (campaign.date_basis === "created_at") {
     return policy.created_at || null;
@@ -203,13 +211,25 @@ function calculateCampaignResult(campaign, policies, contributions) {
   const nextThreshold =
     thresholds.find((threshold) => totalPremium < threshold.target) || null;
 
+  const currentBonus = currentThreshold?.bonus || 0;
+
+  const crmShare =
+    totalPremium > 0 ? (internalPremium / totalPremium) * currentBonus : 0;
+
+  const deliaShare =
+    totalPremium > 0 ? (externalPremium / totalPremium) * currentBonus : 0;
+
   return {
     matchingPolicies,
     internalPremium,
     externalPremium,
     totalPremium,
     thresholds,
-    currentBonus: currentThreshold?.bonus || 0,
+    currentBonus,
+    crmShare,
+    deliaShare,
+    crmSharePercent: totalPremium > 0 ? (internalPremium / totalPremium) * 100 : 0,
+    deliaSharePercent: totalPremium > 0 ? (externalPremium / totalPremium) * 100 : 0,
     currentTarget: currentThreshold?.target || 0,
     nextTarget: nextThreshold?.target || null,
     nextBonus: nextThreshold?.bonus || null,
@@ -220,11 +240,11 @@ function calculateCampaignResult(campaign, policies, contributions) {
   };
 }
 
-function buildInitialCampaignForm(availableBranches) {
+function buildInitialCampaignForm() {
   return {
     name: "",
     insurer_name: "REAL VIDA",
-    product_branches: availableBranches.slice(0, 0),
+    product_branches: [],
     start_date: todayIso(),
     end_date: todayIso(),
     date_basis: "start_date",
@@ -236,11 +256,11 @@ function buildInitialCampaignForm(availableBranches) {
 }
 
 export default function Campanhas({ campaigns, contributions, policies }) {
-  const availableBranches = useMemo(() => getUniqueBranches(policies), [policies]);
+  const availableBranches = branchList;
 
   const [showNewForm, setShowNewForm] = useState(false);
   const [newCampaign, setNewCampaign] = useState(() =>
-    buildInitialCampaignForm(availableBranches)
+    buildInitialCampaignForm()
   );
   const [savingCampaignId, setSavingCampaignId] = useState(null);
   const [externalForms, setExternalForms] = useState({});
@@ -377,6 +397,15 @@ export default function Campanhas({ campaigns, contributions, policies }) {
       payment_status: "pendente",
       paid_at: null,
     });
+  }
+
+  function printCampaignReport(campaignId) {
+    document.body.setAttribute("data-print-campaign", campaignId);
+
+    setTimeout(() => {
+      window.print();
+      document.body.removeAttribute("data-print-campaign");
+    }, 100);
   }
 
   const totals = useMemo(() => {
@@ -635,6 +664,7 @@ export default function Campanhas({ campaigns, contributions, policies }) {
           markPaid={markPaid}
           markPending={markPending}
           updateCampaign={updateCampaign}
+          printCampaignReport={printCampaignReport}
         />
 
         <CampaignList
@@ -652,7 +682,42 @@ export default function Campanhas({ campaigns, contributions, policies }) {
           markPaid={markPaid}
           markPending={markPending}
           updateCampaign={updateCampaign}
+          printCampaignReport={printCampaignReport}
         />
+
+        <style jsx global>{`
+          .campaign-print-report {
+            display: none;
+          }
+
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+
+            .campaign-print-report,
+            .campaign-print-report * {
+              visibility: visible;
+            }
+
+            .campaign-print-report {
+              display: block !important;
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              background: white;
+              color: #111827;
+              padding: 28px;
+              box-sizing: border-box;
+              font-family: Arial, sans-serif;
+            }
+
+            .no-print {
+              display: none !important;
+            }
+          }
+        `}</style>
       </main>
     </div>
   );
@@ -682,6 +747,7 @@ function CampaignList({
   markPaid,
   markPending,
   updateCampaign,
+  printCampaignReport,
 }) {
   return (
     <section style={listSection}>
@@ -752,6 +818,29 @@ function CampaignList({
                   }
                 />
               </div>
+
+              <section style={splitCard}>
+                <h4 style={sectionTitle}>Divisão provisória do prémio</h4>
+
+                <div style={campaignStatsGrid}>
+                  <Mini
+                    title="Parte CRM"
+                    value={`${formatEuro(result.crmShare)} (${result.crmSharePercent.toFixed(1)}%)`}
+                  />
+                  <Mini
+                    title="Parte Délia"
+                    value={`${formatEuro(result.deliaShare)} (${result.deliaSharePercent.toFixed(1)}%)`}
+                  />
+                  <Mini
+                    title="Prémio total previsto"
+                    value={formatEuro(result.currentBonus)}
+                  />
+                </div>
+
+                <p style={muted}>
+                  Divisão provisória calculada proporcionalmente ao prémio anual produzido por cada parte.
+                </p>
+              </section>
 
               {result.nextTarget ? (
                 <div style={progressInfo}>
@@ -859,6 +948,14 @@ function CampaignList({
                       Marcar como Pago
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    style={reportButton}
+                    onClick={() => printCampaignReport(campaign.id)}
+                  >
+                    Relatório PDF
+                  </button>
 
                   {campaign.paid_at && (
                     <div style={paidInfo}>Pago em {formatDate(campaign.paid_at)}</div>
@@ -983,6 +1080,114 @@ function CampaignList({
                 )}
               </section>
 
+              <section
+                className="campaign-print-report"
+                id={`campaign-report-${campaign.id}`}
+              >
+                <h1 style={printTitle}>Relatório de Campanha</h1>
+
+                <h2 style={printSubtitle}>{campaign.name}</h2>
+
+                <div style={printGrid}>
+                  <div>
+                    <strong>Seguradora</strong>
+                    <span>{campaign.insurer_name}</span>
+                  </div>
+
+                  <div>
+                    <strong>Período</strong>
+                    <span>
+                      {formatDate(campaign.start_date)} a {formatDate(campaign.end_date)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>Critério</strong>
+                    <span>{getDateBasisLabel(campaign.date_basis)}</span>
+                  </div>
+
+                  <div>
+                    <strong>Ramos</strong>
+                    <span>{(campaign.product_branches || []).join(", ") || "-"}</span>
+                  </div>
+
+                  <div>
+                    <strong>Produção CRM</strong>
+                    <span>{formatEuro(result.internalPremium)}</span>
+                  </div>
+
+                  <div>
+                    <strong>Produção Délia</strong>
+                    <span>{formatEuro(result.externalPremium)}</span>
+                  </div>
+
+                  <div>
+                    <strong>Produção total</strong>
+                    <span>{formatEuro(result.totalPremium)}</span>
+                  </div>
+
+                  <div>
+                    <strong>Prémio previsto</strong>
+                    <span>{formatEuro(result.currentBonus)}</span>
+                  </div>
+
+                  <div>
+                    <strong>Divisão CRM</strong>
+                    <span>{formatEuro(result.crmShare)} ({result.crmSharePercent.toFixed(1)}%)</span>
+                  </div>
+
+                  <div>
+                    <strong>Divisão Délia</strong>
+                    <span>{formatEuro(result.deliaShare)} ({result.deliaSharePercent.toFixed(1)}%)</span>
+                  </div>
+
+                  <div>
+                    <strong>Próximo patamar</strong>
+                    <span>{result.nextTarget ? formatEuro(result.nextTarget) : "Máximo"}</span>
+                  </div>
+
+                  <div>
+                    <strong>Falta para próximo patamar</strong>
+                    <span>{formatEuro(result.missingToNext)}</span>
+                  </div>
+                </div>
+
+                <h3>Produção Délia</h3>
+
+                {result.campaignContributions.length === 0 ? (
+                  <p>Sem produção externa registada.</p>
+                ) : (
+                  <table style={printTable}>
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Apólice</th>
+                        <th>Prémio anual</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.campaignContributions.map((item) => (
+                        <tr key={`print-${item.id}`}>
+                          <td>{item.client_name}</td>
+                          <td>{item.policy_number || "-"}</td>
+                          <td>{formatEuro(item.annual_premium)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                <h3>Resumo CRM</h3>
+
+                <p>
+                  Apólices CRM contabilizadas: <strong>{result.matchingPolicies.length}</strong>
+                </p>
+
+                <p style={printFooter}>
+                  Relatório provisório gerado em {formatDate(new Date().toISOString())}.
+                </p>
+              </section>
+
               <section style={policiesCard}>
                 <h4 style={sectionTitle}>Apólices contabilizadas no CRM</h4>
 
@@ -1073,6 +1278,7 @@ const miniValue = { fontSize: 21, color: "#111827" };
 const progressInfo = { background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e", padding: 14, borderRadius: 12, marginBottom: 16 };
 const successInfo = { background: "#dcfce7", border: "1px solid #86efac", color: "#166534", padding: 14, borderRadius: 12, marginBottom: 16, fontWeight: "bold" };
 const settingsCard = { background: "#f8fafc", border: "1px solid #e2e8f0", padding: 18, borderRadius: 16, marginBottom: 20 };
+const splitCard = { background: "#f0fdf4", border: "1px solid #bbf7d0", padding: 18, borderRadius: 16, marginBottom: 20 };
 const externalCard = { background: "#eff6ff", border: "1px solid #bfdbfe", padding: 18, borderRadius: 16, marginBottom: 20 };
 const policiesCard = { background: "#f9fafb", border: "1px solid #e5e7eb", padding: 18, borderRadius: 16 };
 const sectionTitle = { marginTop: 0 };
@@ -1087,6 +1293,7 @@ const button = { background: "#111827", color: "white", border: "none", padding:
 const paidButton = { background: "#16a34a", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const secondaryButton = { background: "#6b7280", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const deleteButton = { background: "#dc2626", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold" };
+const reportButton = { background: "#7c3aed", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const paidBadge = { background: "#bbf7d0", color: "#166534", padding: "6px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
 const pendingBadge = { background: "#fee2e2", color: "#991b1b", padding: "6px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
 const paidInfo = { color: "#166534", fontWeight: "bold" };
@@ -1101,3 +1308,34 @@ const clientButton = { background: "#2563eb", color: "white", padding: "8px 10px
 const moneyValue = { color: "#16a34a" };
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
+
+
+const printTitle = {
+  fontSize: 30,
+  margin: "0 0 8px",
+};
+
+const printSubtitle = {
+  fontSize: 22,
+  margin: "0 0 20px",
+};
+
+const printGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, 1fr)",
+  gap: 12,
+  marginBottom: 24,
+};
+
+const printTable = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: 10,
+  marginBottom: 20,
+};
+
+const printFooter = {
+  marginTop: 28,
+  color: "#64748b",
+  fontSize: 13,
+};
