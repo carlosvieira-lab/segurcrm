@@ -183,16 +183,19 @@ function buildEmailLink(email, clientName) {
 function buildOldPoliciesReport(policies) {
   return policies
     .filter((policy) => {
-      const parsedStartDate = parsePolicyStartDate(policy.start_date);
+      const startDate = policy.start_date ? new Date(policy.start_date) : null;
 
       return (
         policy.status !== "anulada" &&
-        parsedStartDate &&
+        policy.start_date &&
+        startDate &&
+        !Number.isNaN(startDate.getTime()) &&
+        startDate.getFullYear() >= 1900 &&
+        startDate.getFullYear() <= new Date().getFullYear() + 1 &&
         policy.client_id
       );
     })
     .map((policy) => {
-      const parsedStartDate = parsePolicyStartDate(policy.start_date);
       const age = calculatePolicyAgeFromStartDate(policy.start_date);
 
       return {
@@ -205,13 +208,15 @@ function buildOldPoliciesReport(policies) {
         policyNumber: policy.policy_number || "-",
         branch: policy.branch || "-",
         insurerName: policy.insurers?.name || "-",
-        startDate: parsedStartDate,
-        startDateRaw: policy.start_date,
+        startDate: policy.start_date,
         ageLabel: age.label,
         annualPremium: Number(policy.annual_premium || 0),
       };
     })
-    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+    .sort(
+      (a, b) =>
+        new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    )
     .slice(0, 20);
 }
 
@@ -918,7 +923,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
       policy.insurerName,
       policy.branch,
       policy.policyNumber,
-      formatPolicyStartDate(policy.startDate),
+      formatDate(policy.startDate),
       policy.ageLabel,
       policy.annualPremium.toFixed(2),
     ]);
@@ -1523,7 +1528,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
                       <span>{policy.policyNumber}</span>
                       <span>{policy.branch}</span>
                       <span>{policy.insurerName}</span>
-                      <strong style={startDateValue}>{formatPolicyStartDate(policy.startDate)}</strong>
+                      <strong style={startDateValue}>{formatDate(policy.startDate)}</strong>
                       <span style={ageBadge}>{policy.ageLabel}</span>
 
                       <div style={oldPolicyActions}>
