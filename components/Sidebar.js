@@ -58,6 +58,11 @@ export default function Sidebar({ active }) {
             label="Recebimentos Comissões"
             active={active === "recebimentos-comissoes"}
           />
+          <MenuItem
+            href="/campanhas"
+            label="Campanhas"
+            active={active === "campanhas"}
+          />
           <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
           <MenuItem href="/importacoes" label="Importações" active={active === "importacoes"} />
           <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
@@ -140,3 +145,5 @@ const logoutButton = {
   cursor: "pointer",
   fontWeight: "bold",
 };
+
+     
