@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -466,7 +466,7 @@ export default function Campanhas({ campaigns, contributions, policies }) {
 
         <section style={summaryGrid}>
           <Summary title="Campanhas ativas" value={activeCampaigns.length} />
-          <Summary title="Apólices CRM" value={totals.totalPolicies} />
+          <Summary title="Apólices Carlos" value={totals.totalPolicies} />
           <Summary title="Apólices Délia" value={totals.externalPolicies} />
           <Summary title="Prémio em campanha" value={formatEuro(totals.totalPremium)} />
           <Summary title="Prémios previstos" value={formatEuro(totals.totalBonus)} />
@@ -807,7 +807,7 @@ function CampaignList({
                 <Mini title="Prémio CRM" value={formatEuro(result.internalPremium)} />
                 <Mini title="Prémio Délia" value={formatEuro(result.externalPremium)} />
                 <Mini title="Total campanha" value={formatEuro(result.totalPremium)} />
-                <Mini title="Apólices CRM" value={result.matchingPolicies.length} />
+                <Mini title="Apólices Carlos" value={result.matchingPolicies.length} />
                 <Mini title="Apólices Délia" value={result.campaignContributions.length} />
                 <Mini title="Patamar" value={formatEuro(result.currentTarget)} />
                 <Mini
@@ -823,7 +823,7 @@ function CampaignList({
 
                 <div style={campaignStatsGrid}>
                   <Mini
-                    title="Parte CRM"
+                    title="Parte Carlos"
                     value={`${formatEuro(result.crmShare)} (${result.crmSharePercent.toFixed(1)}%)`}
                   />
                   <Mini
@@ -1112,7 +1112,7 @@ function CampaignList({
                   </div>
 
                   <div>
-                    <strong>Produção CRM</strong>
+                    <strong>Produção Carlos</strong>
                     <span>{formatEuro(result.internalPremium)}</span>
                   </div>
 
@@ -1132,7 +1132,7 @@ function CampaignList({
                   </div>
 
                   <div>
-                    <strong>Divisão CRM</strong>
+                    <strong>Divisão Carlos</strong>
                     <span>{formatEuro(result.crmShare)} ({result.crmSharePercent.toFixed(1)}%)</span>
                   </div>
 
@@ -1177,10 +1177,10 @@ function CampaignList({
                   </table>
                 )}
 
-                <h3>Resumo CRM</h3>
+                <h3>Resumo Carlos</h3>
 
                 <p>
-                  Apólices CRM contabilizadas: <strong>{result.matchingPolicies.length}</strong>
+                  Apólices Carlos contabilizadas: <strong>{result.matchingPolicies.length}</strong>
                 </p>
 
                 <p style={printFooter}>
@@ -1340,3 +1340,4 @@ const printFooter = {
   color: "#64748b",
   fontSize: 13,
 };
+
