@@ -674,23 +674,15 @@ export default function Campanhas({ campaigns, contributions, policies }) {
           printCampaignReport={printCampaignReport}
         />
 
-        <CampaignList
-          title="Campanhas pagas / histórico"
-          campaigns={paidCampaigns}
-          policies={policies}
-          contributions={contributions}
-          availableBranches={availableBranches}
-          externalForms={externalForms}
-          setExternalForms={setExternalForms}
-          getExternalForm={getExternalForm}
-          savingCampaignId={savingCampaignId}
-          addExternalPolicy={addExternalPolicy}
-          deleteExternalPolicy={deleteExternalPolicy}
-          markPaid={markPaid}
-          markPending={markPending}
-          updateCampaign={updateCampaign}
-          printCampaignReport={printCampaignReport}
-        />
+        {paidCampaigns.length > 0 && (
+          <section style={paidSummaryCard}>
+            <strong>Campanhas pagas ocultas:</strong>{" "}
+            {paidCampaigns.length}
+            <span style={smallMuted}>
+              {" "}— ficam guardadas em histórico, mas não aparecem nesta página para evitar confusão.
+            </span>
+          </section>
+        )}
 
         <style jsx global>{`
           .campaign-print-report {
@@ -1286,6 +1278,7 @@ const miniValue = { fontSize: 21, color: "#111827" };
 const progressInfo = { background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e", padding: 14, borderRadius: 12, marginBottom: 16 };
 const successInfo = { background: "#dcfce7", border: "1px solid #86efac", color: "#166534", padding: 14, borderRadius: 12, marginBottom: 16, fontWeight: "bold" };
 const settingsCard = { background: "#f8fafc", border: "1px solid #e2e8f0", padding: 18, borderRadius: 16, marginBottom: 20 };
+const paidSummaryCard = { background: "#f9fafb", border: "1px solid #e5e7eb", color: "#374151", padding: 16, borderRadius: 14, marginBottom: 24 };
 const splitCard = { background: "#f0fdf4", border: "1px solid #bbf7d0", padding: 18, borderRadius: 16, marginBottom: 20 };
 const externalCard = { background: "#eff6ff", border: "1px solid #bfdbfe", padding: 18, borderRadius: 16, marginBottom: 20 };
 const policiesCard = { background: "#f9fafb", border: "1px solid #e5e7eb", padding: 18, borderRadius: 16 };
@@ -1347,5 +1340,3 @@ const printFooter = {
   color: "#64748b",
   fontSize: 13,
 };
-
-                      
