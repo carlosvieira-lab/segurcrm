@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { createClient } from "@supabase/supabase-js";
-import Sidebar from "../../components/Sidebar";
+import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -15,16 +15,34 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
-  const { data: tasks } = await supabase
-    .from("tasks")
-    .select("*, clients(id, name, nif, phone), policies(id, policy_number, branch, license_plate)")
-    .order("due_date", { ascending: true });
+  const { data: opportunities } = await supabase
+    .from("opportunities")
+    .select("*, clients(id, name, nif, phone)")
+    .order("contact_date", { ascending: true });
+
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, name, nif, phone")
+    .order("name", { ascending: true });
 
   return {
     props: {
-      tasks: tasks || [],
+      opportunities: opportunities || [],
+      clients: clients || [],
     },
   };
+}
+
+function cleanText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function onlyNumbers(value) {
+  return String(value || "").replace(/\D/g, "");
 }
 
 function formatDate(date) {
@@ -32,16 +50,73 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-function formatDateTime(date) {
-  if (!date) return "-";
-  return new Intl.DateTimeFormat("pt-PT", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(date));
+function isIsoDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
 }
 
-function onlyNumbers(value) {
-  return String(value || "").replace(/\D/g, "");
+function toIsoDate(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function isValidDateParts(year, month, day) {
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
+function parseSmartRenewalDate(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+  if (isIsoDate(text)) return text;
+
+  const match = text.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+
+  if (!match) return "";
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let year = match[3]
+    ? Number(match[3].length === 2 ? `20${match[3]}` : match[3])
+    : today.getFullYear();
+
+  if (!isValidDateParts(year, month, day)) return "";
+
+  let candidate = new Date(year, month - 1, day);
+  candidate.setHours(0, 0, 0, 0);
+
+  if (!match[3] && candidate < today) {
+    year += 1;
+  }
+
+  return toIsoDate(year, month, day);
+}
+
+function formatSmartDateHelp(date) {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function addMonths(dateString, months) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  date.setMonth(date.getMonth() + months);
+  return date.toISOString().split("T")[0];
+}
+
+function todayText() {
+  return new Date().toLocaleString("pt-PT", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 function buildWhatsappLink(phone) {
@@ -51,149 +126,95 @@ function buildWhatsappLink(phone) {
   return `https://wa.me/351${numbers}`;
 }
 
-function todayIso() {
-  return new Date().toISOString().split("T")[0];
+const opportunityStatuses = [
+  "lead",
+  "contactado",
+  "proposta enviada",
+  "em negociação",
+  "ganho",
+  "perdido",
+];
+
+function normalizeOpportunityStatus(status) {
+  const value = String(status || "").toLowerCase().trim();
+
+  if (value === "por contactar") return "lead";
+  if (value === "proposta") return "proposta enviada";
+  if (value === "negociação" || value === "negociacao") return "em negociação";
+
+  return opportunityStatuses.includes(value) ? value : "lead";
 }
 
-function normalizePriority(priority) {
-  const p = String(priority || "NORMAL").toUpperCase().trim();
+function statusLabel(status) {
+  const normalized = normalizeOpportunityStatus(status);
 
-  if (p === "URGENTE") return "URGENTE";
-  if (p === "MUITO URGENTE") return "MUITO URGENTE";
+  if (normalized === "lead") return "Lead";
+  if (normalized === "contactado") return "Contactado";
+  if (normalized === "proposta enviada") return "Proposta Enviada";
+  if (normalized === "em negociação") return "Em Negociação";
+  if (normalized === "ganho") return "Ganho";
+  if (normalized === "perdido") return "Perdido";
 
-  return "NORMAL";
+  return normalized;
 }
 
-function normalizeCategory(category) {
-  const c = String(category || "").toLowerCase().trim();
+function statusBadgeStyle(status) {
+  const normalized = normalizeOpportunityStatus(status);
 
-  if (c.includes("comercial")) {
-    return "COMERCIAL";
-  }
+  if (normalized === "ganho") return { background: "#dcfce7", color: "#166534" };
+  if (normalized === "perdido") return { background: "#fee2e2", color: "#991b1b" };
+  if (normalized === "proposta enviada") return { background: "#ede9fe", color: "#5b21b6" };
+  if (normalized === "em negociação") return { background: "#fef3c7", color: "#92400e" };
+  if (normalized === "contactado") return { background: "#dbeafe", color: "#1d4ed8" };
 
-  if (
-    c.includes("administrativa") ||
-    c.includes("administrativo") ||
-    c.includes("admin")
-  ) {
-    return "ADMINISTRATIVA";
-  }
-
-  return "SEM CATEGORIA";
+  return { background: "#e5e7eb", color: "#111827" };
 }
 
-function sortByDueDate(a, b) {
-  const dateA = a.due_date || "9999-12-31";
-  const dateB = b.due_date || "9999-12-31";
-
-  if (dateA !== dateB) {
-    return dateA.localeCompare(dateB);
-  }
-
-  const priorityOrder = {
-    "MUITO URGENTE": 0,
-    URGENTE: 1,
-    NORMAL: 2,
-  };
-
-  const priorityA = priorityOrder[normalizePriority(a.priority)] ?? 2;
-  const priorityB = priorityOrder[normalizePriority(b.priority)] ?? 2;
-
-  if (priorityA !== priorityB) {
-    return priorityA - priorityB;
-  }
-
-  return String(a.title || "").localeCompare(String(b.title || ""), "pt-PT");
-}
-
-function taskTiming(task) {
-  const today = todayIso();
-
-  if (!task.due_date) {
-    return {
-      label: "Sem data",
-      color: "#64748b",
-      background: "#f1f5f9",
-    };
-  }
-
-  if (task.due_date < today) {
-    return {
-      label: "Atrasada",
-      color: "#b91c1c",
-      background: "#fee2e2",
-    };
-  }
-
-  if (task.due_date === today) {
-    return {
-      label: "Hoje",
-      color: "#c2410c",
-      background: "#ffedd5",
-    };
-  }
-
-  return {
-    label: "Futura",
-    color: "#1d4ed8",
-    background: "#dbeafe",
-  };
-}
-
-function getClientName(task) {
-  return task.clients?.name || task.client_name || "";
-}
-
-function getClientNif(task) {
-  return task.clients?.nif || task.client_nif || "";
-}
-
-function getClientPhone(task) {
-  return task.clients?.phone || task.client_phone || "";
-}
-
-function getInitials(name) {
-  const words = String(name || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (words.length === 0) return "?";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-
-  return `${words[0][0]}${words[1][0]}`.toUpperCase();
-}
-
-export default function TarefasCompacto({ tasks }) {
+export default function Oportunidades({ opportunities, clients }) {
   const router = useRouter();
-  const dashboardFilter = router.query.filtro || "";
-
-  const [priorityFilter, setPriorityFilter] = useState("TODAS");
-  const [categoryFilter, setCategoryFilter] = useState("TODAS");
+  const [clientNif, setClientNif] = useState("");
+  const [clientId, setClientId] = useState(null);
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [opportunityText, setOpportunityText] = useState("");
+  const [renewalDate, setRenewalDate] = useState("");
+  const [renewalDateInput, setRenewalDateInput] = useState("");
+  const [contactDate, setContactDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [clientFound, setClientFound] = useState(false);
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState(null);
-  const [showDetail, setShowDetail] = useState(false);
-  const [showAllDoNow, setShowAllDoNow] = useState(false);
 
-  const [showTaskForm, setShowTaskForm] = useState(false);
+  useEffect(() => {
+    setContactDate(addMonths(renewalDate, -1));
+  }, [renewalDate]);
 
-  const [taskForm, setTaskForm] = useState({
-    title: "",
-    client_id: null,
-    client_name: "",
-    client_phone: "",
-    client_nif: "",
-    description: "",
-    category: "ADMINISTRATIVA",
-    priority: "NORMAL",
-    due_date: "",
-  });
+  function handleRenewalDateInput(value) {
+    setRenewalDateInput(value);
+
+    const parsed = parseSmartRenewalDate(value);
+
+    if (parsed) {
+      setRenewalDate(parsed);
+      return;
+    }
+
+    if (!value) {
+      setRenewalDate("");
+    }
+  }
 
   useEffect(() => {
     async function loadClientFromQuery() {
       const clientId = router.query.cliente;
 
       if (!clientId) return;
+
+      const localClient = clients.find((client) => client.id === clientId);
+
+      if (localClient) {
+        selectClient(localClient);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("clients")
@@ -203,216 +224,237 @@ export default function TarefasCompacto({ tasks }) {
 
       if (error || !data) return;
 
-      setShowTaskForm(true);
-
-      setTaskForm((current) => ({
-        ...current,
-        client_id: data.id,
-        client_name: data.name || "",
-        client_phone: data.phone || "",
-        client_nif: data.nif || "",
-        description:
-          current.description ||
-          `Tarefa criada a partir da ficha do cliente: ${data.name || ""}`,
-      }));
+      selectClient(data);
     }
 
     loadClientFromQuery();
-  }, [router.query.cliente]);
+  }, [router.query.cliente, clients]);
 
-  const [showEditTaskForm, setShowEditTaskForm] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState(null);
+  useEffect(() => {
+    const nifClean = onlyNumbers(clientNif);
 
-  const [editTaskForm, setEditTaskForm] = useState({
-    title: "",
-    description: "",
-    category: "ADMINISTRATIVA",
-    priority: "NORMAL",
-    due_date: "",
-  });
-
-  const openTasks = tasks.filter((t) => t.status !== "concluida");
-  const completedTasks = tasks.filter((t) => t.status === "concluida");
-
-  const today = todayIso();
-
-  const overdueTasks = openTasks.filter(
-    (t) => t.due_date && t.due_date < today
-  );
-
-  const todayTasks = openTasks.filter(
-    (t) => t.due_date === today
-  );
-
-  const normalTasks = openTasks.filter(
-    (t) => normalizePriority(t.priority) === "NORMAL"
-  );
-
-  const urgentTasks = openTasks.filter(
-    (t) => normalizePriority(t.priority) === "URGENTE"
-  );
-
-  const veryUrgentTasks = openTasks.filter(
-    (t) => normalizePriority(t.priority) === "MUITO URGENTE"
-  );
-
-  const administrativeTasks = openTasks.filter(
-    (t) => normalizeCategory(t.category) === "ADMINISTRATIVA"
-  );
-
-  const commercialTasks = openTasks.filter(
-    (t) => normalizeCategory(t.category) === "COMERCIAL"
-  );
-
-  const uncategorizedTasks = openTasks.filter(
-    (t) => normalizeCategory(t.category) === "SEM CATEGORIA"
-  );
-
-  const searchClean = String(search || "").toLowerCase().trim();
-
-  let filteredTasks = openTasks.filter((task) => {
-    if (!searchClean) return true;
-
-    const text = `
-      ${task.title || ""}
-      ${task.description || ""}
-      ${task.status || ""}
-      ${task.category || ""}
-      ${task.priority || ""}
-      ${getClientName(task)}
-      ${getClientNif(task)}
-      ${getClientPhone(task)}
-      ${task.policies?.policy_number || ""}
-      ${task.policies?.branch || ""}
-      ${task.policies?.license_plate || ""}
-    `.toLowerCase();
-
-    return text.includes(searchClean);
-  });
-
-  if (priorityFilter !== "TODAS") {
-    filteredTasks = filteredTasks.filter(
-      (t) => normalizePriority(t.priority) === priorityFilter
-    );
-  }
-
-  if (categoryFilter !== "TODAS") {
-    filteredTasks = filteredTasks.filter(
-      (t) => normalizeCategory(t.category) === categoryFilter
-    );
-  }
-
-  if (dashboardFilter === "vencidas") {
-    filteredTasks = filteredTasks.filter(
-      (t) => t.due_date && t.due_date < today
-    );
-  }
-
-  if (dashboardFilter === "hoje") {
-    filteredTasks = filteredTasks.filter(
-      (t) => t.due_date === today
-    );
-  }
-
-  filteredTasks = filteredTasks.sort(sortByDueDate);
-
-  const doNowTasks = openTasks
-    .filter((task) => {
-      const priority = normalizePriority(task.priority);
-      return (
-        (task.due_date && task.due_date <= today) ||
-        priority === "MUITO URGENTE"
-      );
-    })
-    .sort(sortByDueDate);
-
-  const nextTasks = openTasks
-    .filter((task) => task.due_date && task.due_date > today)
-    .sort(sortByDueDate);
-
-  const selectedTask =
-    filteredTasks.find((task) => task.id === selectedId) ||
-    doNowTasks.find((task) => task.id === selectedId) ||
-    nextTasks.find((task) => task.id === selectedId) ||
-    null;
-
-  const filteredTitle =
-    dashboardFilter === "vencidas"
-      ? "Tarefas vencidas"
-      : dashboardFilter === "hoje"
-      ? "Tarefas para hoje"
-      : "Todas as tarefas";
-
-  async function createTask(e) {
-    e.preventDefault();
-
-    if (!taskForm.title.trim()) {
-      alert("Indica o título da tarefa.");
+    if (nifClean.length < 8) {
+      setClientFound(false);
+      setClientId(null);
       return;
     }
 
-    const { error } = await supabase.from("tasks").insert({
-      title: taskForm.title,
-      description: taskForm.description,
-      category: normalizeCategory(taskForm.category),
-      priority: normalizePriority(taskForm.priority),
-      status: "aberta",
-      due_date: taskForm.due_date || null,
-      client_id: taskForm.client_id || null,
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    window.location.reload();
-  }
-
-  function editTask(task) {
-    setEditingTaskId(task.id);
-    setShowEditTaskForm(true);
-    setShowTaskForm(false);
-
-    setEditTaskForm({
-      title: task.title || "",
-      description: task.description || "",
-      category: normalizeCategory(task.category),
-      priority: normalizePriority(task.priority),
-      due_date: task.due_date || "",
-    });
-
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
+    const timer = setTimeout(() => {
+      const found = findClientLocal({
+        nif: clientNif,
+        phone: "",
+        name: "",
       });
-    }, 100);
+
+      if (found) {
+        selectClient(found);
+      } else {
+        setClientFound(false);
+        setClientId(null);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [clientNif]);
+
+  function findClientLocal({ nif, phone, name }) {
+    const nifClean = onlyNumbers(nif);
+    const phoneClean = onlyNumbers(phone);
+    const nameClean = cleanText(name);
+
+    return (
+      clients.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
+      clients.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
+      clients.find((client) => nameClean && cleanText(client.name) === nameClean) ||
+      null
+    );
   }
 
-  async function saveTask(e) {
+  async function findClient({ nif, phone, name }) {
+    const local = findClientLocal({ nif, phone, name });
+    if (local) return local;
+
+    const { data, error } = await supabase
+      .from("clients")
+      .select("id, name, nif, phone");
+
+    if (error || !data) return null;
+
+    const nifClean = onlyNumbers(nif);
+    const phoneClean = onlyNumbers(phone);
+    const nameClean = cleanText(name);
+
+    return (
+      data.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
+      data.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
+      data.find((client) => nameClean && cleanText(client.name) === nameClean) ||
+      null
+    );
+  }
+
+  function selectClient(client) {
+    setClientId(client.id);
+    setClientName(client.name || "");
+    setClientNif(client.nif || "");
+    setClientPhone(client.phone || "");
+    setClientFound(true);
+  }
+
+  async function searchClientByNif() {
+    if (!clientNif) return;
+
+    const found = await findClient({
+      nif: clientNif,
+      phone: clientPhone,
+      name: clientName,
+    });
+
+    if (found) {
+      selectClient(found);
+    } else {
+      setClientId(null);
+      setClientFound(false);
+      alert("Cliente não encontrado em carteira. Podes preencher manualmente.");
+    }
+  }
+
+  async function createOpportunity(e) {
     e.preventDefault();
 
-    if (!editingTaskId) {
-      alert("Não foi possível identificar a tarefa.");
+    if (!clientName) {
+      alert("Preenche o nome do cliente.");
       return;
     }
 
-    if (!editTaskForm.title.trim()) {
-      alert("Indica o título da tarefa.");
+    if (!opportunityText) {
+      alert("Preenche a descrição da oportunidade.");
       return;
     }
+
+    if (!renewalDate) {
+      alert("Preenche a data de vencimento.");
+      return;
+    }
+
+    setSaving(true);
+
+    let finalClientId = clientId;
+    let finalClientName = clientName;
+    let finalClientNif = clientNif;
+    let finalClientPhone = clientPhone;
+
+    if (!finalClientId) {
+      const found = await findClient({
+        nif: clientNif,
+        phone: clientPhone,
+        name: clientName,
+      });
+
+      if (found) {
+        finalClientId = found.id;
+        finalClientName = found.name || clientName;
+        finalClientNif = found.nif || clientNif;
+        finalClientPhone = found.phone || clientPhone;
+      }
+    }
+
+    const procedureText = `${todayText()} - Oportunidade criada: ${opportunityText}`;
+
+    const { error } = await supabase.from("opportunities").insert({
+      client_id: finalClientId || null,
+      client_nif: finalClientNif || null,
+      client_phone: finalClientPhone || null,
+      name: finalClientName,
+      insurance_type: opportunityText,
+      renewal_date: renewalDate,
+      contact_date: contactDate || null,
+      status: "lead",
+      procedure_notes: procedureText,
+    });
+
+    if (error) {
+      setSaving(false);
+      alert(error.message);
+      return;
+    }
+
+    await supabase.from("tasks").insert({
+      client_id: finalClientId || null,
+      title: `Contactar ${finalClientName} para oportunidade`,
+      category: "COMERCIAL",
+      priority: "NORMAL",
+      status: "aberta",
+      due_date: contactDate || null,
+      origin: "automática - oportunidade",
+      description: `Tarefa criada a partir de oportunidade comercial. Contactar cliente 1 mês antes do vencimento da apólice na congénere. Oportunidade: ${opportunityText}`,
+    });
+
+    setSaving(false);
+    window.location.reload();
+  }
+
+  async function editOpportunity(item) {
+    const name = prompt("Nome do cliente", item.name || item.clients?.name || "");
+    if (name === null) return;
+
+    const client_nif = prompt("NIF", item.client_nif || item.clients?.nif || "");
+    if (client_nif === null) return;
+
+    const client_phone = prompt(
+      "Contacto telefónico",
+      item.client_phone || item.clients?.phone || ""
+    );
+    if (client_phone === null) return;
+
+    const insurance_type = prompt(
+      "Descrição da oportunidade",
+      item.insurance_type || ""
+    );
+    if (insurance_type === null) return;
+
+    const renewal_date_raw = prompt(
+      "Data de vencimento (AAAA-MM-DD ou DD-MM)",
+      item.renewal_date || ""
+    );
+    if (renewal_date_raw === null) return;
+
+    const renewal_date =
+      parseSmartRenewalDate(renewal_date_raw) || renewal_date_raw;
+
+    const contact_date_raw = prompt(
+      "Data para contactar (AAAA-MM-DD ou DD-MM)",
+      item.contact_date || addMonths(renewal_date, -1) || ""
+    );
+    if (contact_date_raw === null) return;
+
+    const contact_date =
+      parseSmartRenewalDate(contact_date_raw) || contact_date_raw;
+
+    const status = prompt(
+      "Estado comercial (lead, contactado, proposta enviada, em negociação, ganho, perdido)",
+      normalizeOpportunityStatus(item.status) || "lead"
+    );
+    if (status === null) return;
+
+    const foundClient = await findClient({
+      nif: client_nif,
+      phone: client_phone,
+      name,
+    });
 
     const { error } = await supabase
-      .from("tasks")
+      .from("opportunities")
       .update({
-        title: editTaskForm.title,
-        description: editTaskForm.description,
-        category: normalizeCategory(editTaskForm.category),
-        priority: normalizePriority(editTaskForm.priority),
-        due_date: editTaskForm.due_date || null,
+        client_id: foundClient?.id || item.client_id || null,
+        client_nif: client_nif || foundClient?.nif || null,
+        client_phone: client_phone || foundClient?.phone || null,
+        name: name || foundClient?.name || "",
+        insurance_type,
+        renewal_date: renewal_date || null,
+        contact_date: contact_date || null,
+        status: normalizeOpportunityStatus(status),
       })
-      .eq("id", editingTaskId);
+      .eq("id", item.id);
 
     if (error) {
       alert(error.message);
@@ -422,13 +464,19 @@ export default function TarefasCompacto({ tasks }) {
     window.location.reload();
   }
 
-  async function completeTask(taskId) {
+  async function addProcedure(item) {
+    const note = prompt("Novo procedimento / cronologia");
+    if (!note) return;
+
+    const previous = item.procedure_notes || "";
+    const next = previous
+      ? `${previous}\n\n${todayText()} - ${note}`
+      : `${todayText()} - ${note}`;
+
     const { error } = await supabase
-      .from("tasks")
-      .update({
-        status: "concluida",
-      })
-      .eq("id", taskId);
+      .from("opportunities")
+      .update({ procedure_notes: next })
+      .eq("id", item.id);
 
     if (error) {
       alert(error.message);
@@ -437,957 +485,670 @@ export default function TarefasCompacto({ tasks }) {
 
     window.location.reload();
   }
+
+  async function updateStatus(item, status) {
+    const previous = item.procedure_notes || "";
+
+    let nextStatus = status;
+    let nextRenewalDate = item.renewal_date;
+    let nextContactDate = item.contact_date;
+
+    let line = `${todayText()} - Estado alterado para ${status}`;
+
+    if (status === "perdido") {
+      const renewal = new Date(item.renewal_date);
+      renewal.setFullYear(renewal.getFullYear() + 1);
+
+      const contact = new Date(item.contact_date || item.renewal_date);
+      contact.setFullYear(contact.getFullYear() + 1);
+
+      nextRenewalDate = renewal.toISOString().split("T")[0];
+      nextContactDate = contact.toISOString().split("T")[0];
+      nextStatus = "lead";
+
+      line =
+        `${todayText()} - Oportunidade não concretizada. ` +
+        `Novo contacto agendado para ${formatDate(nextContactDate)}`;
+    }
+
+    const next = previous ? `${previous}\n\n${line}` : line;
+
+    const { error } = await supabase
+      .from("opportunities")
+      .update({
+        status: nextStatus,
+        renewal_date: nextRenewalDate,
+        contact_date: nextContactDate,
+        procedure_notes: next,
+      })
+      .eq("id", item.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  const searchClean = cleanText(search);
+  const searchNumbers = onlyNumbers(search);
+
+  const filtered = opportunities.filter((item) => {
+    const text = cleanText(`
+      ${item.name || ""}
+      ${item.client_nif || ""}
+      ${item.client_phone || ""}
+      ${item.insurance_type || ""}
+      ${item.status || ""}
+      ${item.renewal_date || ""}
+      ${item.contact_date || ""}
+      ${item.procedure_notes || ""}
+      ${item.clients?.name || ""}
+      ${item.clients?.nif || ""}
+      ${item.clients?.phone || ""}
+    `);
+
+    const numbers = `
+      ${onlyNumbers(item.client_nif)}
+      ${onlyNumbers(item.client_phone)}
+      ${onlyNumbers(item.clients?.nif)}
+      ${onlyNumbers(item.clients?.phone)}
+    `;
+
+    return (
+      !searchClean ||
+      text.includes(searchClean) ||
+      (searchNumbers && numbers.includes(searchNumbers))
+    );
+  });
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const leads = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "lead"
+  );
+
+  const contacted = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "contactado"
+  );
+
+  const proposals = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "proposta enviada"
+  );
+
+  const negotiation = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "em negociação"
+  );
+
+  const won = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "ganho"
+  );
+
+  const lost = filtered.filter(
+    (item) => normalizeOpportunityStatus(item.status) === "perdido"
+  );
+
+  const overdueFollowups = filtered.filter(
+    (item) =>
+      normalizeOpportunityStatus(item.status) !== "ganho" &&
+      normalizeOpportunityStatus(item.status) !== "perdido" &&
+      item.contact_date &&
+      item.contact_date <= today
+  );
 
   return (
     <div style={page}>
-      <Sidebar active="tarefas-compacto" />
+      <Sidebar active="oportunidades" />
 
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>✅ Tarefas</h1>
-            <p style={subtitle}>Gestão por prioridade, categoria e data limite.</p>
+            <h1 style={title}>Oportunidades Comerciais</h1>
+            <p style={subtitle}>
+              Gestão do funil comercial. As ações e contactos ficam separados nas Tarefas.
+            </p>
           </div>
-
-          <button style={button} onClick={() => setShowTaskForm(true)}>
-            + Nova tarefa
-          </button>
         </header>
 
-        {(showTaskForm || showEditTaskForm) && (
-          <section style={showEditTaskForm ? editFormCard : formCard}>
-            <h2 style={formTitle}>{showEditTaskForm ? "Editar Tarefa" : "Nova Tarefa"}</h2>
+        <section style={searchCard}>
+          <input
+            style={searchInput}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filtrar oportunidades por cliente, NIF, telefone, estado, oportunidade ou procedimento..."
+          />
+        </section>
 
-            <form onSubmit={showEditTaskForm ? saveTask : createTask} style={formGrid}>
-              {!showEditTaskForm && taskForm.client_id && (
-                <div style={clientOriginBox}>
-                  <strong>👤 Cliente associado automaticamente</strong>
-                  <div>Nome: {taskForm.client_name}</div>
-                  <div>NIF: {taskForm.client_nif || "-"}</div>
-                  <div>Telefone: {taskForm.client_phone || "-"}</div>
-                  <div>Origem: Ficha de Cliente</div>
-                </div>
-              )}
+        <section style={formCard}>
+          <h2>Nova oportunidade</h2>
+
+          <form style={form} onSubmit={createOpportunity}>
+            <label style={label}>NIF do cliente</label>
+
+            <div style={nifRow}>
               <input
                 style={input}
-                placeholder="Título da tarefa"
-                value={showEditTaskForm ? editTaskForm.title : taskForm.title}
-                onChange={(e) =>
-                  showEditTaskForm
-                    ? setEditTaskForm({ ...editTaskForm, title: e.target.value })
-                    : setTaskForm({ ...taskForm, title: e.target.value })
-                }
-                required
+                value={clientNif}
+                onChange={(e) => setClientNif(e.target.value)}
+                placeholder="NIF"
               />
 
-              <select
-                style={input}
-                value={showEditTaskForm ? editTaskForm.category : taskForm.category}
-                onChange={(e) =>
-                  showEditTaskForm
-                    ? setEditTaskForm({ ...editTaskForm, category: e.target.value })
-                    : setTaskForm({ ...taskForm, category: e.target.value })
-                }
-              >
-                <option value="ADMINISTRATIVA">Administrativa</option>
-                <option value="COMERCIAL">Comercial</option>
-              </select>
+              <button type="button" style={darkButton} onClick={searchClientByNif}>
+                Procurar
+              </button>
+            </div>
 
-              <select
-                style={input}
-                value={showEditTaskForm ? editTaskForm.priority : taskForm.priority}
-                onChange={(e) =>
-                  showEditTaskForm
-                    ? setEditTaskForm({ ...editTaskForm, priority: e.target.value })
-                    : setTaskForm({ ...taskForm, priority: e.target.value })
-                }
-              >
-                <option value="NORMAL">Normal</option>
-                <option value="URGENTE">Urgente</option>
-                <option value="MUITO URGENTE">Muito urgente</option>
-              </select>
+            {clientFound && (
+              <p style={successText}>Cliente encontrado e dados preenchidos automaticamente.</p>
+            )}
 
-              <input
-                style={input}
-                type="date"
-                value={showEditTaskForm ? editTaskForm.due_date : taskForm.due_date}
-                onChange={(e) =>
-                  showEditTaskForm
-                    ? setEditTaskForm({ ...editTaskForm, due_date: e.target.value })
-                    : setTaskForm({ ...taskForm, due_date: e.target.value })
-                }
-              />
-
-              <textarea
-                style={textarea}
-                placeholder="Descrição"
-                value={showEditTaskForm ? editTaskForm.description : taskForm.description}
-                onChange={(e) =>
-                  showEditTaskForm
-                    ? setEditTaskForm({ ...editTaskForm, description: e.target.value })
-                    : setTaskForm({ ...taskForm, description: e.target.value })
-                }
-              />
-
-              <div style={formButtons}>
-                <button type="submit" style={button}>
-                  {showEditTaskForm ? "Guardar alterações" : "Guardar tarefa"}
-                </button>
-
-                <button
-                  type="button"
-                  style={cancelButton}
-                  onClick={() => {
-                    setShowTaskForm(false);
-                    setShowEditTaskForm(false);
-                    setEditingTaskId(null);
-                  }}
-                >
-                  Cancelar
-                </button>
+            {clientFound && clientId && (
+              <div style={linkedClientBox}>
+                Cliente importado da ficha: <strong>{clientName}</strong>
               </div>
-            </form>
+            )}
+
+            <label style={label}>Nome do cliente</label>
+            <input
+              style={input}
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="Nome do cliente"
+            />
+
+            <label style={label}>Contacto telefónico</label>
+            <input
+              style={input}
+              value={clientPhone}
+              onChange={(e) => setClientPhone(e.target.value)}
+              placeholder="Telefone"
+            />
+
+            <label style={label}>Oportunidade / seguro a captar</label>
+            <textarea
+              style={textarea}
+              value={opportunityText}
+              onChange={(e) => setOpportunityText(e.target.value)}
+              placeholder="Ex: Seguro automóvel na companhia X, cliente demonstrou interesse em transferir..."
+            />
+
+            <label style={label}>Data de vencimento da apólice na congénere</label>
+            <input
+              type="text"
+              style={input}
+              value={renewalDateInput}
+              onChange={(e) => handleRenewalDateInput(e.target.value)}
+              onBlur={(e) => {
+                const parsed = parseSmartRenewalDate(e.target.value);
+
+                if (parsed) {
+                  setRenewalDateInput(formatSmartDateHelp(parsed));
+                  setRenewalDate(parsed);
+                }
+              }}
+              placeholder="Ex: 20-04, 20/08 ou 2026-08-20"
+            />
+
+            {renewalDate && (
+              <div style={dateHelpBox}>
+                <strong>✓ Vencimento interpretado:</strong>{" "}
+                {formatSmartDateHelp(renewalDate)}
+                <br />
+                <strong>✓ Contacto automático:</strong>{" "}
+                {formatSmartDateHelp(contactDate)}
+              </div>
+            )}
+
+            {renewalDateInput && !renewalDate && (
+              <div style={dateWarningBox}>
+                ⚠ Não consegui interpretar a data. Usa formato 20-04, 20/04 ou 2026-08-20.
+              </div>
+            )}
+
+            <label style={label}>Data automática para contacto</label>
+            <input style={inputDisabled} value={contactDate || ""} readOnly />
+
+            <button style={button} disabled={saving}>
+              {saving ? "A guardar..." : "Guardar oportunidade"}
+            </button>
+          </form>
+        </section>
+
+        <section style={statsGrid}>
+          <StatCard title="Leads" value={leads.length} color="#111827" />
+          <StatCard title="Contactados" value={contacted.length} color="#2563eb" />
+          <StatCard title="Propostas" value={proposals.length} color="#7c3aed" />
+          <StatCard title="Negociação" value={negotiation.length} color="#f59e0b" />
+          <StatCard title="Ganhas" value={won.length} color="#16a34a" />
+          <StatCard title="Perdidas" value={lost.length} color="#6b7280" />
+        </section>
+
+        {overdueFollowups.length > 0 && (
+          <section style={warningSection}>
+            <strong>Atenção:</strong> Existem {overdueFollowups.length} oportunidades com data de contacto vencida.
+            A ação deve ser acompanhada na página de Tarefas.
           </section>
         )}
 
-        <section style={statsGrid}>
-          <StatCard title="Abertas" value={openTasks.length} color="#2563eb" icon="📋" />
-          <StatCard title="Atrasadas" value={overdueTasks.length} color="#dc2626" icon="⏰" />
-          <StatCard title="Urgentes" value={urgentTasks.length + veryUrgentTasks.length} color="#f59e0b" icon="❗" />
-          <StatCard title="Hoje" value={todayTasks.length} color="#16a34a" icon="📅" />
-          <StatCard title="Concluídas" value={completedTasks.length} color="#7c3aed" icon="✅" />
-        </section>
+        <Section title="Lead">
+          <OpportunityGrid items={leads} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
 
-        <section style={showDetail ? workArea : workAreaFull}>
-          <div style={leftColumn}>
-            <section style={urgentSection}>
-              <div style={sectionTop}>
-                <h2 style={urgentTitle}>🔥 Fazer Agora ({doNowTasks.length})</h2>
-                {doNowTasks.length > 3 && (
-                  <button
-                    type="button"
-                    style={ghostButton}
-                    onClick={() => setShowAllDoNow(!showAllDoNow)}
-                  >
-                    {showAllDoNow ? "Ver menos ↑" : "Ver todas →"}
-                  </button>
-                )}
-              </div>
+        <Section title="Contactado">
+          <OpportunityGrid items={contacted} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
 
-              {doNowTasks.length === 0 ? (
-                <p style={muted}>Sem tarefas urgentes.</p>
-              ) : (
-                <div style={urgentGrid}>
-                  {(showAllDoNow ? doNowTasks : doNowTasks.slice(0, 3)).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      selected={selectedId === task.id}
-                      compact
-                      onOpen={() => {
-                        setSelectedId(task.id);
-                        setShowDetail(true);
-                      }}
-                      editTask={editTask}
-                      completeTask={completeTask}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
+        <Section title="Proposta Enviada">
+          <OpportunityGrid items={proposals} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
 
-            <section style={nextSection}>
-              <div style={sectionTop}>
-                <h2 style={sectionTitle}>📅 Próximas Tarefas ({nextTasks.length})</h2>
-                <button type="button" style={ghostButton} onClick={() => setSelectedId(nextTasks[0]?.id || null)}>
-                  Ver detalhe →
-                </button>
-              </div>
+        <Section title="Em Negociação">
+          <OpportunityGrid items={negotiation} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
 
-              {nextTasks.length === 0 ? (
-                <p style={muted}>Sem próximas tarefas.</p>
-              ) : (
-                <div style={tableWrap}>
-                  <table style={table}>
-                    <thead>
-                      <tr>
-                        <th style={th}>Data limite</th>
-                        <th style={th}>Tarefa</th>
-                        <th style={th}>Cliente</th>
-                        <th style={th}>Categoria</th>
-                        <th style={th}>Prioridade</th>
-                        <th style={th}>Estado</th>
-                        <th style={th}>Abrir</th>
-                      </tr>
-                    </thead>
+        <Section title="Ganhas">
+          <OpportunityGrid items={won} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
 
-                    <tbody>
-                      {nextTasks.slice(0, 8).map((task) => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          selected={selectedId === task.id}
-                          onOpen={() => {
-                        setSelectedId(task.id);
-                        setShowDetail(true);
-                      }}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-
-            <section style={allSection}>
-              <div style={sectionTop}>
-                <h2 style={sectionTitle}>{filteredTitle}: {filteredTasks.length}</h2>
-              </div>
-
-              <div style={filters}>
-                <input
-                  style={searchInput}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Pesquisar tarefa, cliente, NIF, telefone, descrição..."
-                />
-
-                <select style={filterSelect} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                  <option value="TODAS">Todas as categorias</option>
-                  <option value="ADMINISTRATIVA">Administrativas</option>
-                  <option value="COMERCIAL">Comerciais</option>
-                  <option value="SEM CATEGORIA">Sem categoria</option>
-                </select>
-
-                <select style={filterSelect} value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
-                  <option value="TODAS">Todas as prioridades</option>
-                  <option value="NORMAL">Normais</option>
-                  <option value="URGENTE">Urgentes</option>
-                  <option value="MUITO URGENTE">Muito urgentes</option>
-                </select>
-
-                <button type="button" style={clearButton} onClick={() => {
-                  setSearch("");
-                  setCategoryFilter("TODAS");
-                  setPriorityFilter("TODAS");
-                }}>
-                  Limpar
-                </button>
-              </div>
-
-              {filteredTasks.length === 0 ? (
-                <p style={muted}>Sem tarefas nesta seleção.</p>
-              ) : (
-                <div style={taskListGrid}>
-                  {filteredTasks.slice(0, 10).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      selected={selectedId === task.id}
-                      onOpen={() => {
-                        setSelectedId(task.id);
-                        setShowDetail(true);
-                      }}
-                      editTask={editTask}
-                      completeTask={completeTask}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          {showDetail && (
-            <div style={rightColumn}>
-              {selectedTask ? (
-                <TaskDetail
-                  task={selectedTask}
-                  editTask={editTask}
-                  completeTask={completeTask}
-                  onClose={() => {
-                    setSelectedId(null);
-                    setShowDetail(false);
-                  }}
-                />
-              ) : (
-                <div style={emptyDetail}>
-                  <h2>Detalhe da Tarefa</h2>
-                  <p>Seleciona uma tarefa para ver o detalhe completo.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+        <Section title="Perdidas">
+          <OpportunityGrid items={lost} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
+        </Section>
       </main>
     </div>
   );
 }
 
-function StatCard({ title, value, color, icon }) {
-  return (
-    <div style={statCard}>
-      <div style={{ ...statIcon, color, background: `${color}18` }}>{icon}</div>
-      <div>
-        <p style={cardLabel}>{title}</p>
-        <h2 style={{ ...cardValue, color }}>{value}</h2>
-      </div>
-    </div>
-  );
-}
-
-function TaskRow({ task, selected, onOpen }) {
-  const timing = taskTiming(task);
-  const priority = normalizePriority(task.priority);
-  const category = normalizeCategory(task.category);
-  const clientName = getClientName(task);
+function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus }) {
+  if (items.length === 0) {
+    return <p style={muted}>Sem registos.</p>;
+  }
 
   return (
-    <tr style={selected ? selectedRow : tr}>
-      <td style={td}>
-        <strong>{formatDate(task.due_date)}</strong>
-      </td>
+    <div style={grid}>
+      {items.map((item) => {
+        const phone = item.client_phone || item.clients?.phone || "";
+        const whatsappLink = buildWhatsappLink(phone);
 
-      <td style={td}>{task.title || "Sem título"}</td>
+        const today = new Date().toISOString().split("T")[0];
+        const isToday = item.contact_date === today;
 
-      <td style={td}>
-        {clientName ? (
-          <div>
-            <strong>{clientName}</strong>
-            <div style={smallMuted}>Cliente da carteira</div>
-          </div>
-        ) : (
-          "Tarefa geral"
-        )}
-      </td>
+        return (
+          <div
+            key={item.id}
+            style={{
+              ...opportunityCard,
+              ...(isToday ? opportunityTodayCard : {}),
+            }}
+          >
+            <div style={topLine}>
+              <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
+              <span style={{ ...statusBadge, ...statusBadgeStyle(item.status) }}>
+                {statusLabel(item.status)}
+              </span>
+            </div>
 
-      <td style={td}>
-        <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
-      </td>
+            <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
+            <p><strong>Telefone:</strong> {phone || "-"}</p>
+            <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
+            <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
+            <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
 
-      <td style={td}>
-        <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
-      </td>
+            <div style={quickActions}>
+              {item.client_id && (
+                <Link href={`/clientes/${item.client_id}`} style={clientLink}>
+                  Abrir ficha do cliente
+                </Link>
+              )}
 
-      <td style={td}>
-        <span style={{ ...miniBadge, color: timing.color, background: timing.background }}>
-          {timing.label}
-        </span>
-      </td>
+              {whatsappLink && (
+                <a
+                  href={whatsappLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={whatsappButton}
+                >
+                  WhatsApp
+                </a>
+              )}
 
-      <td style={td}>
-        <button style={openIconButton} onClick={onOpen}>›</button>
-      </td>
-    </tr>
-  );
-}
+              {item.client_id && (
+                <Link
+                  href={`/tarefas/compacto?cliente=${item.client_id}&origem=oportunidade`}
+                  style={taskLink}
+                >
+                  Criar tarefa
+                </Link>
+              )}
+            </div>
 
-function TaskCard({ task, selected, compact = false, onOpen, editTask, completeTask }) {
-  const priority = normalizePriority(task.priority);
-  const category = normalizeCategory(task.category);
-  const timing = taskTiming(task);
-  const clientName = getClientName(task);
-  const clientNif = getClientNif(task);
-  const clientPhone = getClientPhone(task);
-  const whatsappLink = buildWhatsappLink(clientPhone);
+            <div style={procedureBox}>
+              <strong>Procedimentos / cronologia</strong>
+              <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
+            </div>
 
-  return (
-    <div style={{ ...taskCard, ...(selected ? selectedCard : {}) }}>
-      <div style={taskTop}>
-        <button type="button" style={taskTitleButton} onClick={onOpen}>
-          {task.title || "Sem título"}
-        </button>
+            <div style={buttonGroup}>
+              <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
+                Editar
+              </button>
 
-        <div style={badgeRow}>
-          <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
-          <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
-        </div>
-      </div>
+              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
+                + Procedimento
+              </button>
 
-      <div style={taskMetaGrid}>
-        <InfoLine icon="📅" label="Data limite" value={formatDate(task.due_date)} />
-        <InfoLine icon="📌" label="Estado" value={task.status || "aberta"} />
-      </div>
+              <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
+                Contactado
+              </button>
 
-      {clientName ? (
-        <div style={clientBox}>
-          <div style={clientTop}>
-            <span style={avatar}>{getInitials(clientName)}</span>
-            <div>
-              <strong>Cliente da carteira</strong>
-              <div>{clientName}</div>
+              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => updateStatus(item, "proposta enviada")}>
+                Proposta enviada
+              </button>
+
+              <button style={{ ...smallButton, background: "#f59e0b" }} onClick={() => updateStatus(item, "em negociação")}>
+                Em negociação
+              </button>
+
+              <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
+                Ganho
+              </button>
+
+              <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
+                Perdido
+              </button>
             </div>
           </div>
-
-          <div style={clientData}>
-            <span>NIF: {clientNif || "-"}</span>
-            <span>Telefone: {clientPhone || "-"}</span>
-          </div>
-        </div>
-      ) : (
-        <div style={generalTaskBox}>Tarefa geral sem cliente associado</div>
-      )}
-
-      {!compact && task.description && (
-        <p style={description}>{task.description}</p>
-      )}
-
-      {task.policies && (
-        <div style={policyBox}>
-          Apólice: {task.policies.policy_number || "-"} · {task.policies.branch || "-"} · {task.policies.license_plate || "-"}
-        </div>
-      )}
-
-      <div style={buttonGroup}>
-        {task.client_id && (
-          <Link href={`/clientes/${task.client_id}`} style={smallLinkButton}>
-            Abrir cliente
-          </Link>
-        )}
-
-        {whatsappLink && (
-          <a
-            href={whatsappLink}
-            target="_blank"
-            rel="noreferrer"
-            style={smallWhatsappButton}
-          >
-            WhatsApp
-          </a>
-        )}
-
-        <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => editTask(task)}>
-          Editar
-        </button>
-
-        <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => completeTask(task.id)}>
-          Concluir
-        </button>
-      </div>
+        );
+      })}
     </div>
   );
 }
 
-function TaskDetail({ task, editTask, completeTask, onClose }) {
-  const priority = normalizePriority(task.priority);
-  const category = normalizeCategory(task.category);
-  const timing = taskTiming(task);
-  const clientName = getClientName(task);
-  const clientNif = getClientNif(task);
-  const clientPhone = getClientPhone(task);
-  const whatsappLink = buildWhatsappLink(clientPhone);
-
+function Section({ title, children }) {
   return (
-    <aside style={detailPanel}>
-      <div style={detailHeader}>
-        <h2 style={detailTitle}>Detalhe da Tarefa</h2>
-
-        <button type="button" style={closeDetailButton} onClick={onClose}>
-          ✕
-        </button>
-      </div>
-
-      <h3 style={detailTaskTitle}>{task.title || "Sem título"}</h3>
-
-      <div style={detailBadges}>
-        <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
-        <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
-        <span style={{ ...miniBadge, color: timing.color, background: timing.background }}>{timing.label}</span>
-      </div>
-
-      <div style={detailGrid}>
-        <InfoLine icon="📅" label="Data limite" value={formatDate(task.due_date)} />
-        <InfoLine icon="📌" label="Estado" value={task.status || "aberta"} />
-        <InfoLine icon="🕒" label="Criada em" value={formatDateTime(task.created_at)} />
-      </div>
-
-      {clientName ? (
-        <div style={detailClientBox}>
-          <strong>👤 Cliente da carteira</strong>
-          <div style={detailClientName}>{clientName}</div>
-          <div>NIF: {clientNif || "-"}</div>
-          <div>Telefone: {clientPhone || "-"}</div>
-        </div>
-      ) : (
-        <div style={generalTaskBox}>Tarefa geral sem cliente associado</div>
-      )}
-
-      {task.policies && (
-        <div style={detailBlock}>
-          <strong>Apólice</strong>
-          <p>
-            {task.policies.policy_number || "-"} · {task.policies.branch || "-"} · {task.policies.license_plate || "-"}
-          </p>
-        </div>
-      )}
-
-      <div style={detailBlock}>
-        <strong>Descrição</strong>
-        <p>{task.description || "-"}</p>
-      </div>
-
-      <div style={detailButtons}>
-        {task.client_id && (
-          <Link href={`/clientes/${task.client_id}`} style={fullDarkButton}>
-            Abrir cliente
-          </Link>
-        )}
-
-        {whatsappLink && (
-          <a
-            href={whatsappLink}
-            target="_blank"
-            rel="noreferrer"
-            style={fullWhatsappButton}
-          >
-            WhatsApp
-          </a>
-        )}
-
-        <button style={fullBlueButton} onClick={() => editTask(task)}>
-          Editar
-        </button>
-
-        <button style={fullGreenButton} onClick={() => completeTask(task.id)}>
-          Concluir
-        </button>
-      </div>
-    </aside>
+    <section style={section}>
+      <h2 style={sectionTitle}>{title}</h2>
+      {children}
+    </section>
   );
 }
 
-function InfoLine({ icon, label, value }) {
+function StatCard({ title, value, color }) {
   return (
-    <div style={infoLine}>
-      <span>{icon}</span>
-      <div>
-        <small>{label}</small>
-        <strong>{value}</strong>
-      </div>
+    <div style={statCard}>
+      <p style={cardLabel}>{title}</p>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
-}
-
-function priorityStyle(priority) {
-  if (priority === "MUITO URGENTE") {
-    return {
-      background: "#fee2e2",
-      color: "#991b1b",
-    };
-  }
-
-  if (priority === "URGENTE") {
-    return {
-      background: "#fef3c7",
-      color: "#92400e",
-    };
-  }
-
-  return {
-    background: "#dbeafe",
-    color: "#1d4ed8",
-  };
-}
-
-function categoryStyle(category) {
-  if (category === "COMERCIAL") {
-    return {
-      background: "#ede9fe",
-      color: "#5b21b6",
-    };
-  }
-
-  if (category === "ADMINISTRATIVA") {
-    return {
-      background: "#ccfbf1",
-      color: "#0f766e",
-    };
-  }
-
-  return {
-    background: "#e5e7eb",
-    color: "#374151",
-  };
 }
 
 const page = {
   display: "flex",
   minHeight: "100vh",
-  background: "#f1f5f9",
+  background: "#f3f4f6",
   fontFamily: "Arial, sans-serif",
 };
 
 const main = {
   flex: 1,
-  padding: 24,
+  padding: 40,
 };
 
 const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 18,
-  marginBottom: 18,
+  marginBottom: 30,
 };
 
 const title = {
-  fontSize: 36,
+  fontSize: 42,
   margin: 0,
-  color: "#0f172a",
-  fontWeight: 900,
-  lineHeight: 1.05,
 };
 
 const subtitle = {
-  color: "#475569",
-  marginTop: 8,
-  fontSize: 15,
+  color: "#6b7280",
+  marginTop: 10,
 };
 
-const button = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 18px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
+const searchCard = {
+  background: "white",
+  padding: 18,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const searchInput = {
+  width: "100%",
+  padding: 15,
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
 };
 
 const formCard = {
-  background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
-  padding: 16,
+  background: "white",
+  padding: 24,
   borderRadius: 18,
-  marginBottom: 16,
-  border: "1px solid #bfdbfe",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const editFormCard = {
-  background: "linear-gradient(135deg, #fef3c7, #fffbeb)",
-  padding: 16,
-  borderRadius: 18,
-  marginBottom: 16,
-  border: "1px solid #f59e0b",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const formTitle = {
-  margin: "0 0 12px",
-  fontSize: 20,
-};
-
-const formGrid = {
+const form = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+  maxWidth: 720,
+};
+
+const label = {
+  fontSize: 13,
+  color: "#6b7280",
+  fontWeight: "bold",
+};
+
+const nifRow = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
   gap: 10,
 };
 
 const input = {
-  padding: 11,
+  padding: 13,
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box",
+  border: "1px solid #d1d5db",
+  fontSize: 15,
 };
 
-const clientOriginBox = {
-  gridColumn: "1 / -1",
+const dateHelpBox = {
   background: "#dcfce7",
-  border: "1px solid #86efac",
   color: "#166534",
+  border: "1px solid #86efac",
   padding: 12,
-  borderRadius: 12,
+  borderRadius: 10,
   fontWeight: "bold",
   lineHeight: 1.6,
 };
 
-const textarea = {
-  padding: 11,
+const dateWarningBox = {
+  background: "#fff7ed",
+  color: "#9a3412",
+  border: "1px solid #fdba74",
+  padding: 12,
   borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  minHeight: 82,
-  fontSize: 14,
-  width: "100%",
-  boxSizing: "border-box",
-  gridColumn: "1 / -1",
+  fontWeight: "bold",
+};
+
+const inputDisabled = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#f3f4f6",
+  fontSize: 15,
+};
+
+const textarea = {
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  minHeight: 100,
+  fontSize: 15,
   fontFamily: "Arial, sans-serif",
 };
 
-const formButtons = {
-  display: "flex",
-  gap: 10,
-  gridColumn: "1 / -1",
-};
-
-const cancelButton = {
-  background: "#6b7280",
+const button = {
+  background: "#2563eb",
   color: "white",
   border: "none",
-  padding: "12px 18px",
+  padding: 14,
   borderRadius: 10,
   cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const darkButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "0 16px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const successText = {
+  color: "#166534",
+  fontWeight: "bold",
+};
+
+const linkedClientBox = {
+  background: "#dcfce7",
+  color: "#166534",
+  padding: 12,
+  borderRadius: 10,
   fontWeight: "bold",
 };
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-  gap: 12,
-  marginBottom: 16,
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gap: 18,
+  marginBottom: 24,
 };
 
 const statCard = {
   background: "white",
-  padding: 16,
-  borderRadius: 16,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-};
-
-const statIcon = {
-  width: 48,
-  height: 48,
-  borderRadius: 999,
-  display: "grid",
-  placeItems: "center",
-  fontSize: 22,
+  padding: 24,
+  borderRadius: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const cardLabel = {
-  color: "#334155",
+  color: "#6b7280",
   margin: 0,
-  fontWeight: 800,
-  fontSize: 14,
 };
 
 const cardValue = {
-  margin: "4px 0 0",
-  fontSize: 31,
-  lineHeight: 1,
+  fontSize: 32,
+  marginTop: 12,
 };
 
-const workArea = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 330px",
-  gap: 16,
-  alignItems: "start",
-};
-
-const workAreaFull = {
-  display: "grid",
-  gridTemplateColumns: "1fr",
-  gap: 16,
-  alignItems: "start",
-};
-
-const leftColumn = {
-  display: "grid",
-  gap: 16,
-};
-
-const rightColumn = {
-  position: "sticky",
-  top: 16,
-};
-
-const urgentSection = {
-  background: "linear-gradient(135deg, #fff7ed, #fee2e2)",
-  padding: 16,
-  borderRadius: 18,
-  border: "1px solid #fecaca",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const nextSection = {
+const section = {
   background: "white",
-  padding: 16,
+  padding: 24,
   borderRadius: 18,
-  border: "1px solid #bfdbfe",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const allSection = {
-  background: "white",
-  padding: 16,
-  borderRadius: 18,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const sectionTop = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  marginBottom: 12,
-};
-
-const urgentTitle = {
-  margin: 0,
-  color: "#9a3412",
-  fontSize: 20,
-  fontWeight: 900,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
 const sectionTitle = {
-  margin: 0,
-  color: "#0f172a",
-  fontSize: 20,
-  fontWeight: 900,
+  marginTop: 0,
 };
 
-const ghostButton = {
-  background: "transparent",
-  color: "#2563eb",
-  border: "none",
-  cursor: "pointer",
-  fontWeight: 800,
-};
-
-const urgentGrid = {
+const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+  gap: 18,
 };
 
-const taskListGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-  gap: 12,
+const opportunityCard = {
+  background: "#f9fafb",
+  padding: 20,
+  borderRadius: 16,
 };
 
-const taskCard = {
-  background: "#f8fafc",
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid #e5e7eb",
+const opportunityTodayCard = {
+  background: "#dcfce7",
+  border: "1px solid #86efac",
 };
 
-const selectedCard = {
-  outline: "3px solid #16a34a",
-  background: "#f0fdf4",
-};
-
-const taskTop = {
+const topLine = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 10,
-  marginBottom: 10,
+  gap: 12,
+  alignItems: "center",
 };
 
-const taskTitleButton = {
-  border: "none",
-  background: "transparent",
-  padding: 0,
-  textAlign: "left",
-  cursor: "pointer",
-  fontWeight: 900,
-  fontSize: 17,
-  color: "#0f172a",
-  lineHeight: 1.2,
-};
-
-const badgeRow = {
-  display: "flex",
-  gap: 6,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
-const miniBadge = {
-  padding: "5px 9px",
+const statusBadge = {
+  background: "#e5e7eb",
+  color: "#111827",
+  padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
-  whiteSpace: "nowrap",
 };
 
-const taskMetaGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 8,
-  marginBottom: 10,
-};
-
-const infoLine = {
+const quickActions = {
   display: "flex",
-  alignItems: "center",
-  gap: 8,
-  color: "#475569",
-  fontSize: 13,
-};
-
-const clientBox = {
-  background: "white",
-  border: "1px solid #bbf7d0",
-  padding: 10,
-  borderRadius: 12,
-  marginBottom: 10,
-};
-
-const clientTop = {
-  display: "flex",
-  alignItems: "center",
   gap: 10,
-  color: "#166534",
-  marginBottom: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
 };
 
-const avatar = {
-  width: 34,
-  height: 34,
-  minWidth: 34,
-  borderRadius: 999,
-  background: "#dcfce7",
-  color: "#15803d",
-  display: "grid",
-  placeItems: "center",
-  fontWeight: 900,
+const clientLink = {
+  background: "#0f766e",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  fontWeight: "bold",
 };
 
-const clientData = {
-  display: "grid",
-  gap: 3,
-  color: "#334155",
-  fontSize: 13,
+const whatsappButton = {
+  background: "#16a34a",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  fontWeight: "bold",
 };
 
-const generalTaskBox = {
-  background: "#f1f5f9",
-  color: "#64748b",
-  padding: 10,
+const taskLink = {
+  background: "#7c3aed",
+  color: "white",
+  padding: "10px 14px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  fontWeight: "bold",
+};
+
+const procedureBox = {
+  background: "white",
+  padding: 14,
   borderRadius: 12,
-  marginBottom: 10,
-  fontWeight: 700,
+  marginTop: 16,
 };
 
-const description = {
-  color: "#334155",
-  fontSize: 14,
-  lineHeight: 1.35,
-  margin: "8px 0",
-};
-
-const policyBox = {
-  background: "#eff6ff",
-  color: "#1d4ed8",
-  padding: 9,
-  borderRadius: 10,
-  fontSize: 13,
-  fontWeight: 700,
-  marginBottom: 10,
+const procedureText = {
+  whiteSpace: "pre-wrap",
+  fontFamily: "Arial, sans-serif",
+  margin: "10px 0 0",
 };
 
 const buttonGroup = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginTop: 10,
+  marginTop: 16,
 };
 
 const smallButton = {
@@ -1399,239 +1160,16 @@ const smallButton = {
   fontWeight: "bold",
 };
 
-const smallLinkButton = {
-  background: "#111827",
-  color: "white",
-  padding: "9px 12px",
-  borderRadius: 8,
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const smallWhatsappButton = {
-  background: "#16a34a",
-  color: "white",
-  padding: "9px 12px",
-  borderRadius: 8,
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const tableWrap = {
-  overflowX: "auto",
-};
-
-const table = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: 13,
-};
-
-const th = {
-  textAlign: "left",
-  color: "#475569",
-  padding: "9px 8px",
-  borderBottom: "1px solid #e5e7eb",
-  whiteSpace: "nowrap",
-};
-
-const tr = {
-  background: "white",
-};
-
-const selectedRow = {
-  background: "#f0fdf4",
-};
-
-const td = {
-  padding: "9px 8px",
-  borderBottom: "1px solid #e5e7eb",
-  verticalAlign: "middle",
-};
-
-const smallMuted = {
-  color: "#64748b",
-  fontSize: 12,
-  marginTop: 3,
-};
-
-const openIconButton = {
-  border: "1px solid #e5e7eb",
-  background: "white",
-  borderRadius: 8,
-  width: 30,
-  height: 30,
-  cursor: "pointer",
-  fontWeight: 900,
-};
-
-const filters = {
-  display: "grid",
-  gridTemplateColumns: "minmax(220px, 1fr) 180px 180px auto",
-  gap: 10,
-  marginBottom: 12,
-};
-
-const searchInput = {
-  padding: 11,
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  fontSize: 14,
-};
-
-const filterSelect = {
-  padding: 11,
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  fontSize: 14,
-  background: "white",
-};
-
-const clearButton = {
-  background: "white",
-  color: "#334155",
-  border: "1px solid #cbd5e1",
-  borderRadius: 10,
-  padding: "0 14px",
-  cursor: "pointer",
-  fontWeight: 800,
-};
-
-const detailPanel = {
-  background: "white",
-  borderRadius: 18,
-  padding: 16,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
-};
-
-const emptyDetail = {
-  background: "white",
-  borderRadius: 18,
-  padding: 18,
-  border: "1px solid #e5e7eb",
-  color: "#64748b",
-};
-
-const detailHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  marginBottom: 14,
-};
-
-const detailTitle = {
-  margin: 0,
-  color: "#0f172a",
-  fontSize: 20,
-};
-
-const closeDetailButton = {
-  border: "none",
-  background: "#ef4444",
-  color: "white",
-  width: 34,
-  height: 34,
-  borderRadius: 8,
-  cursor: "pointer",
-  fontWeight: "bold",
-  fontSize: 18,
-  lineHeight: 1,
-};
-
-const detailTaskTitle = {
-  margin: "0 0 10px",
-  fontSize: 20,
-  color: "#0f172a",
-};
-
-const detailBadges = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-  marginBottom: 14,
-};
-
-const detailGrid = {
-  display: "grid",
-  gap: 10,
-  marginBottom: 14,
-};
-
-const detailClientBox = {
-  background: "#f0fdf4",
-  border: "1px solid #bbf7d0",
-  padding: 12,
-  borderRadius: 12,
-  color: "#166534",
-  marginBottom: 12,
-  display: "grid",
-  gap: 4,
-};
-
-const detailClientName = {
-  color: "#0f172a",
-  fontWeight: 900,
-  fontSize: 16,
-};
-
-const detailBlock = {
-  background: "#f8fafc",
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-  padding: 12,
-  marginBottom: 12,
-};
-
-const detailButtons = {
-  display: "grid",
-  gap: 9,
-};
-
-const fullDarkButton = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  textDecoration: "none",
-  fontWeight: "bold",
-  textAlign: "center",
-};
-
-const fullWhatsappButton = {
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  textDecoration: "none",
-  fontWeight: "bold",
-  textAlign: "center",
-};
-
-const fullBlueButton = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const fullGreenButton = {
-  background: "#16a34a",
-  color: "white",
-  border: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
 const muted = {
-  color: "#64748b",
+  color: "#6b7280",
 };
 
+const warningSection = {
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  color: "#9a3412",
+  padding: 16,
+  borderRadius: 14,
+  marginBottom: 24,
+  fontWeight: "bold",
+};
