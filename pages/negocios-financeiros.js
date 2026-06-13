@@ -742,6 +742,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
         Number(contest.prize_3_amount || 0),
       ];
 
+      const minimumAmount = Number(contest.minimum_amount || 0);
       const startDate = contest.start_date || "";
       const endDate = contest.end_date || "";
       const eligibleTypes = Array.isArray(contest.eligible_deal_types) ? contest.eligible_deal_types : [];
@@ -777,6 +778,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
         });
 
       [...map.values()]
+        .filter((item) => minimumAmount <= 0 || item.totalAmount >= minimumAmount)
         .sort((a, b) => {
           if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
           return b.biggestDeal - a.biggestDeal;
@@ -903,21 +905,74 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
   const contestCostAnalysis = useMemo(() => {
     return contests.map((contest) => {
-      const totalCost =
-        Number(contest.prize_1_amount || 0) +
-        Number(contest.prize_2_amount || 0) +
-        Number(contest.prize_3_amount || 0);
+      const prizeAmounts = [
+        Number(contest.prize_1_amount || 0),
+        Number(contest.prize_2_amount || 0),
+        Number(contest.prize_3_amount || 0),
+      ];
+
+      const minimumAmount = Number(contest.minimum_amount || 0);
+      const startDate = contest.start_date || "";
+      const endDate = contest.end_date || "";
+      const eligibleTypes = Array.isArray(contest.eligible_deal_types) ? contest.eligible_deal_types : [];
+      const map = new Map();
+
+      deals
+        .filter((deal) => {
+          const date = getDealDate(deal);
+
+          return (
+            deal.status === "CONTRATADO" &&
+            deal.source_partner_id &&
+            dealMatchesTypes(deal, eligibleTypes) &&
+            (!startDate || date >= startDate) &&
+            (!endDate || date <= endDate)
+          );
+        })
+        .forEach((deal) => {
+          const partnerId = deal.source_partner_id;
+          const partnerName = deal.source_partner?.name || "Sem parceiro";
+          const amount = Number(deal.amount || 0);
+
+          if (!map.has(partnerId)) {
+            map.set(partnerId, {
+              partnerId,
+              partnerName,
+              totalAmount: 0,
+              biggestDeal: 0,
+            });
+          }
+
+          const item = map.get(partnerId);
+          item.totalAmount += amount;
+          item.biggestDeal = Math.max(item.biggestDeal, amount);
+        });
+
+      const winners = [...map.values()]
+        .filter((item) => minimumAmount <= 0 || item.totalAmount >= minimumAmount)
+        .sort((a, b) => {
+          if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
+          return b.biggestDeal - a.biggestDeal;
+        })
+        .slice(0, 3)
+        .map((item, index) => ({
+          ...item,
+          prizeAmount: Number(prizeAmounts[index] || 0),
+        }));
+
+      const totalCost = winners.reduce((sum, item) => sum + Number(item.prizeAmount || 0), 0);
 
       return {
         id: contest.id,
         name: contest.name,
         totalCost,
-        prize_1_amount: Number(contest.prize_1_amount || 0),
-        prize_2_amount: Number(contest.prize_2_amount || 0),
-        prize_3_amount: Number(contest.prize_3_amount || 0),
+        winners,
+        prize_1_amount: winners[0]?.prizeAmount || 0,
+        prize_2_amount: winners[1]?.prizeAmount || 0,
+        prize_3_amount: winners[2]?.prizeAmount || 0,
       };
     });
-  }, [contests]);
+  }, [contests, deals]);
 
   const globalAnalysis = useMemo(() => {
     const totalPartnerPayments = partnerAnalysis.reduce((sum, item) => sum + item.partnerPayments, 0);
@@ -1911,7 +1966,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <Mini title="Comissão real" value={formatEuro(partner.receivedCommission)} />
                         <Mini title="Comissões pagas" value={formatEuro(partner.partnerPayments)} />
                         <Mini title="Custos campanhas" value={formatEuro(partner.campaignCosts)} />
-                        <Mini title="Custos concursos" value={formatEuro(partner.contestCosts)} />
+                        <Mini title="Custos concursos atribuídos" value={formatEuro(partner.contestCosts)} />
                         <Mini title="Resultado líquido" value={formatEuro(partner.netResult)} />
                         <Mini title="Tempo médio" value={formatDays(partner.contractDaysCount ? Math.round(partner.totalContractDays / partner.contractDaysCount) : null)} />
                       </div>
