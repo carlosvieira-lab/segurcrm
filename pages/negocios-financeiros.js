@@ -397,6 +397,20 @@ function dealMatchesTypes(deal, types) {
   return types.includes(deal.deal_type);
 }
 
+function isCruzadosEligibleDeal(deal, startDate, endDate) {
+  const contractDate = String(deal.contract_date || "").slice(0, 10);
+  const excludedTypes = ["Abertura de Conta", "Outros"];
+
+  return (
+    deal.status === "CONTRATADO" &&
+    deal.source_partner_id &&
+    contractDate &&
+    (!startDate || contractDate >= startDate) &&
+    (!endDate || contractDate <= endDate) &&
+    !excludedTypes.includes(deal.deal_type)
+  );
+}
+
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
   const [showDealForm, setShowDealForm] = useState(false);
@@ -523,25 +537,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     const startDate = contestRules.start_date || "2026-01-03";
     const endDate = contestRules.end_date || "2026-12-30";
     const minimumAmount = parseDecimal(contestRules.minimum_amount) || 580000;
-    const eligibleTypes =
-      contestRules.eligible_deal_types && contestRules.eligible_deal_types.length > 0
-        ? contestRules.eligible_deal_types
-        : ["Crédito Habitação", "Crédito Pessoal"];
-
     const map = new Map();
 
     deals
-      .filter((deal) => {
-        const dealDate = String(deal.commission_received_at || deal.created_at || "").slice(0, 10);
-
-        return (
-          deal.status === "CONTRATADO" &&
-          eligibleTypes.includes(deal.deal_type) &&
-          deal.source_partner_id &&
-          dealDate >= startDate &&
-          dealDate <= endDate
-        );
-      })
+      .filter((deal) => isCruzadosEligibleDeal(deal, startDate, endDate))
       .forEach((deal) => {
         const partnerId = deal.source_partner_id;
         const partnerName = deal.source_partner?.name || "Sem parceiro";
@@ -745,21 +744,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       const minimumAmount = Number(contest.minimum_amount || 0);
       const startDate = contest.start_date || "";
       const endDate = contest.end_date || "";
-      const eligibleTypes = Array.isArray(contest.eligible_deal_types) ? contest.eligible_deal_types : [];
       const map = new Map();
 
       deals
-        .filter((deal) => {
-          const date = getDealDate(deal);
-
-          return (
-            deal.status === "CONTRATADO" &&
-            deal.source_partner_id &&
-            dealMatchesTypes(deal, eligibleTypes) &&
-            (!startDate || date >= startDate) &&
-            (!endDate || date <= endDate)
-          );
-        })
+        .filter((deal) => isCruzadosEligibleDeal(deal, startDate, endDate))
         .forEach((deal) => {
           const partnerId = deal.source_partner_id;
           const amount = Number(deal.amount || 0);
@@ -914,21 +902,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       const minimumAmount = Number(contest.minimum_amount || 0);
       const startDate = contest.start_date || "";
       const endDate = contest.end_date || "";
-      const eligibleTypes = Array.isArray(contest.eligible_deal_types) ? contest.eligible_deal_types : [];
       const map = new Map();
 
       deals
-        .filter((deal) => {
-          const date = getDealDate(deal);
-
-          return (
-            deal.status === "CONTRATADO" &&
-            deal.source_partner_id &&
-            dealMatchesTypes(deal, eligibleTypes) &&
-            (!startDate || date >= startDate) &&
-            (!endDate || date <= endDate)
-          );
-        })
+        .filter((deal) => isCruzadosEligibleDeal(deal, startDate, endDate))
         .forEach((deal) => {
           const partnerId = deal.source_partner_id;
           const partnerName = deal.source_partner?.name || "Sem parceiro";
@@ -1751,18 +1728,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 </label>
 
                 <div style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
-                  Tipos elegíveis
-                  <div style={checkboxGrid}>
-                    {dealTypes.map((type) => (
-                      <label key={type} style={checkboxLabel}>
-                        <input
-                          type="checkbox"
-                          checked={(contestForm.eligible_deal_types || []).includes(type)}
-                          onChange={() => toggleContestDealType(type)}
-                        />
-                        {type}
-                      </label>
-                    ))}
+                  Regra dos Cruzados
+                  <div style={ruleBox}>
+                    Conta apenas negócios com estado CONTRATADO, data de contratação dentro do período do concurso,
+                    e tipo diferente de Abertura de Conta e Outros.
                   </div>
                 </div>
 
@@ -1780,7 +1749,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               <strong>Regras principais</strong>
               <span>Período: {formatDate(contestRules.start_date)} a {formatDate(contestRules.end_date)}.</span>
               <span>Apuramento mínimo: contratação de {formatEuro(parseDecimal(contestRules.minimum_amount))}.</span>
-              <span>Tipos elegíveis: {(contestRules.eligible_deal_types || []).join(", ") || "-"}.</span>
+              <span>Tipos que contam: todos os créditos contratados, exceto Abertura de Conta e Outros.</span>
               <span>Desempate: {contestRules.tie_breaker || "-"}.</span>
               <span>{contestRules.report_notes || ""}</span>
             </div>
@@ -2729,3 +2698,4 @@ const compactDealHeader = { display: "flex", justifyContent: "space-between", ga
 const compactDealTitle = { margin: 0, fontSize: 20 };
 const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 };
 const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
+const ruleBox = { background: "#ecfeff", border: "1px solid #67e8f9", borderRadius: 12, padding: 12, color: "#155e75", fontWeight: "bold", lineHeight: 1.5 };
