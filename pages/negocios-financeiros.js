@@ -163,7 +163,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [saving, setSaving] = useState(false);
 
   const bancos = partners.filter((p) => p.partner_type === "Banco");
-  const parceiros = partners.filter((p) => p.partner_type === "Parceiro");
+  const parceiros = partners.filter((p) => p.partner_type !== "Banco");
 
   const filteredDeals = deals.filter((deal) => {
     const text = normalizeText(`
@@ -203,13 +203,14 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
         acc.expected += Number(deal.expected_commission || 0);
         acc.received += Number(deal.received_commission || 0);
         acc.partnerTotal += partnerDue;
+        acc.difference += Number(deal.received_commission || 0) - Number(deal.expected_commission || 0);
 
         if (deal.partner_payment_status === "pago") acc.partnerPaid += partnerDue;
         else acc.partnerPending += partnerDue;
 
         return acc;
       },
-      { amount: 0, expected: 0, received: 0, partnerTotal: 0, partnerPaid: 0, partnerPending: 0 }
+      { amount: 0, expected: 0, received: 0, difference: 0, partnerTotal: 0, partnerPaid: 0, partnerPending: 0 }
     );
   }, [deals]);
 
@@ -259,9 +260,12 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   function updateDealForm(next) {
     const amount = parseDecimal(next.amount);
     const rate = parseDecimal(next.commission_rate);
-    const expected = next.expected_commission ? parseDecimal(next.expected_commission) : calculateExpectedCommission(amount, rate);
+    const expected = calculateExpectedCommission(amount, rate);
 
-    setDealForm({ ...next, expected_commission: expected ? String(expected).replace(".", ",") : "" });
+    setDealForm({
+      ...next,
+      expected_commission: expected ? String(expected.toFixed(2)).replace(".", ",") : "",
+    });
   }
 
   async function createPartner(event) {
@@ -412,7 +416,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   }
 
   async function markCommissionReceived(deal) {
-    const value = prompt("Comissão Real", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
+    const value = prompt("Comissão efetivamente recebida", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
     if (value === null) return;
 
     await updateDeal(deal, {
@@ -444,6 +448,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           <Summary title="Montante financiado" value={formatEuro(totals.amount)} />
           <Summary title="Comissão Teórica" value={formatEuro(totals.expected)} />
           <Summary title="Comissão Real" value={formatEuro(totals.received)} />
+          <Summary title="Diferença" value={formatEuro(totals.difference)} />
           <Summary title="A pagar parceiros" value={formatEuro(totals.partnerPending)} />
           <Summary title="Pago parceiros" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
@@ -605,12 +610,19 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               </label>
 
               <label style={fieldLabel}>Comissão Teórica
-                <input style={input} inputMode="decimal" value={dealForm.expected_commission} onChange={(event) => setDealForm({ ...dealForm, expected_commission: event.target.value })} />
+                <input style={readOnlyInput} inputMode="decimal" value={dealForm.expected_commission} readOnly />
               </label>
 
-              <label style={fieldLabel}>Comissão efetivamente recebida
+              <label style={fieldLabel}>Comissão Real
                 <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} />
               </label>
+
+              <div style={calculationBox}>
+                <strong>Diferença</strong>
+                <span>
+                  {formatEuro(parseDecimal(dealForm.received_commission) - parseDecimal(dealForm.expected_commission))}
+                </span>
+              </div>
 
               <label style={fieldLabel}>Data recebimento comissão
                 <input type="date" style={input} value={dealForm.commission_received_at} onChange={(event) => setDealForm({ ...dealForm, commission_received_at: event.target.value })} />
@@ -687,6 +699,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
             <div style={dealsGrid}>
               {filteredDeals.map((deal) => {
                 const partnerDue = calculatePartnerPayment(deal.received_commission, deal.partner_payment_type, deal.partner_payment_rate, deal.partner_payment_value);
+                const difference = Number(deal.received_commission || 0) - Number(deal.expected_commission || 0);
 
                 return (
                   <article key={deal.id} style={dealCard}>
@@ -700,8 +713,9 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
                     <div style={miniGrid}>
                       <Mini title="Montante" value={formatEuro(deal.amount)} />
-                      <Mini title="Comissão estimada" value={formatEuro(deal.expected_commission)} />
-                      <Mini title="Comissão efetivamente recebida" value={formatEuro(deal.received_commission)} />
+                      <Mini title="Comissão Teórica" value={formatEuro(deal.expected_commission)} />
+                      <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
+                      <Mini title="Diferença" value={formatEuro(difference)} />
                       <Mini title="A pagar parceiro" value={formatEuro(partnerDue)} />
                     </div>
 
@@ -710,7 +724,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                       <Info label="Telefone" value={deal.client_phone || "-"} />
                       <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
                       <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
-                      <Info label="% comissão" value={`${Number(deal.commission_rate || 0)}%`} />
+                      <Info label="% Comissão Banco" value={`${Number(deal.commission_rate || 0)}%`} />
                       <Info label="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
                       <Info label="Estado pagamento parceiro" value={deal.partner_payment_status} />
                       <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
@@ -759,15 +773,17 @@ const subtitle = { color: "#6b7280", marginTop: 8, maxWidth: 780 };
 const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginBottom: 24 };
 const summaryBox = { background: "#f0fdf4", padding: 18, borderRadius: 16, display: "grid", gap: 8, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const summaryLabel = { color: "#6b7280", fontSize: 13, fontWeight: "bold" };
-const summaryValue = { color: "#2563eb", fontSize: 24 };
+const summaryValue = { color: "#047857", fontSize: 24 };
 const formCard = { background: "#f0fdf4", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const sectionTitle = { marginTop: 0 };
 const formGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 };
 const fieldLabel = { display: "flex", flexDirection: "column", gap: 6, color: "#374151", fontWeight: "bold", fontSize: 13 };
 const input = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "#f0fdf4" };
+const readOnlyInput = { ...input, background: "#dcfce7", fontWeight: "bold" };
+const calculationBox = { background: "#dcfce7", border: "1px solid #86efac", borderRadius: 10, padding: 12, display: "grid", gap: 6, color: "#166534", fontWeight: "bold" };
 const textarea = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "#f0fdf4", minHeight: 90, fontFamily: "Arial, sans-serif" };
 const button = { background: "#111827", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
-const secondaryButton = { background: "#2563eb", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
+const secondaryButton = { background: "#059669", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const paidButton = { background: "#16a34a", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const grayButton = { background: "#6b7280", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const panel = { background: "#f0fdf4", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
@@ -780,7 +796,7 @@ const dealsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minm
 const dealCard = { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 16, padding: 18 };
 const dealTop = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 };
 const dealTitle = { margin: 0, fontSize: 22 };
-const statusBadge = { background: "#dbeafe", color: "#1d4ed8", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
+const statusBadge = { background: "#bbf7d0", color: "#166534", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
 const miniGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 };
 const miniBox = { background: "#f0fdf4", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 6 };
 const infoGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 };
