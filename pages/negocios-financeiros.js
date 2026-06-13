@@ -16,20 +16,22 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const dealTypes = [
   "Crédito Habitação",
   "Crédito Pessoal",
-  "Transferência Crédito",
-  "Crédito Consolidado",
+  "Consolidação com CH",
+  "Consolidação CP",
+  "Multiopções Puro",
   "Abertura de Conta",
   "Outros",
 ];
 
 const dealStatuses = [
-  "lead",
-  "documentação",
-  "em análise",
-  "aprovado",
-  "formalizado",
-  "pago",
-  "perdido",
+  "LEAD",
+  "AGUARDA DOCS",
+  "ENV BANCO",
+  "RECUSADO",
+  "APROVADO",
+  "AVALIAÇÃO",
+  "AGUARDA CONTR",
+  "CONTRATADO",
 ];
 
 export async function getServerSideProps() {
@@ -135,7 +137,7 @@ function buildInitialDealForm() {
     partner_payment_value: "",
     partner_payment_status: "pendente",
     partner_paid_at: "",
-    status: "lead",
+    status: "LEAD",
     notes: "",
   };
 }
@@ -212,7 +214,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     const map = new Map();
 
     deals.forEach((deal) => {
-      const partnerName = deal.source_partner?.name || "Sem parceiro";
+      const partnerName = deal.source_partner?.name || "Sem parceiro de origem";
       const partnerDue = calculatePartnerPayment(
         deal.received_commission,
         deal.partner_payment_type,
@@ -262,7 +264,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   async function createPartner(event) {
     event.preventDefault();
     if (!partnerForm.name.trim()) {
-      alert("Preenche o nome do parceiro/banco.");
+      alert("Preenche o nome do banco ou parceiro.");
       return;
     }
 
@@ -425,13 +427,13 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           <div>
             <h1 style={title}>Negócios Financeiros</h1>
             <p style={subtitle}>
-              Crédito habitação, crédito pessoal, consolidação, aberturas de conta, parceiros, bancos, montantes financiados, percentagens de comissão e pagamentos a parceiros.
+              Crédito habitação, crédito pessoal, consolidação, aberturas de conta, bancos que pagam comissões, parceiros de origem, montantes financiados, percentagens de comissão e pagamentos a parceiros.
             </p>
           </div>
 
           <div style={headerButtons}>
             <button style={button} onClick={() => setShowDealForm(!showDealForm)}>+ Novo negócio</button>
-            <button style={secondaryButton} onClick={() => setShowPartnerForm(!showPartnerForm)}>+ Parceiro/Banco</button>
+            <button style={secondaryButton} onClick={() => setShowPartnerForm(!showPartnerForm)}>+ Banco/Parceiro</button>
           </div>
         </header>
 
@@ -446,7 +448,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
         {showPartnerForm && (
           <section style={formCard}>
-            <h2 style={sectionTitle}>Novo parceiro/banco</h2>
+            <h2 style={sectionTitle}>Novo banco ou parceiro</h2>
 
             <form style={formGrid} onSubmit={createPartner}>
               <label style={fieldLabel}>Nome
@@ -474,7 +476,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <textarea style={textarea} value={partnerForm.notes} onChange={(event) => setPartnerForm({ ...partnerForm, notes: event.target.value })} />
               </label>
 
-              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar parceiro"}</button>
+              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar banco/parceiro"}</button>
             </form>
           </section>
         )}
@@ -512,7 +514,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               </label>
 
               <label style={fieldLabel}>
-                Banco / destino
+                Banco que paga a comissão
                 <select
                   style={input}
                   value={dealForm.bank_partner_id}
@@ -533,7 +535,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
               {dealForm.bank_partner_id === "__novo_banco__" && (
                 <label style={fieldLabel}>
-                  Novo banco/destino
+                  Novo banco
                   <input
                     style={input}
                     value={dealForm.new_bank_partner_name}
@@ -543,13 +545,13 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                         new_bank_partner_name: event.target.value,
                       })
                     }
-                    placeholder="Ex: NB Oeiras, Santander Cascais..."
+                    placeholder="Ex: NB Sintra, NB Pico, NB Carcavelos..."
                   />
                 </label>
               )}
 
               <label style={fieldLabel}>
-                Parceiro origem
+                Parceiro que trouxe o negócio
                 <select
                   style={input}
                   value={dealForm.source_partner_id}
@@ -560,7 +562,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                     })
                   }
                 >
-                  <option value="">Sem parceiro</option>
+                  <option value="">Sem parceiro de origem</option>
                   {partners.map((partner) => (
                     <option key={partner.id} value={partner.id}>{partner.name}</option>
                   ))}
@@ -570,7 +572,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
               {dealForm.source_partner_id === "__novo_parceiro__" && (
                 <label style={fieldLabel}>
-                  Novo parceiro origem
+                  Novo parceiro
                   <input
                     style={input}
                     value={dealForm.new_source_partner_name}
@@ -703,8 +705,8 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                     <div style={infoGrid}>
                       <Info label="NIF" value={deal.client_nif || "-"} />
                       <Info label="Telefone" value={deal.client_phone || "-"} />
-                      <Info label="Banco/destino" value={deal.bank_partner?.name || "-"} />
-                      <Info label="Parceiro origem" value={deal.source_partner?.name || "-"} />
+                      <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
+                      <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
                       <Info label="% comissão" value={`${Number(deal.commission_rate || 0)}%`} />
                       <Info label="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
                       <Info label="Estado pagamento parceiro" value={deal.partner_payment_status} />
@@ -785,3 +787,5 @@ const actionRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
 const clientButton = { background: "#0f766e", color: "white", padding: "12px 16px", borderRadius: 10, textDecoration: "none", fontWeight: "bold" };
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
+
+      
