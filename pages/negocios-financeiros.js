@@ -119,21 +119,63 @@ function buildWhatsappUrl(phone, message) {
   return `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
 }
 
-function buildCruzadosWhatsappMessage(item, position) {
-  const missing = Math.max(580000 - Number(item.totalAmount || 0), 0);
-  const statusLine =
-    missing > 0
-      ? `Faltam-te ${formatEuro(missing)} para atingires o mínimo de apuramento de 580.000 €.`
+function buildRankingReferenceLine(label, rankingItem) {
+  if (!rankingItem) return `${label} lugar — ainda sem referência`;
+
+  return `${label} lugar — ${formatEuro(rankingItem.totalAmount)}`;
+}
+
+function buildCruzadosWhatsappMessage(item, position, ranking) {
+  const previousItem = ranking[position - 2] || null;
+  const valueToClimb = previousItem
+    ? Math.max(Number(previousItem.totalAmount || 0) - Number(item.totalAmount || 0) + 1, 0)
+    : 0;
+
+  const fifteenthItem = ranking[14] || null;
+  const valueToTop15 =
+    position > 15 && fifteenthItem
+      ? Math.max(Number(fifteenthItem.totalAmount || 0) - Number(item.totalAmount || 0) + 1, 0)
+      : 0;
+
+  const missingMinimum = Math.max(580000 - Number(item.totalAmount || 0), 0);
+
+  let progressLine = "";
+
+  if (position === 1) {
+    progressLine = "Estás atualmente em 1º lugar. Mantém o ritmo para defender a liderança.";
+  } else if (position > 15 && fifteenthItem) {
+    progressLine = `Faltam ${formatEuro(valueToTop15)} para entrares no Top 15.`;
+  } else if (previousItem) {
+    progressLine = `Faltam ${formatEuro(valueToClimb)} para ultrapassares o ${position - 1}º lugar.`;
+  }
+
+  const minimumLine =
+    missingMinimum > 0
+      ? `Faltam ${formatEuro(missingMinimum)} para atingires o mínimo de apuramento de 580.000 €.`
       : "Já atingiste o mínimo de apuramento de 580.000 €.";
+
+  const referenceLines = [
+    buildRankingReferenceLine("15º", ranking[14]),
+    buildRankingReferenceLine("10º", ranking[9]),
+    buildRankingReferenceLine("5º", ranking[4]),
+    buildRankingReferenceLine("1º", ranking[0]),
+  ].join("\n");
 
   return `Olá ${item.partnerName},
 
 Segue a atualização quinzenal da tua posição no ranking anual OS CRUZADOS 2026.
 
 🏆 Posição atual: ${position}º lugar
+
 💰 Volume contratado acumulado: ${formatEuro(item.totalAmount)}
 
-${statusLine}
+📈 ${progressLine}
+
+${minimumLine}
+
+📊 Referências atuais do ranking, sem identificação dos parceiros:
+
+${referenceLines}
 
 Obrigado pela parceria e continuação de bons negócios.
 
@@ -821,13 +863,13 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <div>
                   <strong>WhatsApp quinzenal — Top 15</strong>
                   <p style={smallMuted}>
-                    Mensagem individual: cada parceiro vê apenas a sua posição, sem dados dos restantes.
+                    Mensagem individual: cada parceiro vê a sua posição e referências do 15º, 10º, 5º e 1º lugar, sem nomes dos restantes parceiros.
                   </p>
                 </div>
 
                 <div style={whatsappList}>
                   {cruzadosRanking.slice(0, 15).map((item, index) => {
-                    const message = buildCruzadosWhatsappMessage(item, index + 1);
+                    const message = buildCruzadosWhatsappMessage(item, index + 1, cruzadosRanking);
                     const url = buildWhatsappUrl(item.partnerPhone, message);
 
                     return (
