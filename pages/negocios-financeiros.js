@@ -55,11 +55,23 @@ export async function getServerSideProps() {
     .select("id, name, nif, phone")
     .order("name", { ascending: true });
 
+  const { data: contests } = await supabase
+    .from("financial_contests")
+    .select("*")
+    .order("start_date", { ascending: false });
+
+  const { data: campaigns } = await supabase
+    .from("financial_campaigns")
+    .select("*")
+    .order("start_date", { ascending: false });
+
   return {
     props: {
       deals: deals || [],
       partners: partners || [],
       clients: clients || [],
+      contests: contests || [],
+      campaigns: campaigns || [],
     },
   };
 }
@@ -125,7 +137,7 @@ function buildRankingReferenceLine(label, rankingItem) {
   return `${label} lugar — ${formatEuro(rankingItem.totalAmount)}`;
 }
 
-function buildCruzadosWhatsappMessage(item, position, ranking) {
+function buildCruzadosWhatsappMessage(item, position, ranking, contestName, minimumAmount) {
   const previousItem = ranking[position - 2] || null;
   const valueToClimb = previousItem
     ? Math.max(Number(previousItem.totalAmount || 0) - Number(item.totalAmount || 0) + 1, 0)
@@ -137,7 +149,8 @@ function buildCruzadosWhatsappMessage(item, position, ranking) {
       ? Math.max(Number(fifteenthItem.totalAmount || 0) - Number(item.totalAmount || 0) + 1, 0)
       : 0;
 
-  const missingMinimum = Math.max(580000 - Number(item.totalAmount || 0), 0);
+  const minimum = Number(minimumAmount || 580000);
+  const missingMinimum = Math.max(minimum - Number(item.totalAmount || 0), 0);
 
   let progressLine = "";
 
@@ -151,8 +164,8 @@ function buildCruzadosWhatsappMessage(item, position, ranking) {
 
   const minimumLine =
     missingMinimum > 0
-      ? `Faltam ${formatEuro(missingMinimum)} para atingires o mínimo de apuramento de 580.000 €.`
-      : "Já atingiste o mínimo de apuramento de 580.000 €.";
+      ? `Faltam ${formatEuro(missingMinimum)} para atingires o mínimo de apuramento de ${formatEuro(minimum)}.`
+      : `Já atingiste o mínimo de apuramento de ${formatEuro(minimum)}.`;
 
   const referenceLines = [
     buildRankingReferenceLine("15º", ranking[14]),
@@ -163,7 +176,7 @@ function buildCruzadosWhatsappMessage(item, position, ranking) {
 
   return `Olá ${item.partnerName},
 
-Segue a atualização quinzenal da tua posição no ranking anual OS CRUZADOS 2026.
+Segue a atualização quinzenal da tua posição no ranking anual ${contestName}.
 
 🏆 Posição atual: ${position}º lugar
 
@@ -178,6 +191,33 @@ ${minimumLine}
 ${referenceLines}
 
 Obrigado pela parceria e continuação de bons negócios.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+}
+
+function buildCampaignWhatsappMessage(item, campaign) {
+  const objective = Number(campaign.objective_amount || 0);
+  const total = Number(item.totalAmount || 0);
+  const missing = Math.max(objective - total, 0);
+
+  const statusLine =
+    missing > 0
+      ? `Faltam ${formatEuro(missing)} para atingires o objetivo de ${formatEuro(objective)}.`
+      : `Já atingiste o objetivo de ${formatEuro(objective)}.`;
+
+  return `Olá ${item.partnerName},
+
+Segue o ponto de situação da campanha ${campaign.name}.
+
+💰 Volume contratado acumulado: ${formatEuro(total)}
+
+${statusLine}
+
+🎁 Prémio/objetivo da campanha:
+${campaign.prize || "-"}
+
+Obrigado pela parceria e bons negócios.
 
 Carlos Vieira
 Loja de Seguros de Trajouce`;
@@ -231,7 +271,79 @@ function buildInitialPartnerForm() {
   };
 }
 
-export default function NegociosFinanceiros({ deals, partners, clients }) {
+function buildDefaultContestForm() {
+  return {
+    name: "CRUZADOS 2026",
+    start_date: "2026-01-03",
+    end_date: "2026-12-30",
+    minimum_amount: "580000",
+    prize_1: "Viagem no valor de 2.500 €",
+    prize_2: "Viagem no valor de 2.000 €",
+    prize_3: "Viagem no valor de 1.500 €",
+    tie_breaker: "Maior processo contratado",
+    eligible_deal_types: ["Crédito Habitação", "Crédito Pessoal"],
+    report_notes: "Reporte ao dia 1 e dia 15 de cada mês.",
+    is_active: true,
+  };
+}
+
+function buildContestForm(contest) {
+  if (!contest) return buildDefaultContestForm();
+
+  return {
+    name: contest.name || "CRUZADOS",
+    start_date: contest.start_date || "",
+    end_date: contest.end_date || "",
+    minimum_amount: contest.minimum_amount
+      ? String(contest.minimum_amount).replace(".", ",")
+      : "",
+    prize_1: contest.prize_1 || "",
+    prize_2: contest.prize_2 || "",
+    prize_3: contest.prize_3 || "",
+    tie_breaker: contest.tie_breaker || "",
+    eligible_deal_types: Array.isArray(contest.eligible_deal_types)
+      ? contest.eligible_deal_types
+      : [],
+    report_notes: contest.report_notes || "",
+    is_active: contest.is_active !== false,
+  };
+}
+
+function buildDefaultCampaignForm() {
+  return {
+    name: "",
+    start_date: "",
+    end_date: "",
+    contract_deadline: "",
+    objective_amount: "",
+    prize: "",
+    eligible_deal_types: ["Crédito Habitação", "Crédito Pessoal"],
+    notes: "",
+    is_active: true,
+  };
+}
+
+function buildCampaignForm(campaign) {
+  if (!campaign) return buildDefaultCampaignForm();
+
+  return {
+    name: campaign.name || "",
+    start_date: campaign.start_date || "",
+    end_date: campaign.end_date || "",
+    contract_deadline: campaign.contract_deadline || "",
+    objective_amount: campaign.objective_amount
+      ? String(campaign.objective_amount).replace(".", ",")
+      : "",
+    prize: campaign.prize || "",
+    eligible_deal_types: Array.isArray(campaign.eligible_deal_types)
+      ? campaign.eligible_deal_types
+      : [],
+    notes: campaign.notes || "",
+    is_active: campaign.is_active !== false,
+  };
+}
+
+export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
   const [showDealForm, setShowDealForm] = useState(false);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
@@ -239,6 +351,17 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [showPartnersPanel, setShowPartnersPanel] = useState(false);
   const [showCruzadosRanking, setShowCruzadosRanking] = useState(false);
+  const [showContestEditor, setShowContestEditor] = useState(false);
+  const [selectedContestId, setSelectedContestId] = useState(contests?.[0]?.id || "");
+  const [contestForm, setContestForm] = useState(() =>
+    buildContestForm(contests?.[0] || null)
+  );
+  const [showCampaignsPanel, setShowCampaignsPanel] = useState(false);
+  const [showCampaignEditor, setShowCampaignEditor] = useState(false);
+  const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns?.[0]?.id || "");
+  const [campaignForm, setCampaignForm] = useState(() =>
+    buildCampaignForm(campaigns?.[0] || null)
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [paymentFilter, setPaymentFilter] = useState("todos");
@@ -248,6 +371,20 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const inactivePartners = partners.filter((p) => p.is_active === false);
   const bancos = activePartners.filter((p) => p.partner_type === "Banco");
   const parceiros = activePartners.filter((p) => p.partner_type !== "Banco");
+
+  const selectedContest =
+    contests.find((contest) => contest.id === selectedContestId) ||
+    contests[0] ||
+    null;
+
+  const contestRules = buildContestForm(selectedContest);
+
+  const selectedCampaign =
+    campaigns.find((campaign) => campaign.id === selectedCampaignId) ||
+    campaigns[0] ||
+    null;
+
+  const campaignRules = buildCampaignForm(selectedCampaign);
 
   const filteredDeals = deals.filter((deal) => {
     const text = normalizeText(`
@@ -325,10 +462,14 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   }, [deals]);
 
   const cruzadosRanking = useMemo(() => {
-    const startDate = "2026-01-03";
-    const endDate = "2026-12-30";
+    const startDate = contestRules.start_date || "2026-01-03";
+    const endDate = contestRules.end_date || "2026-12-30";
+    const minimumAmount = parseDecimal(contestRules.minimum_amount) || 580000;
+    const eligibleTypes =
+      contestRules.eligible_deal_types && contestRules.eligible_deal_types.length > 0
+        ? contestRules.eligible_deal_types
+        : ["Crédito Habitação", "Crédito Pessoal"];
 
-    const eligibleTypes = ["Crédito Habitação", "Crédito Pessoal"];
     const map = new Map();
 
     deals
@@ -370,19 +511,249 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     return [...map.values()]
       .map((item) => ({
         ...item,
-        eligible: item.totalAmount >= 580000,
+        eligible: item.totalAmount >= minimumAmount,
       }))
       .sort((a, b) => {
         if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
         return b.biggestDeal - a.biggestDeal;
       });
-  }, [deals]);
+  }, [deals, partners, contestRules]);
 
   const cruzadosPrizes = [
-    "1º lugar — Viagem no valor de 2.500 €",
-    "2º lugar — Viagem no valor de 2.000 €",
-    "3º lugar — Viagem no valor de 1.500 €",
+    `1º lugar — ${contestRules.prize_1 || "-"}`,
+    `2º lugar — ${contestRules.prize_2 || "-"}`,
+    `3º lugar — ${contestRules.prize_3 || "-"}`,
   ];
+
+  const campaignRanking = useMemo(() => {
+    const startDate = campaignRules.start_date || "";
+    const endDate = campaignRules.contract_deadline || campaignRules.end_date || "";
+    const objective = parseDecimal(campaignRules.objective_amount) || 0;
+    const eligibleTypes =
+      campaignRules.eligible_deal_types && campaignRules.eligible_deal_types.length > 0
+        ? campaignRules.eligible_deal_types
+        : dealTypes;
+
+    const map = new Map();
+
+    deals
+      .filter((deal) => {
+        const dealDate = String(deal.commission_received_at || deal.created_at || "").slice(0, 10);
+
+        return (
+          deal.status === "CONTRATADO" &&
+          eligibleTypes.includes(deal.deal_type) &&
+          deal.source_partner_id &&
+          (!startDate || dealDate >= startDate) &&
+          (!endDate || dealDate <= endDate)
+        );
+      })
+      .forEach((deal) => {
+        const partnerId = deal.source_partner_id;
+        const partnerName = deal.source_partner?.name || "Sem parceiro";
+        const fullPartner = partners.find((partner) => partner.id === partnerId);
+        const partnerPhone = fullPartner?.phone || "";
+        const amount = Number(deal.amount || 0);
+
+        if (!map.has(partnerId)) {
+          map.set(partnerId, {
+            partnerId,
+            partnerName,
+            partnerPhone,
+            totalAmount: 0,
+            dealsCount: 0,
+            biggestDeal: 0,
+          });
+        }
+
+        const item = map.get(partnerId);
+        item.totalAmount += amount;
+        item.dealsCount += 1;
+        item.biggestDeal = Math.max(item.biggestDeal, amount);
+      });
+
+    return [...map.values()]
+      .map((item) => {
+        const missing = Math.max(objective - item.totalAmount, 0);
+        const progress = objective > 0 ? (item.totalAmount / objective) * 100 : 0;
+
+        return {
+          ...item,
+          missing,
+          progress,
+          achieved: objective > 0 && item.totalAmount >= objective,
+          near: objective > 0 && item.totalAmount < objective && progress >= 80,
+        };
+      })
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [deals, partners, campaignRules]);
+
+  const campaignStats = {
+    participants: campaignRanking.length,
+    achieved: campaignRanking.filter((item) => item.achieved).length,
+    near: campaignRanking.filter((item) => item.near).length,
+    pending: campaignRanking.filter((item) => !item.achieved && !item.near).length,
+  };
+
+  function selectContest(contestId) {
+    const contest = contests.find((item) => item.id === contestId) || null;
+
+    setSelectedContestId(contestId);
+    setContestForm(buildContestForm(contest));
+  }
+
+  function selectCampaign(campaignId) {
+    const campaign = campaigns.find((item) => item.id === campaignId) || null;
+
+    setSelectedCampaignId(campaignId);
+    setCampaignForm(buildCampaignForm(campaign));
+  }
+
+  function toggleContestDealType(type) {
+    const current = contestForm.eligible_deal_types || [];
+    const exists = current.includes(type);
+
+    setContestForm({
+      ...contestForm,
+      eligible_deal_types: exists
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    });
+  }
+
+  function toggleCampaignDealType(type) {
+    const current = campaignForm.eligible_deal_types || [];
+    const exists = current.includes(type);
+
+    setCampaignForm({
+      ...campaignForm,
+      eligible_deal_types: exists
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    });
+  }
+
+  async function saveContest(event) {
+    event.preventDefault();
+
+    if (!contestForm.name.trim()) {
+      alert("Preenche o nome do concurso.");
+      return;
+    }
+
+    setSaving(true);
+
+    const payload = {
+      name: contestForm.name.trim(),
+      start_date: contestForm.start_date || null,
+      end_date: contestForm.end_date || null,
+      minimum_amount: parseDecimal(contestForm.minimum_amount),
+      prize_1: contestForm.prize_1 || null,
+      prize_2: contestForm.prize_2 || null,
+      prize_3: contestForm.prize_3 || null,
+      tie_breaker: contestForm.tie_breaker || null,
+      eligible_deal_types: contestForm.eligible_deal_types || [],
+      report_notes: contestForm.report_notes || null,
+      is_active: contestForm.is_active !== false,
+    };
+
+    let error = null;
+
+    if (selectedContestId) {
+      const result = await supabase
+        .from("financial_contests")
+        .update(payload)
+        .eq("id", selectedContestId);
+
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("financial_contests")
+        .insert(payload);
+
+      error = result.error;
+    }
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function saveCampaign(event) {
+    event.preventDefault();
+
+    if (!campaignForm.name.trim()) {
+      alert("Preenche o nome da campanha.");
+      return;
+    }
+
+    setSaving(true);
+
+    const payload = {
+      name: campaignForm.name.trim(),
+      start_date: campaignForm.start_date || null,
+      end_date: campaignForm.end_date || null,
+      contract_deadline: campaignForm.contract_deadline || null,
+      objective_amount: parseDecimal(campaignForm.objective_amount),
+      prize: campaignForm.prize || null,
+      eligible_deal_types: campaignForm.eligible_deal_types || [],
+      notes: campaignForm.notes || null,
+      is_active: campaignForm.is_active !== false,
+    };
+
+    let error = null;
+
+    if (selectedCampaignId) {
+      const result = await supabase
+        .from("financial_campaigns")
+        .update(payload)
+        .eq("id", selectedCampaignId);
+
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from("financial_campaigns")
+        .insert(payload);
+
+      error = result.error;
+    }
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function duplicateContestForNextYear() {
+    const currentYear = Number(String(contestForm.start_date || new Date().getFullYear()).slice(0, 4));
+    const nextYear = currentYear + 1;
+    const baseName = String(contestForm.name || "CRUZADOS").replace(/\d{4}/, "").trim();
+
+    setSelectedContestId("");
+    setContestForm({
+      ...contestForm,
+      name: `${baseName || "CRUZADOS"} ${nextYear}`,
+      start_date: `${nextYear}-01-01`,
+      end_date: `${nextYear}-12-31`,
+    });
+    setShowContestEditor(true);
+  }
+
+  function createNewCampaign() {
+    setSelectedCampaignId("");
+    setCampaignForm(buildDefaultCampaignForm());
+    setShowCampaignEditor(true);
+    setShowCampaignsPanel(true);
+  }
 
   function selectClient(clientId) {
     const client = clients.find((item) => item.id === clientId);
@@ -703,7 +1074,14 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               style={secondaryButton}
               onClick={() => setShowCruzadosRanking(!showCruzadosRanking)}
             >
-              🏆 Ranking Cruzados
+              🏆 Concursos
+            </button>
+
+            <button
+              style={secondaryButton}
+              onClick={() => setShowCampaignsPanel(!showCampaignsPanel)}
+            >
+              🎯 Campanhas
             </button>
 
             <button
@@ -827,10 +1205,9 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           <section style={cruzadosPanel}>
             <div style={compactPanelHeader}>
               <div>
-                <h2 style={sectionTitle}>🏆 Ranking Anual — Os Cruzados 2026</h2>
+                <h2 style={sectionTitle}>🏆 Concurso Anual — {contestRules.name}</h2>
                 <p style={muted}>
-                  Concurso anual de parceiros para Crédito Habitação e Crédito Pessoal.
-                  Período: 03-01-2026 a 30-12-2026.
+                  Concurso anual de parceiros. As regras são editáveis para poderes criar CRUZADOS 2027, 2028, etc.
                 </p>
               </div>
 
@@ -843,11 +1220,99 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               </button>
             </div>
 
+            <div style={contestToolbar}>
+              <label style={fieldLabel}>
+                Concurso
+                <select
+                  style={input}
+                  value={selectedContestId}
+                  onChange={(event) => selectContest(event.target.value)}
+                >
+                  {contests.map((contest) => (
+                    <option key={contest.id} value={contest.id}>
+                      {contest.name}
+                    </option>
+                  ))}
+                  {contests.length === 0 && <option value="">Criar primeiro concurso</option>}
+                </select>
+              </label>
+
+              <button type="button" style={secondaryButton} onClick={() => setShowContestEditor(!showContestEditor)}>
+                {showContestEditor ? "Esconder regras" : "Editar regras"}
+              </button>
+
+              <button type="button" style={button} onClick={duplicateContestForNextYear}>
+                Duplicar ano seguinte
+              </button>
+            </div>
+
+            {showContestEditor && (
+              <form style={contestFormGrid} onSubmit={saveContest}>
+                <label style={fieldLabel}>Nome do concurso
+                  <input style={input} value={contestForm.name} onChange={(event) => setContestForm({ ...contestForm, name: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Data início
+                  <input type="date" style={input} value={contestForm.start_date} onChange={(event) => setContestForm({ ...contestForm, start_date: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Data fim
+                  <input type="date" style={input} value={contestForm.end_date} onChange={(event) => setContestForm({ ...contestForm, end_date: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Montante mínimo
+                  <input style={input} inputMode="decimal" value={contestForm.minimum_amount} onChange={(event) => setContestForm({ ...contestForm, minimum_amount: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Prémio 1º lugar
+                  <input style={input} value={contestForm.prize_1} onChange={(event) => setContestForm({ ...contestForm, prize_1: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Prémio 2º lugar
+                  <input style={input} value={contestForm.prize_2} onChange={(event) => setContestForm({ ...contestForm, prize_2: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Prémio 3º lugar
+                  <input style={input} value={contestForm.prize_3} onChange={(event) => setContestForm({ ...contestForm, prize_3: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Critério desempate
+                  <input style={input} value={contestForm.tie_breaker} onChange={(event) => setContestForm({ ...contestForm, tie_breaker: event.target.value })} />
+                </label>
+
+                <div style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Tipos elegíveis
+                  <div style={checkboxGrid}>
+                    {dealTypes.map((type) => (
+                      <label key={type} style={checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={(contestForm.eligible_deal_types || []).includes(type)}
+                          onChange={() => toggleContestDealType(type)}
+                        />
+                        {type}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas / reporte
+                  <textarea style={textarea} value={contestForm.report_notes} onChange={(event) => setContestForm({ ...contestForm, report_notes: event.target.value })} />
+                </label>
+
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : selectedContestId ? "Guardar regras" : "Criar concurso"}
+                </button>
+              </form>
+            )}
+
             <div style={cruzadosRules}>
               <strong>Regras principais</strong>
-              <span>Apuramento mínimo: contratação de 580.000 €.</span>
-              <span>Desempate: parceiro com o processo contratado de maior valor.</span>
-              <span>Reporte: dia 1 e dia 15 de cada mês.</span>
+              <span>Período: {formatDate(contestRules.start_date)} a {formatDate(contestRules.end_date)}.</span>
+              <span>Apuramento mínimo: contratação de {formatEuro(parseDecimal(contestRules.minimum_amount))}.</span>
+              <span>Tipos elegíveis: {(contestRules.eligible_deal_types || []).join(", ") || "-"}.</span>
+              <span>Desempate: {contestRules.tie_breaker || "-"}.</span>
+              <span>{contestRules.report_notes || ""}</span>
             </div>
 
             <div style={cruzadosPrizeGrid}>
@@ -869,7 +1334,13 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
                 <div style={whatsappList}>
                   {cruzadosRanking.slice(0, 15).map((item, index) => {
-                    const message = buildCruzadosWhatsappMessage(item, index + 1, cruzadosRanking);
+                    const message = buildCruzadosWhatsappMessage(
+                      item,
+                      index + 1,
+                      cruzadosRanking,
+                      contestRules.name,
+                      parseDecimal(contestRules.minimum_amount) || 580000
+                    );
                     const url = buildWhatsappUrl(item.partnerPhone, message);
 
                     return (
@@ -921,10 +1392,168 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                     <span>{item.dealsCount}</span>
                     <span>{formatEuro(item.biggestDeal)}</span>
                     <span style={item.eligible ? eligibleBadge : notEligibleBadge}>
-                      {item.eligible ? "Apurado" : `Faltam ${formatEuro(580000 - item.totalAmount)}`}
+                      {item.eligible
+                        ? "Apurado"
+                        : `Faltam ${formatEuro(
+                            Math.max((parseDecimal(contestRules.minimum_amount) || 580000) - item.totalAmount, 0)
+                          )}`}
                     </span>
                   </div>
                 ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {showCampaignsPanel && (
+          <section style={campaignPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>🎯 Campanhas Sazonais</h2>
+                <p style={muted}>
+                  Campanhas temporárias com objetivo próprio, prémio próprio e ponto de situação por parceiro.
+                </p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowCampaignsPanel(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <div style={contestToolbar}>
+              <label style={fieldLabel}>
+                Campanha
+                <select
+                  style={input}
+                  value={selectedCampaignId}
+                  onChange={(event) => selectCampaign(event.target.value)}
+                >
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </option>
+                  ))}
+                  {campaigns.length === 0 && <option value="">Criar primeira campanha</option>}
+                </select>
+              </label>
+
+              <button type="button" style={secondaryButton} onClick={() => setShowCampaignEditor(!showCampaignEditor)}>
+                {showCampaignEditor ? "Esconder campanha" : "Editar campanha"}
+              </button>
+
+              <button type="button" style={button} onClick={createNewCampaign}>
+                Nova campanha
+              </button>
+            </div>
+
+            {showCampaignEditor && (
+              <form style={contestFormGrid} onSubmit={saveCampaign}>
+                <label style={fieldLabel}>Nome da campanha
+                  <input style={input} value={campaignForm.name} onChange={(event) => setCampaignForm({ ...campaignForm, name: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Data início
+                  <input type="date" style={input} value={campaignForm.start_date} onChange={(event) => setCampaignForm({ ...campaignForm, start_date: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Data fim
+                  <input type="date" style={input} value={campaignForm.end_date} onChange={(event) => setCampaignForm({ ...campaignForm, end_date: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Data limite contratação
+                  <input type="date" style={input} value={campaignForm.contract_deadline} onChange={(event) => setCampaignForm({ ...campaignForm, contract_deadline: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Objetivo por parceiro
+                  <input style={input} inputMode="decimal" value={campaignForm.objective_amount} onChange={(event) => setCampaignForm({ ...campaignForm, objective_amount: event.target.value })} />
+                </label>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Prémio
+                  <textarea style={textarea} value={campaignForm.prize} onChange={(event) => setCampaignForm({ ...campaignForm, prize: event.target.value })} />
+                </label>
+
+                <div style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Tipos elegíveis
+                  <div style={checkboxGrid}>
+                    {dealTypes.map((type) => (
+                      <label key={type} style={checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={(campaignForm.eligible_deal_types || []).includes(type)}
+                          onChange={() => toggleCampaignDealType(type)}
+                        />
+                        {type}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas
+                  <textarea style={textarea} value={campaignForm.notes} onChange={(event) => setCampaignForm({ ...campaignForm, notes: event.target.value })} />
+                </label>
+
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : selectedCampaignId ? "Guardar campanha" : "Criar campanha"}
+                </button>
+              </form>
+            )}
+
+            <div style={campaignSummaryGrid}>
+              <Summary title="Objetivo por parceiro" value={formatEuro(parseDecimal(campaignRules.objective_amount))} />
+              <Summary title="Participantes" value={campaignStats.participants} />
+              <Summary title="Atingiram" value={campaignStats.achieved} />
+              <Summary title="Perto (>=80%)" value={campaignStats.near} />
+              <Summary title="Por atingir" value={campaignStats.pending} />
+            </div>
+
+            <div style={cruzadosRules}>
+              <strong>{campaignRules.name}</strong>
+              <span>Período: {formatDate(campaignRules.start_date)} a {formatDate(campaignRules.end_date)}.</span>
+              <span>Contratados até: {formatDate(campaignRules.contract_deadline)}.</span>
+              <span>Tipos elegíveis: {(campaignRules.eligible_deal_types || []).join(", ") || "-"}.</span>
+              <span>Prémio: {campaignRules.prize || "-"}</span>
+            </div>
+
+            {campaignRanking.length === 0 ? (
+              <p style={muted}>Ainda não existem parceiros com negócios contratados nesta campanha.</p>
+            ) : (
+              <div style={rankingTable}>
+                <div style={campaignRankingHeader}>
+                  <span>Parceiro</span>
+                  <span>Contratado</span>
+                  <span>Falta</span>
+                  <span>%</span>
+                  <span>Estado</span>
+                  <span>WhatsApp</span>
+                </div>
+
+                {campaignRanking.map((item) => {
+                  const campaignMessage = buildCampaignWhatsappMessage(item, {
+                    name: campaignRules.name,
+                    objective_amount: parseDecimal(campaignRules.objective_amount),
+                    prize: campaignRules.prize,
+                  });
+                  const url = buildWhatsappUrl(item.partnerPhone, campaignMessage);
+
+                  return (
+                    <div key={item.partnerId} style={campaignRankingRow}>
+                      <strong>{item.partnerName}</strong>
+                      <span>{formatEuro(item.totalAmount)}</span>
+                      <span>{formatEuro(item.missing)}</span>
+                      <span>{item.progress.toFixed(1)}%</span>
+                      <span style={item.achieved ? eligibleBadge : item.near ? nearBadge : notEligibleBadge}>
+                        {item.achieved ? "Atingiu" : item.near ? "Perto" : "Por atingir"}
+                      </span>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer" style={whatsappButton}>
+                          WhatsApp
+                        </a>
+                      ) : (
+                        <span style={missingPhoneBadge}>Sem telefone</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1370,3 +1999,13 @@ const whatsappList = { display: "grid", gap: 8 };
 const whatsappRow = { background: "white", border: "1px solid #ccfbf1", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" };
 const whatsappButton = { background: "#16a34a", color: "white", padding: "9px 12px", borderRadius: 8, textDecoration: "none", fontWeight: "bold", fontSize: 13 };
 const missingPhoneBadge = { background: "#fee2e2", color: "#991b1b", padding: "7px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
+
+const contestToolbar = { display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "end", marginBottom: 14 };
+const contestFormGrid = { background: "#f0fdfa", border: "1px solid #5eead4", borderRadius: 14, padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 14 };
+const checkboxGrid = { display: "flex", flexWrap: "wrap", gap: 10 };
+const checkboxLabel = { background: "#ecfeff", border: "1px solid #67e8f9", borderRadius: 999, padding: "8px 10px", display: "flex", gap: 6, alignItems: "center", fontWeight: "bold" };
+const campaignPanel = { background: "#fefce8", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(202,138,4,0.18)", border: "1px solid #fde047" };
+const campaignSummaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 14 };
+const campaignRankingHeader = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1.2fr 0.8fr 1fr 1fr", gap: 10, background: "#713f12", color: "white", padding: "10px 12px", borderRadius: 10, fontWeight: "bold", minWidth: 850 };
+const campaignRankingRow = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1.2fr 0.8fr 1fr 1fr", gap: 10, background: "#fffbeb", border: "1px solid #fde68a", padding: "10px 12px", borderRadius: 10, alignItems: "center", minWidth: 850 };
+const nearBadge = { background: "#fef3c7", color: "#92400e", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
