@@ -111,9 +111,9 @@ function calculateExpectedCommission(amount, rate) {
   return (Number(amount || 0) * Number(rate || 0)) / 100;
 }
 
-function calculatePartnerPayment(receivedCommission, paymentType, paymentRate, paymentValue) {
+function calculatePartnerPayment(financedAmount, paymentType, paymentRate, paymentValue) {
   if (paymentType === "valor fixo") return Number(paymentValue || 0);
-  return (Number(receivedCommission || 0) * Number(paymentRate || 0)) / 100;
+  return (Number(financedAmount || 0) * Number(paymentRate || 0)) / 100;
 }
 
 function buildInitialDealForm() {
@@ -148,6 +148,9 @@ function buildInitialPartnerForm() {
     partner_type: "Banco",
     phone: "",
     email: "",
+    default_payment_type: "percentagem",
+    default_payment_rate: "",
+    default_payment_value: "",
     notes: "",
   };
 }
@@ -193,7 +196,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     return deals.reduce(
       (acc, deal) => {
         const partnerDue = calculatePartnerPayment(
-          deal.received_commission,
+          deal.amount,
           deal.partner_payment_type,
           deal.partner_payment_rate,
           deal.partner_payment_value
@@ -220,7 +223,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     deals.forEach((deal) => {
       const partnerName = deal.source_partner?.name || "Sem parceiro de origem";
       const partnerDue = calculatePartnerPayment(
-        deal.received_commission,
+        deal.amount,
         deal.partner_payment_type,
         deal.partner_payment_rate,
         deal.partner_payment_value
@@ -257,6 +260,30 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     });
   }
 
+  function selectSourcePartner(partnerId) {
+    const partner = partners.find((item) => item.id === partnerId);
+
+    if (!partner) {
+      setDealForm({
+        ...dealForm,
+        source_partner_id: partnerId,
+      });
+      return;
+    }
+
+    setDealForm({
+      ...dealForm,
+      source_partner_id: partnerId,
+      partner_payment_type: partner.default_payment_type || "percentagem",
+      partner_payment_rate: partner.default_payment_rate
+        ? String(partner.default_payment_rate).replace(".", ",")
+        : "",
+      partner_payment_value: partner.default_payment_value
+        ? String(partner.default_payment_value).replace(".", ",")
+        : "",
+    });
+  }
+
   function updateDealForm(next) {
     const amount = parseDecimal(next.amount);
     const rate = parseDecimal(next.commission_rate);
@@ -281,6 +308,9 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
       partner_type: partnerForm.partner_type,
       phone: partnerForm.phone || null,
       email: partnerForm.email || null,
+      default_payment_type: partnerForm.default_payment_type || "percentagem",
+      default_payment_rate: parseDecimal(partnerForm.default_payment_rate),
+      default_payment_value: parseDecimal(partnerForm.default_payment_value),
       notes: partnerForm.notes || null,
       is_active: true,
     });
@@ -310,6 +340,9 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
       .insert({
         name: cleanName,
         partner_type: partnerType,
+        default_payment_type: "percentagem",
+        default_payment_rate: 0,
+        default_payment_value: 0,
         is_active: true,
       })
       .select("id")
@@ -449,8 +482,8 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           <Summary title="Comissão Teórica" value={formatEuro(totals.expected)} />
           <Summary title="Comissão Real" value={formatEuro(totals.received)} />
           <Summary title="Diferença" value={formatEuro(totals.difference)} />
-          <Summary title="A pagar parceiros" value={formatEuro(totals.partnerPending)} />
-          <Summary title="Pago parceiros" value={formatEuro(totals.partnerPaid)} />
+          <Summary title="Comissão parceiros" value={formatEuro(totals.partnerPending)} />
+          <Summary title="Comissões parceiros pagas" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
         </section>
 
@@ -479,6 +512,54 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               <label style={fieldLabel}>Email
                 <input style={input} value={partnerForm.email} onChange={(event) => setPartnerForm({ ...partnerForm, email: event.target.value })} />
               </label>
+
+              <label style={fieldLabel}>Tipo comissão parceiro
+                <select
+                  style={input}
+                  value={partnerForm.default_payment_type}
+                  onChange={(event) =>
+                    setPartnerForm({
+                      ...partnerForm,
+                      default_payment_type: event.target.value,
+                    })
+                  }
+                >
+                  <option value="percentagem">Percentagem sobre valor financiado</option>
+                  <option value="valor fixo">Comissão fixa</option>
+                </select>
+              </label>
+
+              {partnerForm.default_payment_type === "percentagem" ? (
+                <label style={fieldLabel}>% parceiro por defeito
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    value={partnerForm.default_payment_rate}
+                    onChange={(event) =>
+                      setPartnerForm({
+                        ...partnerForm,
+                        default_payment_rate: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: 0,25"
+                  />
+                </label>
+              ) : (
+                <label style={fieldLabel}>Valor fixo por defeito
+                  <input
+                    style={input}
+                    inputMode="decimal"
+                    value={partnerForm.default_payment_value}
+                    onChange={(event) =>
+                      setPartnerForm({
+                        ...partnerForm,
+                        default_payment_value: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: 100"
+                  />
+                </label>
+              )}
 
               <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas
                 <textarea style={textarea} value={partnerForm.notes} onChange={(event) => setPartnerForm({ ...partnerForm, notes: event.target.value })} />
@@ -563,12 +644,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <select
                   style={input}
                   value={dealForm.source_partner_id}
-                  onChange={(event) =>
-                    setDealForm({
-                      ...dealForm,
-                      source_partner_id: event.target.value,
-                    })
-                  }
+                  onChange={(event) => selectSourcePartner(event.target.value)}
                 >
                   <option value="">Sem parceiro de origem</option>
                   {parceiros.map((partner) => (
@@ -614,7 +690,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               </label>
 
               <label style={fieldLabel}>Comissão Real
-                <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} />
+                <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} placeholder="Preenche quando o banco pagar" />
               </label>
 
               <div style={calculationBox}>
@@ -630,18 +706,35 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
               <label style={fieldLabel}>Pagamento parceiro
                 <select style={input} value={dealForm.partner_payment_type} onChange={(event) => setDealForm({ ...dealForm, partner_payment_type: event.target.value })}>
-                  <option value="percentagem">Percentagem da comissão recebida</option>
+                  <option value="percentagem">Percentagem sobre o valor financiado</option>
                   <option value="valor fixo">Valor fixo</option>
                 </select>
               </label>
 
-              <label style={fieldLabel}>% a pagar ao parceiro
+              <label style={fieldLabel}>% parceiro sobre valor financiado
                 <input style={input} inputMode="decimal" value={dealForm.partner_payment_rate} onChange={(event) => setDealForm({ ...dealForm, partner_payment_rate: event.target.value })} />
               </label>
 
-              <label style={fieldLabel}>Valor fixo parceiro
-                <input style={input} inputMode="decimal" value={dealForm.partner_payment_value} onChange={(event) => setDealForm({ ...dealForm, partner_payment_value: event.target.value })} />
-              </label>
+              {dealForm.partner_payment_type === "valor fixo" ? (
+                <label style={fieldLabel}>Comissão fixa parceiro
+                  <input style={input} inputMode="decimal" value={dealForm.partner_payment_value} onChange={(event) => setDealForm({ ...dealForm, partner_payment_value: event.target.value })} />
+                </label>
+              ) : (
+                <div style={calculationBox}>
+                  <strong>Comissão parceiro</strong>
+                  <small>Calculada sobre o valor financiado, salvo comissão fixa.</small>
+                  <span>
+                    {formatEuro(
+                      calculatePartnerPayment(
+                        parseDecimal(dealForm.amount),
+                        dealForm.partner_payment_type,
+                        parseDecimal(dealForm.partner_payment_rate),
+                        parseDecimal(dealForm.partner_payment_value)
+                      )
+                    )}
+                  </span>
+                </div>
+              )}
 
               <label style={fieldLabel}>Estado pagamento parceiro
                 <select style={input} value={dealForm.partner_payment_status} onChange={(event) => setDealForm({ ...dealForm, partner_payment_status: event.target.value })}>
@@ -698,7 +791,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           {filteredDeals.length === 0 ? <p style={muted}>Sem negócios nesta seleção.</p> : (
             <div style={dealsGrid}>
               {filteredDeals.map((deal) => {
-                const partnerDue = calculatePartnerPayment(deal.received_commission, deal.partner_payment_type, deal.partner_payment_rate, deal.partner_payment_value);
+                const partnerDue = calculatePartnerPayment(deal.amount, deal.partner_payment_type, deal.partner_payment_rate, deal.partner_payment_value);
                 const difference = Number(deal.received_commission || 0) - Number(deal.expected_commission || 0);
 
                 return (
@@ -716,7 +809,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                       <Mini title="Comissão Teórica" value={formatEuro(deal.expected_commission)} />
                       <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
                       <Mini title="Diferença" value={formatEuro(difference)} />
-                      <Mini title="A pagar parceiro" value={formatEuro(partnerDue)} />
+                      <Mini title="Comissão parceiro" value={formatEuro(partnerDue)} />
                     </div>
 
                     <div style={infoGrid}>
