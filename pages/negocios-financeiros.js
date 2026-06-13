@@ -88,6 +88,23 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
+function daysBetween(startDate, endDate) {
+  if (!startDate || !endDate) return null;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diff = end.getTime() - start.getTime();
+
+  if (Number.isNaN(diff)) return null;
+
+  return Math.max(Math.round(diff / (1000 * 60 * 60 * 24)), 0);
+}
+
+function formatDays(value) {
+  if (value === null || value === undefined) return "-";
+  return `${value} dias`;
+}
+
 function parseDecimal(value) {
   if (value === "" || value === null || value === undefined) return 0;
   if (typeof value === "number") return value;
@@ -248,6 +265,8 @@ function buildInitialDealForm() {
     expected_commission: "",
     received_commission: "",
     commission_received_at: "",
+    entry_date: "",
+    contract_date: "",
     partner_payment_type: "percentagem",
     partner_payment_rate: "",
     partner_payment_value: "",
@@ -370,7 +389,7 @@ function getPartnerClassification(totalAmount) {
 }
 
 function getDealDate(deal) {
-  return String(deal.commission_received_at || deal.created_at || "").slice(0, 10);
+  return String(deal.contract_date || deal.entry_date || deal.commission_received_at || deal.created_at || "").slice(0, 10);
 }
 
 function dealMatchesTypes(deal, types) {
@@ -381,6 +400,7 @@ function dealMatchesTypes(deal, types) {
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
   const [showDealForm, setShowDealForm] = useState(false);
+  const [editingDealId, setEditingDealId] = useState(null);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
@@ -649,6 +669,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           processCount: 0,
           totalAmount: 0,
           receivedCommission: 0,
+          totalContractDays: 0,
+          contractDaysCount: 0,
           statusMap: {},
         });
       }
@@ -657,6 +679,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       item.processCount += 1;
       item.totalAmount += amount;
       item.receivedCommission += received;
+
+      const contractDays = daysBetween(deal.entry_date, deal.contract_date);
+      if (contractDays !== null) {
+        item.totalContractDays += contractDays;
+        item.contractDaysCount += 1;
+      }
 
       if (!item.statusMap[status]) {
         item.statusMap[status] = { count: 0, amount: 0 };
@@ -784,6 +812,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           campaignCosts: 0,
           contestCosts: 0,
           netResult: 0,
+          totalContractDays: 0,
+          contractDaysCount: 0,
         });
       }
 
@@ -796,6 +826,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
       item.receivedCommission += received;
       item.partnerPayments += partnerPaid;
+
+      const contractDays = daysBetween(deal.entry_date, deal.contract_date);
+      if (contractDays !== null) {
+        item.totalContractDays += contractDays;
+        item.contractDaysCount += 1;
+      }
     });
 
     return [...map.values()]
@@ -1262,6 +1298,49 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     return data?.id || null;
   }
 
+  function openNewDealForm() {
+    setEditingDealId(null);
+    setDealForm(buildInitialDealForm());
+    setShowDealForm(true);
+  }
+
+  function openEditDeal(deal) {
+    setEditingDealId(deal.id);
+    setShowDealForm(true);
+
+    setDealForm({
+      client_id: deal.client_id || "",
+      client_name: deal.client_name || "",
+      client_nif: deal.client_nif || "",
+      client_phone: deal.client_phone || "",
+      deal_type: deal.deal_type || "Crédito Habitação",
+      bank_partner_id: deal.bank_partner_id || "",
+      new_bank_partner_name: "",
+      source_partner_id: deal.source_partner_id || "",
+      new_source_partner_name: "",
+      amount: deal.amount ? String(deal.amount).replace(".", ",") : "",
+      commission_rate: deal.commission_rate ? String(deal.commission_rate).replace(".", ",") : "",
+      expected_commission: deal.expected_commission ? String(deal.expected_commission).replace(".", ",") : "",
+      received_commission: deal.received_commission ? String(deal.received_commission).replace(".", ",") : "",
+      commission_received_at: deal.commission_received_at || "",
+      entry_date: deal.entry_date || "",
+      contract_date: deal.contract_date || "",
+      partner_payment_type: deal.partner_payment_type || "percentagem",
+      partner_payment_rate: deal.partner_payment_rate ? String(deal.partner_payment_rate).replace(".", ",") : "",
+      partner_payment_value: deal.partner_payment_value ? String(deal.partner_payment_value).replace(".", ",") : "",
+      partner_payment_status: deal.partner_payment_status || "pendente",
+      partner_paid_at: deal.partner_paid_at || "",
+      status: deal.status || "LEAD",
+      notes: deal.notes || "",
+    });
+  }
+
+  function cancelDealEdit() {
+    setEditingDealId(null);
+    setDealForm(buildInitialDealForm());
+    setShowDealForm(false);
+  }
+
   async function createDeal(event) {
     event.preventDefault();
     if (!dealForm.client_name.trim()) {
@@ -1298,7 +1377,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       return;
     }
 
-    const { error } = await supabase.from("financial_deals").insert({
+    const payload = {
       client_id: dealForm.client_id || null,
       client_name: dealForm.client_name,
       client_nif: dealForm.client_nif || null,
@@ -1311,6 +1390,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       expected_commission: expectedCommission,
       received_commission: receivedCommission,
       commission_received_at: dealForm.commission_received_at || null,
+      entry_date: dealForm.entry_date || null,
+      contract_date: dealForm.contract_date || null,
       partner_payment_type: dealForm.partner_payment_type,
       partner_payment_rate: parseDecimal(dealForm.partner_payment_rate),
       partner_payment_value: parseDecimal(dealForm.partner_payment_value),
@@ -1318,7 +1399,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       partner_paid_at: dealForm.partner_paid_at || null,
       status: dealForm.status,
       notes: dealForm.notes || null,
-    });
+    };
+
+    const { error } = editingDealId
+      ? await supabase.from("financial_deals").update(payload).eq("id", editingDealId)
+      : await supabase.from("financial_deals").insert(payload);
+
     setSaving(false);
 
     if (error) {
@@ -1378,7 +1464,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           </div>
 
           <div style={headerButtons}>
-            <button style={button} onClick={() => setShowDealForm(!showDealForm)}>+ Novo negócio</button>
+            <button style={button} onClick={openNewDealForm}>+ Novo negócio</button>
             <button
               style={secondaryButton}
               onClick={() => setShowCruzadosRanking(!showCruzadosRanking)}
@@ -1774,6 +1860,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <Mini title="Valor financiado" value={formatEuro(bank.totalAmount)} />
                         <Mini title="Comissão recebida" value={formatEuro(bank.receivedCommission)} />
                         <Mini title="Ticket médio" value={formatEuro(bank.processCount ? bank.totalAmount / bank.processCount : 0)} />
+                        <Mini title="Tempo médio" value={formatDays(bank.contractDaysCount ? Math.round(bank.totalContractDays / bank.contractDaysCount) : null)} />
                       </div>
 
                       <div style={statusMiniGrid}>
@@ -1825,6 +1912,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <Mini title="Custos campanhas" value={formatEuro(partner.campaignCosts)} />
                         <Mini title="Custos concursos" value={formatEuro(partner.contestCosts)} />
                         <Mini title="Resultado líquido" value={formatEuro(partner.netResult)} />
+                        <Mini title="Tempo médio" value={formatDays(partner.contractDaysCount ? Math.round(partner.totalContractDays / partner.contractDaysCount) : null)} />
                       </div>
                     </article>
                   ))}
@@ -2130,7 +2218,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
         {showDealForm && (
           <section style={formCard}>
-            <h2 style={sectionTitle}>Novo negócio financeiro</h2>
+            <h2 style={sectionTitle}>{editingDealId ? "Editar negócio financeiro" : "Novo negócio financeiro"}</h2>
 
             <form style={formGrid} onSubmit={createDeal}>
               <label style={fieldLabel}>Cliente existente
@@ -2235,6 +2323,19 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 </select>
               </label>
 
+              <label style={fieldLabel}>Data entrada
+                <input type="date" style={input} value={dealForm.entry_date} onChange={(event) => setDealForm({ ...dealForm, entry_date: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Data contratação
+                <input type="date" style={input} value={dealForm.contract_date} onChange={(event) => setDealForm({ ...dealForm, contract_date: event.target.value })} />
+              </label>
+
+              <div style={calculationBox}>
+                <strong>Tempo de contratação</strong>
+                <span>{formatDays(daysBetween(dealForm.entry_date, dealForm.contract_date))}</span>
+              </div>
+
               <label style={fieldLabel}>Montante financiado
                 <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
               </label>
@@ -2309,7 +2410,17 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 <textarea style={textarea} value={dealForm.notes} onChange={(event) => setDealForm({ ...dealForm, notes: event.target.value })} />
               </label>
 
-              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar negócio"}</button>
+              <div style={formActions}>
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : editingDealId ? "Guardar alterações" : "Guardar negócio"}
+                </button>
+
+                {editingDealId && (
+                  <button type="button" style={grayButton} onClick={cancelDealEdit}>
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
             </form>
           </section>
         )}
@@ -2351,6 +2462,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               {filteredDeals.map((deal) => {
                 const partnerDue = calculatePartnerPayment(deal.amount, deal.partner_payment_type, deal.partner_payment_rate, deal.partner_payment_value);
                 const difference = Number(deal.received_commission || 0) - Number(deal.expected_commission || 0);
+                const contractDays = daysBetween(deal.entry_date, deal.contract_date);
 
                 return (
                   <article key={deal.id} style={dealCard}>
@@ -2368,6 +2480,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                       <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
                       <Mini title="Diferença" value={formatEuro(difference)} />
                       <Mini title="Comissão parceiro" value={formatEuro(partnerDue)} />
+                      <Mini title="Tempo" value={formatDays(contractDays)} />
                     </div>
 
                     <div style={infoGrid}>
@@ -2376,6 +2489,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                       <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
                       <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
                       <Info label="% Comissão Banco" value={`${Number(deal.commission_rate || 0)}%`} />
+                      <Info label="Data entrada" value={formatDate(deal.entry_date)} />
+                      <Info label="Data contratação" value={formatDate(deal.contract_date)} />
                       <Info label="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
                       <Info label="Estado pagamento parceiro" value={deal.partner_payment_status} />
                       <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
