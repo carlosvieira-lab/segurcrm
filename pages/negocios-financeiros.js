@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -278,8 +278,11 @@ function buildDefaultContestForm() {
     end_date: "2026-12-30",
     minimum_amount: "580000",
     prize_1: "Viagem no valor de 2.500 €",
+    prize_1_amount: "2500",
     prize_2: "Viagem no valor de 2.000 €",
+    prize_2_amount: "2000",
     prize_3: "Viagem no valor de 1.500 €",
+    prize_3_amount: "1500",
     tie_breaker: "Maior processo contratado",
     eligible_deal_types: ["Crédito Habitação", "Crédito Pessoal"],
     report_notes: "Reporte ao dia 1 e dia 15 de cada mês.",
@@ -298,8 +301,17 @@ function buildContestForm(contest) {
       ? String(contest.minimum_amount).replace(".", ",")
       : "",
     prize_1: contest.prize_1 || "",
+    prize_1_amount: contest.prize_1_amount
+      ? String(contest.prize_1_amount).replace(".", ",")
+      : "",
     prize_2: contest.prize_2 || "",
+    prize_2_amount: contest.prize_2_amount
+      ? String(contest.prize_2_amount).replace(".", ",")
+      : "",
     prize_3: contest.prize_3 || "",
+    prize_3_amount: contest.prize_3_amount
+      ? String(contest.prize_3_amount).replace(".", ",")
+      : "",
     tie_breaker: contest.tie_breaker || "",
     eligible_deal_types: Array.isArray(contest.eligible_deal_types)
       ? contest.eligible_deal_types
@@ -316,6 +328,7 @@ function buildDefaultCampaignForm() {
     end_date: "",
     contract_deadline: "",
     objective_amount: "",
+    cost_per_winner: "",
     prize: "",
     eligible_deal_types: ["Crédito Habitação", "Crédito Pessoal"],
     notes: "",
@@ -334,6 +347,9 @@ function buildCampaignForm(campaign) {
     objective_amount: campaign.objective_amount
       ? String(campaign.objective_amount).replace(".", ",")
       : "",
+    cost_per_winner: campaign.cost_per_winner
+      ? String(campaign.cost_per_winner).replace(".", ",")
+      : "",
     prize: campaign.prize || "",
     eligible_deal_types: Array.isArray(campaign.eligible_deal_types)
       ? campaign.eligible_deal_types
@@ -342,6 +358,26 @@ function buildCampaignForm(campaign) {
     is_active: campaign.is_active !== false,
   };
 }
+
+function getPartnerClassification(totalAmount) {
+  const amount = Number(totalAmount || 0);
+
+  if (amount > 750000) return { label: "TOP", color: "#166534", background: "#dcfce7" };
+  if (amount > 400000) return { label: "BOM", color: "#1d4ed8", background: "#dbeafe" };
+  if (amount >= 200000) return { label: "MÉDIO", color: "#92400e", background: "#fef3c7" };
+
+  return { label: "FRACO", color: "#991b1b", background: "#fee2e2" };
+}
+
+function getDealDate(deal) {
+  return String(deal.commission_received_at || deal.created_at || "").slice(0, 10);
+}
+
+function dealMatchesTypes(deal, types) {
+  if (!types || types.length === 0) return true;
+  return types.includes(deal.deal_type);
+}
+
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
   const [showDealForm, setShowDealForm] = useState(false);
@@ -357,6 +393,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     buildContestForm(contests?.[0] || null)
   );
   const [showCampaignsPanel, setShowCampaignsPanel] = useState(false);
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const [showCampaignEditor, setShowCampaignEditor] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns?.[0]?.id || "");
   const [campaignForm, setCampaignForm] = useState(() =>
@@ -595,6 +632,274 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     pending: campaignRanking.filter((item) => !item.achieved && !item.near).length,
   };
 
+  const bankAnalysis = useMemo(() => {
+    const map = new Map();
+
+    deals.forEach((deal) => {
+      const bankName = deal.bank_partner?.name || "Sem banco";
+      const key = deal.bank_partner_id || "sem-banco";
+      const amount = Number(deal.amount || 0);
+      const received = Number(deal.received_commission || 0);
+      const status = deal.status || "SEM ESTADO";
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: bankName,
+          processCount: 0,
+          totalAmount: 0,
+          receivedCommission: 0,
+          statusMap: {},
+        });
+      }
+
+      const item = map.get(key);
+      item.processCount += 1;
+      item.totalAmount += amount;
+      item.receivedCommission += received;
+
+      if (!item.statusMap[status]) {
+        item.statusMap[status] = { count: 0, amount: 0 };
+      }
+
+      item.statusMap[status].count += 1;
+      item.statusMap[status].amount += amount;
+    });
+
+    return [...map.values()].sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [deals]);
+
+  const partnerAnalysis = useMemo(() => {
+    const campaignCostByPartner = {};
+    const contestCostByPartner = {};
+
+    campaigns.forEach((campaign) => {
+      const objective = Number(campaign.objective_amount || 0);
+      const cost = Number(campaign.cost_per_winner || 0);
+      const startDate = campaign.start_date || "";
+      const endDate = campaign.contract_deadline || campaign.end_date || "";
+      const eligibleTypes = Array.isArray(campaign.eligible_deal_types) ? campaign.eligible_deal_types : [];
+
+      const totals = {};
+
+      deals
+        .filter((deal) => {
+          const date = getDealDate(deal);
+
+          return (
+            deal.status === "CONTRATADO" &&
+            deal.source_partner_id &&
+            dealMatchesTypes(deal, eligibleTypes) &&
+            (!startDate || date >= startDate) &&
+            (!endDate || date <= endDate)
+          );
+        })
+        .forEach((deal) => {
+          totals[deal.source_partner_id] =
+            (totals[deal.source_partner_id] || 0) + Number(deal.amount || 0);
+        });
+
+      Object.entries(totals).forEach(([partnerId, total]) => {
+        if (objective > 0 && total >= objective) {
+          campaignCostByPartner[partnerId] = (campaignCostByPartner[partnerId] || 0) + cost;
+        }
+      });
+    });
+
+    contests.forEach((contest) => {
+      const prizeAmounts = [
+        Number(contest.prize_1_amount || 0),
+        Number(contest.prize_2_amount || 0),
+        Number(contest.prize_3_amount || 0),
+      ];
+
+      const startDate = contest.start_date || "";
+      const endDate = contest.end_date || "";
+      const eligibleTypes = Array.isArray(contest.eligible_deal_types) ? contest.eligible_deal_types : [];
+      const map = new Map();
+
+      deals
+        .filter((deal) => {
+          const date = getDealDate(deal);
+
+          return (
+            deal.status === "CONTRATADO" &&
+            deal.source_partner_id &&
+            dealMatchesTypes(deal, eligibleTypes) &&
+            (!startDate || date >= startDate) &&
+            (!endDate || date <= endDate)
+          );
+        })
+        .forEach((deal) => {
+          const partnerId = deal.source_partner_id;
+          const amount = Number(deal.amount || 0);
+
+          if (!map.has(partnerId)) {
+            map.set(partnerId, {
+              partnerId,
+              totalAmount: 0,
+              biggestDeal: 0,
+            });
+          }
+
+          const item = map.get(partnerId);
+          item.totalAmount += amount;
+          item.biggestDeal = Math.max(item.biggestDeal, amount);
+        });
+
+      [...map.values()]
+        .sort((a, b) => {
+          if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
+          return b.biggestDeal - a.biggestDeal;
+        })
+        .slice(0, 3)
+        .forEach((item, index) => {
+          contestCostByPartner[item.partnerId] =
+            (contestCostByPartner[item.partnerId] || 0) + Number(prizeAmounts[index] || 0);
+        });
+    });
+
+    const map = new Map();
+
+    deals.forEach((deal) => {
+      const partnerId = deal.source_partner_id || "sem-parceiro";
+      const partnerName = deal.source_partner?.name || "Sem parceiro";
+      const amount = Number(deal.amount || 0);
+      const received = Number(deal.received_commission || 0);
+      const partnerPaid = calculatePartnerPayment(
+        deal.amount,
+        deal.partner_payment_type,
+        deal.partner_payment_rate,
+        deal.partner_payment_value
+      );
+
+      if (!map.has(partnerId)) {
+        map.set(partnerId, {
+          partnerId,
+          name: partnerName,
+          processCount: 0,
+          contractedAmount: 0,
+          receivedCommission: 0,
+          partnerPayments: 0,
+          campaignCosts: 0,
+          contestCosts: 0,
+          netResult: 0,
+        });
+      }
+
+      const item = map.get(partnerId);
+      item.processCount += 1;
+
+      if (deal.status === "CONTRATADO") {
+        item.contractedAmount += amount;
+      }
+
+      item.receivedCommission += received;
+      item.partnerPayments += partnerPaid;
+    });
+
+    return [...map.values()]
+      .map((item) => {
+        const campaignCosts = Number(campaignCostByPartner[item.partnerId] || 0);
+        const contestCosts = Number(contestCostByPartner[item.partnerId] || 0);
+        const netResult =
+          Number(item.receivedCommission || 0) -
+          Number(item.partnerPayments || 0) -
+          campaignCosts -
+          contestCosts;
+
+        return {
+          ...item,
+          campaignCosts,
+          contestCosts,
+          netResult,
+          classification: getPartnerClassification(item.contractedAmount),
+        };
+      })
+      .sort((a, b) => b.contractedAmount - a.contractedAmount);
+  }, [deals, campaigns, contests]);
+
+  const campaignCostAnalysis = useMemo(() => {
+    return campaigns.map((campaign) => {
+      const objective = Number(campaign.objective_amount || 0);
+      const cost = Number(campaign.cost_per_winner || 0);
+      const startDate = campaign.start_date || "";
+      const endDate = campaign.contract_deadline || campaign.end_date || "";
+      const eligibleTypes = Array.isArray(campaign.eligible_deal_types) ? campaign.eligible_deal_types : [];
+      const map = new Map();
+
+      deals
+        .filter((deal) => {
+          const date = getDealDate(deal);
+
+          return (
+            deal.status === "CONTRATADO" &&
+            deal.source_partner_id &&
+            dealMatchesTypes(deal, eligibleTypes) &&
+            (!startDate || date >= startDate) &&
+            (!endDate || date <= endDate)
+          );
+        })
+        .forEach((deal) => {
+          const partnerId = deal.source_partner_id;
+          const partnerName = deal.source_partner?.name || "Sem parceiro";
+
+          if (!map.has(partnerId)) {
+            map.set(partnerId, { partnerName, totalAmount: 0 });
+          }
+
+          map.get(partnerId).totalAmount += Number(deal.amount || 0);
+        });
+
+      const winners = [...map.values()].filter((item) => objective > 0 && item.totalAmount >= objective);
+
+      return {
+        id: campaign.id,
+        name: campaign.name,
+        objective,
+        costPerWinner: cost,
+        winners,
+        totalCost: winners.length * cost,
+      };
+    });
+  }, [campaigns, deals]);
+
+  const contestCostAnalysis = useMemo(() => {
+    return contests.map((contest) => {
+      const totalCost =
+        Number(contest.prize_1_amount || 0) +
+        Number(contest.prize_2_amount || 0) +
+        Number(contest.prize_3_amount || 0);
+
+      return {
+        id: contest.id,
+        name: contest.name,
+        totalCost,
+        prize_1_amount: Number(contest.prize_1_amount || 0),
+        prize_2_amount: Number(contest.prize_2_amount || 0),
+        prize_3_amount: Number(contest.prize_3_amount || 0),
+      };
+    });
+  }, [contests]);
+
+  const globalAnalysis = useMemo(() => {
+    const totalPartnerPayments = partnerAnalysis.reduce((sum, item) => sum + item.partnerPayments, 0);
+    const totalCampaignCosts = partnerAnalysis.reduce((sum, item) => sum + item.campaignCosts, 0);
+    const totalContestCosts = partnerAnalysis.reduce((sum, item) => sum + item.contestCosts, 0);
+    const totalReceived = deals.reduce((sum, deal) => sum + Number(deal.received_commission || 0), 0);
+    const totalAmount = deals.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+
+    return {
+      processCount: deals.length,
+      totalAmount,
+      totalReceived,
+      totalPartnerPayments,
+      totalCampaignCosts,
+      totalContestCosts,
+      netResult: totalReceived - totalPartnerPayments - totalCampaignCosts - totalContestCosts,
+    };
+  }, [deals, partnerAnalysis]);
+
   function selectContest(contestId) {
     const contest = contests.find((item) => item.id === contestId) || null;
 
@@ -649,8 +954,11 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       end_date: contestForm.end_date || null,
       minimum_amount: parseDecimal(contestForm.minimum_amount),
       prize_1: contestForm.prize_1 || null,
+      prize_1_amount: parseDecimal(contestForm.prize_1_amount),
       prize_2: contestForm.prize_2 || null,
+      prize_2_amount: parseDecimal(contestForm.prize_2_amount),
       prize_3: contestForm.prize_3 || null,
+      prize_3_amount: parseDecimal(contestForm.prize_3_amount),
       tie_breaker: contestForm.tie_breaker || null,
       eligible_deal_types: contestForm.eligible_deal_types || [],
       report_notes: contestForm.report_notes || null,
@@ -700,6 +1008,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       end_date: campaignForm.end_date || null,
       contract_deadline: campaignForm.contract_deadline || null,
       objective_amount: parseDecimal(campaignForm.objective_amount),
+      cost_per_winner: parseDecimal(campaignForm.cost_per_winner),
       prize: campaignForm.prize || null,
       eligible_deal_types: campaignForm.eligible_deal_types || [],
       notes: campaignForm.notes || null,
@@ -1086,6 +1395,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
             <button
               style={secondaryButton}
+              onClick={() => setShowAnalysisPanel(!showAnalysisPanel)}
+            >
+              📊 Análise
+            </button>
+
+            <button
+              style={secondaryButton}
               onClick={() => {
                 resetPartnerForm();
                 setShowPartnerForm(!showPartnerForm);
@@ -1268,12 +1584,24 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                   <input style={input} value={contestForm.prize_1} onChange={(event) => setContestForm({ ...contestForm, prize_1: event.target.value })} />
                 </label>
 
+                <label style={fieldLabel}>Custo 1º lugar
+                  <input style={input} inputMode="decimal" value={contestForm.prize_1_amount} onChange={(event) => setContestForm({ ...contestForm, prize_1_amount: event.target.value })} />
+                </label>
+
                 <label style={fieldLabel}>Prémio 2º lugar
                   <input style={input} value={contestForm.prize_2} onChange={(event) => setContestForm({ ...contestForm, prize_2: event.target.value })} />
                 </label>
 
+                <label style={fieldLabel}>Custo 2º lugar
+                  <input style={input} inputMode="decimal" value={contestForm.prize_2_amount} onChange={(event) => setContestForm({ ...contestForm, prize_2_amount: event.target.value })} />
+                </label>
+
                 <label style={fieldLabel}>Prémio 3º lugar
                   <input style={input} value={contestForm.prize_3} onChange={(event) => setContestForm({ ...contestForm, prize_3: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Custo 3º lugar
+                  <input style={input} inputMode="decimal" value={contestForm.prize_3_amount} onChange={(event) => setContestForm({ ...contestForm, prize_3_amount: event.target.value })} />
                 </label>
 
                 <label style={fieldLabel}>Critério desempate
@@ -1405,6 +1733,163 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           </section>
         )}
 
+        {showAnalysisPanel && (
+          <section style={analysisPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>📊 Análise Financeira</h2>
+                <p style={muted}>
+                  Relatório por banco, por parceiro, campanhas, concursos e resultado líquido.
+                </p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowAnalysisPanel(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <section style={analysisSummaryGrid}>
+              <Summary title="Processos" value={globalAnalysis.processCount} />
+              <Summary title="Valor financiado" value={formatEuro(globalAnalysis.totalAmount)} />
+              <Summary title="Comissão real" value={formatEuro(globalAnalysis.totalReceived)} />
+              <Summary title="Comissões parceiros" value={formatEuro(globalAnalysis.totalPartnerPayments)} />
+              <Summary title="Custos campanhas" value={formatEuro(globalAnalysis.totalCampaignCosts)} />
+              <Summary title="Custos concursos" value={formatEuro(globalAnalysis.totalContestCosts)} />
+              <Summary title="Resultado líquido" value={formatEuro(globalAnalysis.netResult)} />
+            </section>
+
+            <section style={analysisBlock}>
+              <h3>🏦 Ficha relatório por banco</h3>
+
+              {bankAnalysis.length === 0 ? (
+                <p style={muted}>Sem bancos para analisar.</p>
+              ) : (
+                <div style={analysisCardGrid}>
+                  {bankAnalysis.map((bank) => (
+                    <article key={bank.key} style={analysisCard}>
+                      <h4 style={analysisCardTitle}>{bank.name}</h4>
+
+                      <div style={miniGrid}>
+                        <Mini title="Processos" value={bank.processCount} />
+                        <Mini title="Valor financiado" value={formatEuro(bank.totalAmount)} />
+                        <Mini title="Comissão recebida" value={formatEuro(bank.receivedCommission)} />
+                        <Mini title="Ticket médio" value={formatEuro(bank.processCount ? bank.totalAmount / bank.processCount : 0)} />
+                      </div>
+
+                      <div style={statusMiniGrid}>
+                        {dealStatuses.map((status) => {
+                          const statusData = bank.statusMap[status] || { count: 0, amount: 0 };
+
+                          return (
+                            <div key={status} style={statusMiniBox}>
+                              <strong>{status}</strong>
+                              <span>{statusData.count} proc.</span>
+                              <span>{formatEuro(statusData.amount)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={analysisBlock}>
+              <h3>🤝 Ficha relatório por parceiro</h3>
+
+              {partnerAnalysis.length === 0 ? (
+                <p style={muted}>Sem parceiros para analisar.</p>
+              ) : (
+                <div style={analysisCardGrid}>
+                  {partnerAnalysis.map((partner) => (
+                    <article key={partner.partnerId} style={analysisCard}>
+                      <div style={partnerAnalysisHeader}>
+                        <h4 style={analysisCardTitle}>{partner.name}</h4>
+                        <span
+                          style={{
+                            ...classificationBadge,
+                            color: partner.classification.color,
+                            background: partner.classification.background,
+                          }}
+                        >
+                          {partner.classification.label}
+                        </span>
+                      </div>
+
+                      <div style={miniGrid}>
+                        <Mini title="Processos" value={partner.processCount} />
+                        <Mini title="Valor contratado" value={formatEuro(partner.contractedAmount)} />
+                        <Mini title="Comissão real" value={formatEuro(partner.receivedCommission)} />
+                        <Mini title="Comissões pagas" value={formatEuro(partner.partnerPayments)} />
+                        <Mini title="Custos campanhas" value={formatEuro(partner.campaignCosts)} />
+                        <Mini title="Custos concursos" value={formatEuro(partner.contestCosts)} />
+                        <Mini title="Resultado líquido" value={formatEuro(partner.netResult)} />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={analysisBlock}>
+              <h3>🎯 Custos de campanhas</h3>
+
+              {campaignCostAnalysis.length === 0 ? (
+                <p style={muted}>Sem campanhas criadas.</p>
+              ) : (
+                <div style={analysisTable}>
+                  <div style={analysisTableHeader}>
+                    <span>Campanha</span>
+                    <span>Objetivo</span>
+                    <span>Premiados</span>
+                    <span>Custo por premiado</span>
+                    <span>Custo total</span>
+                  </div>
+
+                  {campaignCostAnalysis.map((campaign) => (
+                    <div key={campaign.id} style={analysisTableRow}>
+                      <strong>{campaign.name}</strong>
+                      <span>{formatEuro(campaign.objective)}</span>
+                      <span>{campaign.winners.length}</span>
+                      <span>{formatEuro(campaign.costPerWinner)}</span>
+                      <strong>{formatEuro(campaign.totalCost)}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={analysisBlock}>
+              <h3>🏆 Custos de concursos</h3>
+
+              {contestCostAnalysis.length === 0 ? (
+                <p style={muted}>Sem concursos criados.</p>
+              ) : (
+                <div style={analysisTable}>
+                  <div style={analysisTableHeader}>
+                    <span>Concurso</span>
+                    <span>1º lugar</span>
+                    <span>2º lugar</span>
+                    <span>3º lugar</span>
+                    <span>Custo total</span>
+                  </div>
+
+                  {contestCostAnalysis.map((contest) => (
+                    <div key={contest.id} style={analysisTableRow}>
+                      <strong>{contest.name}</strong>
+                      <span>{formatEuro(contest.prize_1_amount)}</span>
+                      <span>{formatEuro(contest.prize_2_amount)}</span>
+                      <span>{formatEuro(contest.prize_3_amount)}</span>
+                      <strong>{formatEuro(contest.totalCost)}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </section>
+        )}
+
         {showCampaignsPanel && (
           <section style={campaignPanel}>
             <div style={compactPanelHeader}>
@@ -1466,6 +1951,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
                 <label style={fieldLabel}>Objetivo por parceiro
                   <input style={input} inputMode="decimal" value={campaignForm.objective_amount} onChange={(event) => setCampaignForm({ ...campaignForm, objective_amount: event.target.value })} />
+                </label>
+
+                <label style={fieldLabel}>Custo por premiado
+                  <input style={input} inputMode="decimal" value={campaignForm.cost_per_winner} onChange={(event) => setCampaignForm({ ...campaignForm, cost_per_winner: event.target.value })} />
                 </label>
 
                 <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Prémio
@@ -2009,3 +2498,17 @@ const campaignSummaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto
 const campaignRankingHeader = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1.2fr 0.8fr 1fr 1fr", gap: 10, background: "#713f12", color: "white", padding: "10px 12px", borderRadius: 10, fontWeight: "bold", minWidth: 850 };
 const campaignRankingRow = { display: "grid", gridTemplateColumns: "2fr 1.2fr 1.2fr 0.8fr 1fr 1fr", gap: 10, background: "#fffbeb", border: "1px solid #fde68a", padding: "10px 12px", borderRadius: 10, alignItems: "center", minWidth: 850 };
 const nearBadge = { background: "#fef3c7", color: "#92400e", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
+
+const analysisPanel = { background: "#f8fafc", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(15,23,42,0.16)", border: "1px solid #cbd5e1" };
+const analysisSummaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 18 };
+const analysisBlock = { background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16, marginBottom: 16 };
+const analysisCardGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 14 };
+const analysisCard = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 14 };
+const analysisCardTitle = { margin: "0 0 12px 0", fontSize: 20 };
+const statusMiniGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 12 };
+const statusMiniBox = { background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 10, display: "grid", gap: 4, fontSize: 12 };
+const partnerAnalysisHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 };
+const classificationBadge = { borderRadius: 999, padding: "7px 10px", fontWeight: "bold", fontSize: 12 };
+const analysisTable = { display: "grid", gap: 6, overflowX: "auto" };
+const analysisTableHeader = { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, background: "#0f172a", color: "white", padding: "10px 12px", borderRadius: 10, fontWeight: "bold", minWidth: 800 };
+const analysisTableRow = { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "10px 12px", borderRadius: 10, minWidth: 800 };
