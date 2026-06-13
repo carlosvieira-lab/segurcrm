@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -160,13 +160,15 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
+  const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [paymentFilter, setPaymentFilter] = useState("todos");
   const [saving, setSaving] = useState(false);
 
-  const bancos = partners.filter((p) => p.partner_type === "Banco");
-  const parceiros = partners.filter((p) => p.partner_type !== "Banco");
+  const activePartners = partners.filter((p) => p.is_active !== false);
+  const bancos = activePartners.filter((p) => p.partner_type === "Banco");
+  const parceiros = activePartners.filter((p) => p.partner_type !== "Banco");
 
   const filteredDeals = deals.filter((deal) => {
     const text = normalizeText(`
@@ -315,6 +317,91 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
       is_active: true,
     });
     setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  function openEditPartner(partner) {
+    setEditingPartnerId(partner.id);
+    setShowPartnerForm(true);
+    setPartnerForm({
+      name: partner.name || "",
+      partner_type: partner.partner_type || "Banco",
+      phone: partner.phone || "",
+      email: partner.email || "",
+      default_payment_type: partner.default_payment_type || "percentagem",
+      default_payment_rate: partner.default_payment_rate
+        ? String(partner.default_payment_rate).replace(".", ",")
+        : "",
+      default_payment_value: partner.default_payment_value
+        ? String(partner.default_payment_value).replace(".", ",")
+        : "",
+      notes: partner.notes || "",
+    });
+  }
+
+  function resetPartnerForm() {
+    setEditingPartnerId(null);
+    setPartnerForm(buildInitialPartnerForm());
+  }
+
+  async function savePartner(event) {
+    event.preventDefault();
+
+    if (!partnerForm.name.trim()) {
+      alert("Preenche o nome do banco ou parceiro.");
+      return;
+    }
+
+    if (!editingPartnerId) {
+      await createPartner(event);
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("financial_partners")
+      .update({
+        name: partnerForm.name.trim(),
+        partner_type: partnerForm.partner_type,
+        phone: partnerForm.phone || null,
+        email: partnerForm.email || null,
+        default_payment_type: partnerForm.default_payment_type || "percentagem",
+        default_payment_rate: parseDecimal(partnerForm.default_payment_rate),
+        default_payment_value: parseDecimal(partnerForm.default_payment_value),
+        notes: partnerForm.notes || null,
+      })
+      .eq("id", editingPartnerId);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function togglePartnerActive(partner) {
+    const nextActive = partner.is_active === false;
+    const message = nextActive
+      ? "Reativar este banco/parceiro?"
+      : "Anular este banco/parceiro? Ele deixa de aparecer nos dropdowns, mas o histórico mantém-se.";
+
+    const ok = window.confirm(message);
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("financial_partners")
+      .update({ is_active: nextActive })
+      .eq("id", partner.id);
 
     if (error) {
       alert(error.message);
@@ -473,7 +560,15 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
           <div style={headerButtons}>
             <button style={button} onClick={() => setShowDealForm(!showDealForm)}>+ Novo negócio</button>
-            <button style={secondaryButton} onClick={() => setShowPartnerForm(!showPartnerForm)}>+ Adicionar banco/parceiro</button>
+            <button
+              style={secondaryButton}
+              onClick={() => {
+                resetPartnerForm();
+                setShowPartnerForm(!showPartnerForm);
+              }}
+            >
+              + Adicionar banco/parceiro
+            </button>
           </div>
         </header>
 
@@ -489,9 +584,11 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
         {showPartnerForm && (
           <section style={formCard}>
-            <h2 style={sectionTitle}>Adicionar banco ou parceiro</h2>
+            <h2 style={sectionTitle}>
+              {editingPartnerId ? "Editar banco ou parceiro" : "Adicionar banco ou parceiro"}
+            </h2>
 
-            <form style={formGrid} onSubmit={createPartner}>
+            <form style={formGrid} onSubmit={savePartner}>
               <label style={fieldLabel}>Nome
                 <input style={input} value={partnerForm.name} onChange={(event) => setPartnerForm({ ...partnerForm, name: event.target.value })} placeholder="Ex: NB Sintra, NB Carcavelos, Consolida..." />
               </label>
@@ -565,10 +662,67 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <textarea style={textarea} value={partnerForm.notes} onChange={(event) => setPartnerForm({ ...partnerForm, notes: event.target.value })} />
               </label>
 
-              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar"}</button>
+              <div style={formActions}>
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : editingPartnerId ? "Guardar alterações" : "Guardar"}
+                </button>
+
+                {editingPartnerId && (
+                  <button type="button" style={grayButton} onClick={resetPartnerForm}>
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
             </form>
           </section>
         )}
+
+        <section style={panel}>
+          <h2 style={sectionTitle}>Bancos e parceiros</h2>
+
+          {partners.length === 0 ? (
+            <p style={muted}>Ainda não existem bancos ou parceiros criados.</p>
+          ) : (
+            <div style={partnerManagementGrid}>
+              {partners.map((partner) => (
+                <div
+                  key={partner.id}
+                  style={{
+                    ...partnerManagementCard,
+                    ...(partner.is_active === false ? inactivePartnerCard : {}),
+                  }}
+                >
+                  <div>
+                    <strong>{partner.name}</strong>
+                    <p style={muted}>
+                      {partner.partner_type || "-"} · {partner.is_active === false ? "Anulado" : "Ativo"}
+                    </p>
+                    <p style={smallMuted}>
+                      Comissão:{" "}
+                      {partner.default_payment_type === "valor fixo"
+                        ? `${formatEuro(partner.default_payment_value)} fixa`
+                        : `${Number(partner.default_payment_rate || 0)}% sobre valor financiado`}
+                    </p>
+                  </div>
+
+                  <div style={partnerManagementActions}>
+                    <button type="button" style={secondaryButton} onClick={() => openEditPartner(partner)}>
+                      Editar
+                    </button>
+
+                    <button
+                      type="button"
+                      style={partner.is_active === false ? paidButton : grayButton}
+                      onClick={() => togglePartnerActive(partner)}
+                    >
+                      {partner.is_active === false ? "Reativar" : "Anular"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {showDealForm && (
           <section style={formCard}>
@@ -870,6 +1024,7 @@ const summaryValue = { color: "#047857", fontSize: 24 };
 const formCard = { background: "#f0fdf4", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const sectionTitle = { marginTop: 0 };
 const formGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 };
+const formActions = { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" };
 const fieldLabel = { display: "flex", flexDirection: "column", gap: 6, color: "#374151", fontWeight: "bold", fontSize: 13 };
 const input = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "#f0fdf4" };
 const readOnlyInput = { ...input, background: "#dcfce7", fontWeight: "bold" };
@@ -899,3 +1054,10 @@ const actionRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
 const clientButton = { background: "#0f766e", color: "white", padding: "12px 16px", borderRadius: 10, textDecoration: "none", fontWeight: "bold" };
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
+
+const partnerManagementGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 };
+const partnerManagementCard = { background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 14, padding: 14, display: "grid", gap: 12 };
+const inactivePartnerCard = { opacity: 0.55, background: "#f3f4f6", border: "1px solid #d1d5db" };
+const partnerManagementActions = { display: "flex", gap: 8, flexWrap: "wrap" };
+
+ 
