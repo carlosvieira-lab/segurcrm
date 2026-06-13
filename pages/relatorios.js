@@ -559,7 +559,7 @@ function exportCsv(filename, header, rows) {
 
 export default function Relatorios({ clients, policies, opportunities }) {
   const [selectedReport, setSelectedReport] = useState("topClientesPremio");
-  const [generaliView, setGeneraliView] = useState("porTrabalhar");
+  const [generaliView, setGeneraliView] = useState("pendentes");
   const [workedGeneraliClients, setWorkedGeneraliClients] = useState(() => {
     const initial = new Set();
 
@@ -612,8 +612,12 @@ export default function Relatorios({ clients, policies, opportunities }) {
   }));
 
   const generaliClientsFiltered = generaliClientsWithWorkState.filter((client) => {
-    if (generaliView === "porTrabalhar") {
-      return !client.hasOpportunity && !client.isWorked;
+    if (generaliView === "pendentes") {
+      return !client.isWorked;
+    }
+
+    if (generaliView === "trabalhados") {
+      return client.isWorked;
     }
 
     if (generaliView === "semOportunidade") {
@@ -624,10 +628,6 @@ export default function Relatorios({ clients, policies, opportunities }) {
       return client.hasOpportunity;
     }
 
-    if (generaliView === "trabalhados") {
-      return client.isWorked;
-    }
-
     return true;
   });
 
@@ -635,7 +635,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
     clients: generaliClientsWithWorkState.length,
     withoutOpportunity: generaliClientsWithWorkState.filter((client) => !client.hasOpportunity).length,
     withOpportunity: generaliClientsWithWorkState.filter((client) => client.hasOpportunity).length,
-    pending: generaliClientsWithWorkState.filter((client) => !client.hasOpportunity && !client.isWorked).length,
+    pending: generaliClientsWithWorkState.filter((client) => !client.isWorked).length,
     worked: generaliClientsWithWorkState.filter((client) => client.isWorked).length,
     policies: generaliClientsWithWorkState.reduce((sum, client) => sum + client.policies, 0),
     premium: generaliClientsWithWorkState.reduce((sum, client) => sum + Number(client.premium || 0), 0),
@@ -1301,7 +1301,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
               </div>
 
               <div style={summaryBox}>
-                <span style={summaryLabel}>Por trabalhar</span>
+                <span style={summaryLabel}>Pendentes</span>
                 <strong style={summaryValue}>{generaliTotals.pending}</strong>
               </div>
 
@@ -1331,11 +1331,22 @@ export default function Relatorios({ clients, policies, opportunities }) {
                 type="button"
                 style={{
                   ...filterButton,
-                  ...(generaliView === "porTrabalhar" ? activeFilterButton : {}),
+                  ...(generaliView === "pendentes" ? activeFilterButton : {}),
                 }}
-                onClick={() => setGeneraliView("porTrabalhar")}
+                onClick={() => setGeneraliView("pendentes")}
               >
-                Por trabalhar
+                Pendentes
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "trabalhados" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("trabalhados")}
+              >
+                Trabalhados
               </button>
 
               <button
@@ -1364,17 +1375,6 @@ export default function Relatorios({ clients, policies, opportunities }) {
                 type="button"
                 style={{
                   ...filterButton,
-                  ...(generaliView === "trabalhados" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("trabalhados")}
-              >
-                Trabalhados
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
                   ...(generaliView === "todos" ? activeFilterButton : {}),
                 }}
                 onClick={() => setGeneraliView("todos")}
@@ -1384,7 +1384,8 @@ export default function Relatorios({ clients, policies, opportunities }) {
             </div>
 
             <p style={muted}>
-              A vista <strong>Por trabalhar</strong> mostra apenas clientes Generali sem oportunidade criada e ainda não marcados como trabalhados.
+              A vista <strong>Pendentes</strong> mostra os clientes Generali que ainda não foram marcados como trabalhados. 
+              Quando crias oportunidade ou clicas em trabalhado, deixam de aparecer nesta lista.
             </p>
 
             {generaliClientsFiltered.length === 0 ? (
@@ -1432,7 +1433,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
                       </span>
 
                       <span style={client.isWorked ? badgeWorked : badgePending}>
-                        {client.isWorked ? "TRABALHADO" : "POR TRABALHAR"}
+                        {client.isWorked ? "TRABALHADO" : "PENDENTE"}
                       </span>
 
                       <div style={generaliActions}>
@@ -1691,7 +1692,7 @@ const reportOptions = [
   {
     value: "generaliClientes",
     label: "Generali - Clientes para oportunidades",
-    description: "Clientes Generali por trabalhar, sem oportunidade, trabalhados ou todos.",
+    description: "Clientes Generali com botões para abrir ficha, criar oportunidade e WhatsApp.",
   },
   {
     value: "clientesAte40",
