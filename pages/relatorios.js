@@ -559,8 +559,7 @@ function exportCsv(filename, header, rows) {
 
 export default function Relatorios({ clients, policies, opportunities }) {
   const [selectedReport, setSelectedReport] = useState("topClientesPremio");
-  const [showOnlyGeneraliWithoutOpportunity, setShowOnlyGeneraliWithoutOpportunity] = useState(true);
-  const [showOnlyGeneraliPending, setShowOnlyGeneraliPending] = useState(true);
+  const [generaliView, setGeneraliView] = useState("porTrabalhar");
   const [workedGeneraliClients, setWorkedGeneraliClients] = useState(() => {
     const initial = new Set();
 
@@ -613,8 +612,21 @@ export default function Relatorios({ clients, policies, opportunities }) {
   }));
 
   const generaliClientsFiltered = generaliClientsWithWorkState.filter((client) => {
-    if (showOnlyGeneraliWithoutOpportunity && client.hasOpportunity) return false;
-    if (showOnlyGeneraliPending && client.isWorked) return false;
+    if (generaliView === "porTrabalhar") {
+      return !client.hasOpportunity && !client.isWorked;
+    }
+
+    if (generaliView === "semOportunidade") {
+      return !client.hasOpportunity;
+    }
+
+    if (generaliView === "comOportunidade") {
+      return client.hasOpportunity;
+    }
+
+    if (generaliView === "trabalhados") {
+      return client.isWorked;
+    }
 
     return true;
   });
@@ -623,7 +635,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
     clients: generaliClientsWithWorkState.length,
     withoutOpportunity: generaliClientsWithWorkState.filter((client) => !client.hasOpportunity).length,
     withOpportunity: generaliClientsWithWorkState.filter((client) => client.hasOpportunity).length,
-    pending: generaliClientsWithWorkState.filter((client) => !client.isWorked).length,
+    pending: generaliClientsWithWorkState.filter((client) => !client.hasOpportunity && !client.isWorked).length,
     worked: generaliClientsWithWorkState.filter((client) => client.isWorked).length,
     policies: generaliClientsWithWorkState.reduce((sum, client) => sum + client.policies, 0),
     premium: generaliClientsWithWorkState.reduce((sum, client) => sum + Number(client.premium || 0), 0),
@@ -1289,7 +1301,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
               </div>
 
               <div style={summaryBox}>
-                <span style={summaryLabel}>Pendentes</span>
+                <span style={summaryLabel}>Por trabalhar</span>
                 <strong style={summaryValue}>{generaliTotals.pending}</strong>
               </div>
 
@@ -1315,28 +1327,65 @@ export default function Relatorios({ clients, policies, opportunities }) {
             </div>
 
             <div style={filterRow}>
-              <label style={filterCheck}>
-                <input
-                  type="checkbox"
-                  checked={showOnlyGeneraliWithoutOpportunity}
-                  onChange={(event) =>
-                    setShowOnlyGeneraliWithoutOpportunity(event.target.checked)
-                  }
-                />
-                Mostrar apenas clientes sem oportunidade
-              </label>
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "porTrabalhar" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("porTrabalhar")}
+              >
+                Por trabalhar
+              </button>
 
-              <label style={filterCheck}>
-                <input
-                  type="checkbox"
-                  checked={showOnlyGeneraliPending}
-                  onChange={(event) =>
-                    setShowOnlyGeneraliPending(event.target.checked)
-                  }
-                />
-                Mostrar apenas pendentes
-              </label>
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "semOportunidade" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("semOportunidade")}
+              >
+                Sem oportunidade
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "comOportunidade" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("comOportunidade")}
+              >
+                Com oportunidade
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "trabalhados" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("trabalhados")}
+              >
+                Trabalhados
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...filterButton,
+                  ...(generaliView === "todos" ? activeFilterButton : {}),
+                }}
+                onClick={() => setGeneraliView("todos")}
+              >
+                Todos
+              </button>
             </div>
+
+            <p style={muted}>
+              A vista <strong>Por trabalhar</strong> mostra apenas clientes Generali sem oportunidade criada e ainda não marcados como trabalhados.
+            </p>
 
             {generaliClientsFiltered.length === 0 ? (
               <p style={muted}>
@@ -1383,7 +1432,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
                       </span>
 
                       <span style={client.isWorked ? badgeWorked : badgePending}>
-                        {client.isWorked ? "TRABALHADO" : "PENDENTE"}
+                        {client.isWorked ? "TRABALHADO" : "POR TRABALHAR"}
                       </span>
 
                       <div style={generaliActions}>
@@ -1642,7 +1691,7 @@ const reportOptions = [
   {
     value: "generaliClientes",
     label: "Generali - Clientes para oportunidades",
-    description: "Clientes Generali com botões para abrir ficha, criar oportunidade e WhatsApp.",
+    description: "Clientes Generali por trabalhar, sem oportunidade, trabalhados ou todos.",
   },
   {
     value: "clientesAte40",
@@ -1938,6 +1987,22 @@ const filterCheck = {
   borderRadius: 12,
   color: "#374151",
   fontWeight: "bold",
+};
+
+const filterButton = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  padding: "11px 14px",
+  borderRadius: 12,
+  color: "#374151",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const activeFilterButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "1px solid #2563eb",
 };
 
 const tableHeaderGenerali = {
