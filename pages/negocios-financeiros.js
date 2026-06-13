@@ -162,6 +162,9 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [paymentFilter, setPaymentFilter] = useState("todos");
   const [saving, setSaving] = useState(false);
 
+  const bancos = partners.filter((p) => p.partner_type === "Banco");
+  const parceiros = partners.filter((p) => p.partner_type === "Parceiro");
+
   const filteredDeals = deals.filter((deal) => {
     const text = normalizeText(`
       ${deal.client_name || ""}
@@ -409,7 +412,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   }
 
   async function markCommissionReceived(deal) {
-    const value = prompt("Comissão efetivamente recebida", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
+    const value = prompt("Comissão Real", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
     if (value === null) return;
 
     await updateDeal(deal, {
@@ -439,8 +442,8 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
         <section style={summaryGrid}>
           <Summary title="Montante financiado" value={formatEuro(totals.amount)} />
-          <Summary title="Comissão estimada" value={formatEuro(totals.expected)} />
-          <Summary title="Comissão efetivamente recebida" value={formatEuro(totals.received)} />
+          <Summary title="Comissão Teórica" value={formatEuro(totals.expected)} />
+          <Summary title="Comissão Real" value={formatEuro(totals.received)} />
           <Summary title="A pagar parceiros" value={formatEuro(totals.partnerPending)} />
           <Summary title="Pago parceiros" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
@@ -526,10 +529,10 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                   }
                 >
                   <option value="">-</option>
-                  {partners.map((partner) => (
+                  {bancos.map((partner) => (
                     <option key={partner.id} value={partner.id}>{partner.name}</option>
                   ))}
-                  <option value="__novo_banco__">+ Adicionar novo banco/destino</option>
+                  <option value="__novo_banco__">+ Adicionar novo banco</option>
                 </select>
               </label>
 
@@ -563,7 +566,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                   }
                 >
                   <option value="">Sem parceiro de origem</option>
-                  {partners.map((partner) => (
+                  {parceiros.map((partner) => (
                     <option key={partner.id} value={partner.id}>{partner.name}</option>
                   ))}
                   <option value="__novo_parceiro__">+ Adicionar novo parceiro</option>
@@ -597,11 +600,11 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
               </label>
 
-              <label style={fieldLabel}>% Comissão efetivamente recebida
+              <label style={fieldLabel}>% Comissão Banco
                 <input style={input} inputMode="decimal" value={dealForm.commission_rate} onChange={(event) => updateDealForm({ ...dealForm, commission_rate: event.target.value })} placeholder="Ex: 1,25" />
               </label>
 
-              <label style={fieldLabel}>Comissão estimada
+              <label style={fieldLabel}>Comissão Teórica
                 <input style={input} inputMode="decimal" value={dealForm.expected_commission} onChange={(event) => setDealForm({ ...dealForm, expected_commission: event.target.value })} />
               </label>
 
@@ -747,7 +750,7 @@ function Info({ label, value }) {
   return <div style={infoBox}><span style={summaryLabel}>{label}</span><strong>{value}</strong></div>;
 }
 
-const page = { display: "flex", minHeight: "100vh", background: "#f3f4f6", fontFamily: "Arial, sans-serif" };
+const page = { display: "flex", minHeight: "100vh", background: "#dcfce7", fontFamily: "Arial, sans-serif" };
 const main = { flex: 1, padding: 40 };
 const header = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, marginBottom: 28 };
 const headerButtons = { display: "flex", gap: 10, flexWrap: "wrap" };
