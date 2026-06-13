@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -122,7 +122,9 @@ function buildInitialDealForm() {
     client_phone: "",
     deal_type: "Crédito Habitação",
     bank_partner_id: "",
+    new_bank_partner_name: "",
     source_partner_id: "",
+    new_source_partner_name: "",
     amount: "",
     commission_rate: "",
     expected_commission: "",
@@ -283,6 +285,35 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     window.location.reload();
   }
 
+  async function createPartnerQuick(name, partnerType) {
+    const cleanName = String(name || "").trim();
+
+    if (!cleanName) return null;
+
+    const existing = partners.find(
+      (partner) => normalizeText(partner.name) === normalizeText(cleanName)
+    );
+
+    if (existing) return existing.id;
+
+    const { data, error } = await supabase
+      .from("financial_partners")
+      .insert({
+        name: cleanName,
+        partner_type: partnerType,
+        is_active: true,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+
+    return data?.id || null;
+  }
+
   async function createDeal(event) {
     event.preventDefault();
     if (!dealForm.client_name.trim()) {
@@ -296,14 +327,37 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
     const receivedCommission = parseDecimal(dealForm.received_commission);
 
     setSaving(true);
+
+    const finalBankPartnerId =
+      dealForm.bank_partner_id === "__novo_banco__"
+        ? await createPartnerQuick(dealForm.new_bank_partner_name, "Banco")
+        : dealForm.bank_partner_id || null;
+
+    const finalSourcePartnerId =
+      dealForm.source_partner_id === "__novo_parceiro__"
+        ? await createPartnerQuick(dealForm.new_source_partner_name, "Parceiro")
+        : dealForm.source_partner_id || null;
+
+    if (dealForm.bank_partner_id === "__novo_banco__" && !finalBankPartnerId) {
+      setSaving(false);
+      alert("Indica o nome do novo banco/destino.");
+      return;
+    }
+
+    if (dealForm.source_partner_id === "__novo_parceiro__" && !finalSourcePartnerId) {
+      setSaving(false);
+      alert("Indica o nome do novo parceiro de origem.");
+      return;
+    }
+
     const { error } = await supabase.from("financial_deals").insert({
       client_id: dealForm.client_id || null,
       client_name: dealForm.client_name,
       client_nif: dealForm.client_nif || null,
       client_phone: dealForm.client_phone || null,
       deal_type: dealForm.deal_type,
-      bank_partner_id: dealForm.bank_partner_id || null,
-      source_partner_id: dealForm.source_partner_id || null,
+      bank_partner_id: finalBankPartnerId,
+      source_partner_id: finalSourcePartnerId,
       amount,
       commission_rate: commissionRate,
       expected_commission: expectedCommission,
@@ -371,7 +425,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           <div>
             <h1 style={title}>Negócios Financeiros</h1>
             <p style={subtitle}>
-              Crédito habitação, crédito pessoal, consolidação, aberturas de conta, parceiros, bancos e pagamentos a parceiros.
+              Crédito habitação, crédito pessoal, consolidação, aberturas de conta, parceiros, bancos, montantes financiados, percentagens de comissão e pagamentos a parceiros.
             </p>
           </div>
 
@@ -457,19 +511,79 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 </select>
               </label>
 
-              <label style={fieldLabel}>Banco / destino
-                <select style={input} value={dealForm.bank_partner_id} onChange={(event) => setDealForm({ ...dealForm, bank_partner_id: event.target.value })}>
+              <label style={fieldLabel}>
+                Banco / destino
+                <select
+                  style={input}
+                  value={dealForm.bank_partner_id}
+                  onChange={(event) =>
+                    setDealForm({
+                      ...dealForm,
+                      bank_partner_id: event.target.value,
+                    })
+                  }
+                >
                   <option value="">-</option>
-                  {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}
+                  {partners.map((partner) => (
+                    <option key={partner.id} value={partner.id}>{partner.name}</option>
+                  ))}
+                  <option value="__novo_banco__">+ Adicionar novo banco/destino</option>
                 </select>
               </label>
 
-              <label style={fieldLabel}>Parceiro origem
-                <select style={input} value={dealForm.source_partner_id} onChange={(event) => setDealForm({ ...dealForm, source_partner_id: event.target.value })}>
+              {dealForm.bank_partner_id === "__novo_banco__" && (
+                <label style={fieldLabel}>
+                  Novo banco/destino
+                  <input
+                    style={input}
+                    value={dealForm.new_bank_partner_name}
+                    onChange={(event) =>
+                      setDealForm({
+                        ...dealForm,
+                        new_bank_partner_name: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: NB Oeiras, Santander Cascais..."
+                  />
+                </label>
+              )}
+
+              <label style={fieldLabel}>
+                Parceiro origem
+                <select
+                  style={input}
+                  value={dealForm.source_partner_id}
+                  onChange={(event) =>
+                    setDealForm({
+                      ...dealForm,
+                      source_partner_id: event.target.value,
+                    })
+                  }
+                >
                   <option value="">Sem parceiro</option>
-                  {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}
+                  {partners.map((partner) => (
+                    <option key={partner.id} value={partner.id}>{partner.name}</option>
+                  ))}
+                  <option value="__novo_parceiro__">+ Adicionar novo parceiro</option>
                 </select>
               </label>
+
+              {dealForm.source_partner_id === "__novo_parceiro__" && (
+                <label style={fieldLabel}>
+                  Novo parceiro origem
+                  <input
+                    style={input}
+                    value={dealForm.new_source_partner_name}
+                    onChange={(event) =>
+                      setDealForm({
+                        ...dealForm,
+                        new_source_partner_name: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: parceiro imobiliário, contabilista..."
+                  />
+                </label>
+              )}
 
               <label style={fieldLabel}>Estado
                 <select style={input} value={dealForm.status} onChange={(event) => setDealForm({ ...dealForm, status: event.target.value })}>
@@ -481,7 +595,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
               </label>
 
-              <label style={fieldLabel}>% Comissão
+              <label style={fieldLabel}>% Comissão recebida
                 <input style={input} inputMode="decimal" value={dealForm.commission_rate} onChange={(event) => updateDealForm({ ...dealForm, commission_rate: event.target.value })} placeholder="Ex: 1,25" />
               </label>
 
@@ -504,7 +618,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 </select>
               </label>
 
-              <label style={fieldLabel}>% parceiro
+              <label style={fieldLabel}>% a pagar ao parceiro
                 <input style={input} inputMode="decimal" value={dealForm.partner_payment_rate} onChange={(event) => setDealForm({ ...dealForm, partner_payment_rate: event.target.value })} />
               </label>
 
