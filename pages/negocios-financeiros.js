@@ -434,6 +434,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   const [campaignForm, setCampaignForm] = useState(() =>
     buildCampaignForm(campaigns?.[0] || null)
   );
+  const [bankReportStart, setBankReportStart] = useState("");
+  const [bankReportEnd, setBankReportEnd] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [paymentFilter, setPaymentFilter] = useState("todos");
@@ -1131,6 +1133,180 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     setCampaignForm(buildDefaultCampaignForm());
     setShowCampaignEditor(true);
     setShowCampaignsPanel(true);
+  }
+
+  function setBankReportPeriod(period) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    if (period === "year") {
+      setBankReportStart(`${year}-01-01`);
+      setBankReportEnd(`${year}-12-31`);
+      return;
+    }
+
+    if (period === "month") {
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0);
+
+      setBankReportStart(start.toISOString().slice(0, 10));
+      setBankReportEnd(end.toISOString().slice(0, 10));
+      return;
+    }
+
+    if (period === "quarter") {
+      const quarterStartMonth = Math.floor(month / 3) * 3;
+      const start = new Date(year, quarterStartMonth, 1);
+      const end = new Date(year, quarterStartMonth + 3, 0);
+
+      setBankReportStart(start.toISOString().slice(0, 10));
+      setBankReportEnd(end.toISOString().slice(0, 10));
+    }
+  }
+
+  function generateBankReport(bank) {
+    const startDate = bankReportStart || "1900-01-01";
+    const endDate = bankReportEnd || "2999-12-31";
+
+    const bankDeals = deals.filter((deal) => {
+      const bankKey = deal.bank_partner_id || "sem-banco";
+      const date = getDealDate(deal);
+
+      return bankKey === bank.key && (!date || (date >= startDate && date <= endDate));
+    });
+
+    const totalProcesses = bankDeals.length;
+    const totalAmount = bankDeals.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+    const ticket = totalProcesses ? totalAmount / totalProcesses : 0;
+    const contractedDeals = bankDeals.filter((deal) => deal.status === "CONTRATADO");
+    const contractedAmount = contractedDeals.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+    const pipelineAmount = bankDeals
+      .filter((deal) => deal.status !== "CONTRATADO" && deal.status !== "RECUSADO")
+      .reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+    const conversionRate = totalProcesses ? (contractedDeals.length / totalProcesses) * 100 : 0;
+
+    const statusRows = dealStatuses.map((status) => {
+      const items = bankDeals.filter((deal) => deal.status === status);
+      const amount = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+
+      return { status, count: items.length, amount };
+    });
+
+    const times = bankDeals
+      .map((deal) => daysBetween(deal.entry_date, deal.contract_date))
+      .filter((value) => value !== null);
+
+    const avgTime = times.length
+      ? Math.round(times.reduce((sum, value) => sum + value, 0) / times.length)
+      : null;
+    const fastest = times.length ? Math.min(...times) : null;
+    const slowest = times.length ? Math.max(...times) : null;
+
+    const monthlyMap = {};
+    bankDeals.forEach((deal) => {
+      const date = getDealDate(deal);
+      const month = date ? date.slice(0, 7) : "Sem data";
+
+      monthlyMap[month] = (monthlyMap[month] || 0) + Number(deal.amount || 0);
+    });
+
+    const monthlyRows = Object.entries(monthlyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, amount]) => ({ month, amount }));
+
+    const periodLabel =
+      bankReportStart || bankReportEnd
+        ? `${bankReportStart || "início"} a ${bankReportEnd || "fim"}`
+        : "Todos os períodos";
+
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatório Banco - ${bank.name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+            h1 { margin-bottom: 4px; }
+            h2 { margin-top: 28px; border-bottom: 2px solid #111827; padding-bottom: 6px; }
+            .muted { color: #6b7280; }
+            .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
+            .card { border: 1px solid #d1d5db; border-radius: 12px; padding: 12px; background: #f9fafb; }
+            .label { color: #6b7280; font-size: 12px; font-weight: bold; }
+            .value { font-size: 22px; font-weight: bold; margin-top: 6px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 9px; text-align: left; }
+            th { background: #111827; color: white; }
+            .footer { margin-top: 34px; color: #6b7280; font-size: 12px; }
+            @media print { button { display: none; } body { margin: 18px; } }
+          </style>
+        </head>
+        <body>
+          <button onclick="window.print()">Imprimir / Guardar PDF</button>
+
+          <h1>Relatório de Produção Bancária</h1>
+          <div class="muted">Banco: <strong>${bank.name}</strong></div>
+          <div class="muted">Período: <strong>${periodLabel}</strong></div>
+
+          <h2>Resumo</h2>
+          <div class="grid">
+            <div class="card"><div class="label">Nº Processos</div><div class="value">${totalProcesses}</div></div>
+            <div class="card"><div class="label">Montante Financiado</div><div class="value">${formatEuro(totalAmount)}</div></div>
+            <div class="card"><div class="label">Ticket Médio</div><div class="value">${formatEuro(ticket)}</div></div>
+            <div class="card"><div class="label">Contratado</div><div class="value">${formatEuro(contractedAmount)}</div></div>
+            <div class="card"><div class="label">Pipeline</div><div class="value">${formatEuro(pipelineAmount)}</div></div>
+            <div class="card"><div class="label">Taxa Conversão</div><div class="value">${conversionRate.toFixed(1)}%</div></div>
+          </div>
+
+          <h2>Pipeline por Estado</h2>
+          <table>
+            <thead>
+              <tr><th>Estado</th><th>Nº Processos</th><th>Montante</th></tr>
+            </thead>
+            <tbody>
+              ${statusRows
+                .map((row) => `<tr><td>${row.status}</td><td>${row.count}</td><td>${formatEuro(row.amount)}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
+
+          <h2>Tempos</h2>
+          <div class="grid">
+            <div class="card"><div class="label">Tempo Médio até Contratação</div><div class="value">${formatDays(avgTime)}</div></div>
+            <div class="card"><div class="label">Processo Mais Rápido</div><div class="value">${formatDays(fastest)}</div></div>
+            <div class="card"><div class="label">Processo Mais Lento</div><div class="value">${formatDays(slowest)}</div></div>
+          </div>
+
+          <h2>Evolução Mensal</h2>
+          <table>
+            <thead>
+              <tr><th>Mês</th><th>Montante</th></tr>
+            </thead>
+            <tbody>
+              ${monthlyRows
+                .map((row) => `<tr><td>${row.month}</td><td>${formatEuro(row.amount)}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            Relatório gerado pelo CRM.SISEGCVIEIRA — Loja de Seguros de Trajouce.
+          </div>
+        </body>
+      </html>
+    `;
+
+    const reportWindow = window.open("", "_blank");
+
+    if (!reportWindow) {
+      alert("O browser bloqueou a janela do relatório. Permite pop-ups para este site.");
+      return;
+    }
+
+    reportWindow.document.open();
+    reportWindow.document.write(html);
+    reportWindow.document.close();
   }
 
   function selectClient(clientId) {
@@ -1872,6 +2048,26 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
             <section style={analysisBlock}>
               <h3>🏦 Ficha relatório por banco</h3>
 
+              <div style={bankReportControls}>
+                <button type="button" style={smallButton} onClick={() => setBankReportPeriod("month")}>
+                  Mês atual
+                </button>
+                <button type="button" style={smallButton} onClick={() => setBankReportPeriod("quarter")}>
+                  Trimestre atual
+                </button>
+                <button type="button" style={smallButton} onClick={() => setBankReportPeriod("year")}>
+                  Ano atual
+                </button>
+
+                <label style={fieldLabel}>Início
+                  <input type="date" style={input} value={bankReportStart} onChange={(event) => setBankReportStart(event.target.value)} />
+                </label>
+
+                <label style={fieldLabel}>Fim
+                  <input type="date" style={input} value={bankReportEnd} onChange={(event) => setBankReportEnd(event.target.value)} />
+                </label>
+              </div>
+
               {bankAnalysis.length === 0 ? (
                 <p style={muted}>Sem bancos para analisar.</p>
               ) : (
@@ -1886,6 +2082,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <Mini title="Comissão recebida" value={formatEuro(bank.receivedCommission)} />
                         <Mini title="Ticket médio" value={formatEuro(bank.processCount ? bank.totalAmount / bank.processCount : 0)} />
                         <Mini title="Tempo médio" value={formatDays(bank.contractDaysCount ? Math.round(bank.totalContractDays / bank.contractDaysCount) : null)} />
+                      </div>
+
+                      <div style={actionRow}>
+                        <button type="button" style={paidButton} onClick={() => generateBankReport(bank)}>
+                          📄 Relatório Banco
+                        </button>
                       </div>
 
                       <div style={statusMiniGrid}>
@@ -2699,3 +2901,4 @@ const compactDealTitle = { margin: 0, fontSize: 20 };
 const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 };
 const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
 const ruleBox = { background: "#ecfeff", border: "1px solid #67e8f9", borderRadius: 12, padding: 12, color: "#155e75", fontWeight: "bold", lineHeight: 1.5 };
+const bankReportControls = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", marginBottom: 14 };
