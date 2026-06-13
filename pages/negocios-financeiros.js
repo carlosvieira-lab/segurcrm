@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+mport { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -105,6 +105,40 @@ function normalizeText(value) {
 
 function onlyNumbers(value) {
   return String(value || "").replace(/\D/g, "");
+}
+
+function buildWhatsappUrl(phone, message) {
+  const cleanPhone = onlyNumbers(phone);
+
+  if (!cleanPhone) return "";
+
+  const finalPhone = cleanPhone.startsWith("351")
+    ? cleanPhone
+    : `351${cleanPhone}`;
+
+  return `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
+}
+
+function buildCruzadosWhatsappMessage(item, position) {
+  const missing = Math.max(580000 - Number(item.totalAmount || 0), 0);
+  const statusLine =
+    missing > 0
+      ? `Faltam-te ${formatEuro(missing)} para atingires o mínimo de apuramento de 580.000 €.`
+      : "Já atingiste o mínimo de apuramento de 580.000 €.";
+
+  return `Olá ${item.partnerName},
+
+Segue a atualização quinzenal da tua posição no ranking anual OS CRUZADOS 2026.
+
+🏆 Posição atual: ${position}º lugar
+💰 Volume contratado acumulado: ${formatEuro(item.totalAmount)}
+
+${statusLine}
+
+Obrigado pela parceria e continuação de bons negócios.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
 }
 
 function calculateExpectedCommission(amount, rate) {
@@ -220,7 +254,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
       },
       { amount: 0, expected: 0, received: 0, difference: 0, partnerTotal: 0, partnerPaid: 0, partnerPending: 0 }
     );
-  }, [deals]);
+  }, [deals, partners]);
 
   const groupedPartnerPayments = useMemo(() => {
     const map = new Map();
@@ -270,12 +304,15 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
       .forEach((deal) => {
         const partnerId = deal.source_partner_id;
         const partnerName = deal.source_partner?.name || "Sem parceiro";
+        const fullPartner = partners.find((partner) => partner.id === partnerId);
+        const partnerPhone = fullPartner?.phone || "";
         const amount = Number(deal.amount || 0);
 
         if (!map.has(partnerId)) {
           map.set(partnerId, {
             partnerId,
             partnerName,
+            partnerPhone,
             totalAmount: 0,
             dealsCount: 0,
             biggestDeal: 0,
@@ -779,6 +816,48 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
               ))}
             </div>
 
+            {cruzadosRanking.length > 0 && (
+              <div style={whatsappPanel}>
+                <div>
+                  <strong>WhatsApp quinzenal — Top 15</strong>
+                  <p style={smallMuted}>
+                    Mensagem individual: cada parceiro vê apenas a sua posição, sem dados dos restantes.
+                  </p>
+                </div>
+
+                <div style={whatsappList}>
+                  {cruzadosRanking.slice(0, 15).map((item, index) => {
+                    const message = buildCruzadosWhatsappMessage(item, index + 1);
+                    const url = buildWhatsappUrl(item.partnerPhone, message);
+
+                    return (
+                      <div key={item.partnerId} style={whatsappRow}>
+                        <div>
+                          <strong>{index + 1}º · {item.partnerName}</strong>
+                          <span style={partnerMeta}>
+                            {formatEuro(item.totalAmount)} contratado
+                          </span>
+                        </div>
+
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={whatsappButton}
+                          >
+                            Enviar WhatsApp
+                          </a>
+                        ) : (
+                          <span style={missingPhoneBadge}>Sem telefone</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {cruzadosRanking.length === 0 ? (
               <p style={muted}>Ainda não existem parceiros com negócios contratados elegíveis para o ranking.</p>
             ) : (
@@ -1243,3 +1322,9 @@ const rankingHeader = { display: "grid", gridTemplateColumns: "50px 2fr 1.2fr 0.
 const rankingRow = { display: "grid", gridTemplateColumns: "50px 2fr 1.2fr 0.8fr 1.2fr 1.2fr", gap: 10, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "10px 12px", borderRadius: 10, alignItems: "center", minWidth: 850 };
 const eligibleBadge = { background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
 const notEligibleBadge = { background: "#fee2e2", color: "#991b1b", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
+
+const whatsappPanel = { background: "#f0fdfa", border: "1px solid #5eead4", borderRadius: 14, padding: 14, display: "grid", gap: 12, marginBottom: 16 };
+const whatsappList = { display: "grid", gap: 8 };
+const whatsappRow = { background: "white", border: "1px solid #ccfbf1", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" };
+const whatsappButton = { background: "#16a34a", color: "white", padding: "9px 12px", borderRadius: 8, textDecoration: "none", fontWeight: "bold", fontSize: 13 };
+const missingPhoneBadge = { background: "#fee2e2", color: "#991b1b", padding: "7px 10px", borderRadius: 999, fontWeight: "bold", fontSize: 12 };
