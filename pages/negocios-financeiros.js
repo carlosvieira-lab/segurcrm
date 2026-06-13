@@ -161,12 +161,14 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
   const [editingPartnerId, setEditingPartnerId] = useState(null);
+  const [showPartnersPanel, setShowPartnersPanel] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [paymentFilter, setPaymentFilter] = useState("todos");
   const [saving, setSaving] = useState(false);
 
   const activePartners = partners.filter((p) => p.is_active !== false);
+  const inactivePartners = partners.filter((p) => p.is_active === false);
   const bancos = activePartners.filter((p) => p.partner_type === "Banco");
   const parceiros = activePartners.filter((p) => p.partner_type !== "Banco");
 
@@ -677,50 +679,83 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
           </section>
         )}
 
-        <section style={panel}>
-          <h2 style={sectionTitle}>Bancos e parceiros</h2>
-
-          {partners.length === 0 ? (
-            <p style={muted}>Ainda não existem bancos ou parceiros criados.</p>
-          ) : (
-            <div style={partnerManagementGrid}>
-              {partners.map((partner) => (
-                <div
-                  key={partner.id}
-                  style={{
-                    ...partnerManagementCard,
-                    ...(partner.is_active === false ? inactivePartnerCard : {}),
-                  }}
-                >
-                  <div>
-                    <strong>{partner.name}</strong>
-                    <p style={muted}>
-                      {partner.partner_type || "-"} · {partner.is_active === false ? "Anulado" : "Ativo"}
-                    </p>
-                    <p style={smallMuted}>
-                      Comissão:{" "}
-                      {partner.default_payment_type === "valor fixo"
-                        ? `${formatEuro(partner.default_payment_value)} fixa`
-                        : `${Number(partner.default_payment_rate || 0)}% sobre valor financiado`}
-                    </p>
-                  </div>
-
-                  <div style={partnerManagementActions}>
-                    <button type="button" style={secondaryButton} onClick={() => openEditPartner(partner)}>
-                      Editar
-                    </button>
-
-                    <button
-                      type="button"
-                      style={partner.is_active === false ? paidButton : grayButton}
-                      onClick={() => togglePartnerActive(partner)}
-                    >
-                      {partner.is_active === false ? "Reativar" : "Anular"}
-                    </button>
-                  </div>
-                </div>
-              ))}
+        <section style={compactPanel}>
+          <div style={compactPanelHeader}>
+            <div>
+              <h2 style={sectionTitle}>Bancos e parceiros</h2>
+              <p style={muted}>
+                Gestão compacta de bancos que pagam comissão e parceiros que trazem negócio.
+              </p>
             </div>
+
+            <button
+              type="button"
+              style={secondaryButton}
+              onClick={() => setShowPartnersPanel(!showPartnersPanel)}
+            >
+              {showPartnersPanel ? "Esconder" : "Ver / editar"}
+            </button>
+          </div>
+
+          <div style={compactStatsGrid}>
+            <div style={compactStat}>
+              <span style={summaryLabel}>Bancos ativos</span>
+              <strong style={compactStatValue}>{bancos.length}</strong>
+            </div>
+
+            <div style={compactStat}>
+              <span style={summaryLabel}>Parceiros ativos</span>
+              <strong style={compactStatValue}>{parceiros.length}</strong>
+            </div>
+
+            <div style={compactStat}>
+              <span style={summaryLabel}>Anulados</span>
+              <strong style={compactStatValue}>{inactivePartners.length}</strong>
+            </div>
+          </div>
+
+          {showPartnersPanel && (
+            <>
+              {partners.length === 0 ? (
+                <p style={muted}>Ainda não existem bancos ou parceiros criados.</p>
+              ) : (
+                <div style={partnerManagementList}>
+                  {partners.map((partner) => (
+                    <div
+                      key={partner.id}
+                      style={{
+                        ...partnerManagementRow,
+                        ...(partner.is_active === false ? inactivePartnerCard : {}),
+                      }}
+                    >
+                      <div>
+                        <strong>{partner.name}</strong>
+                        <span style={partnerMeta}>
+                          {partner.partner_type || "-"} · {partner.is_active === false ? "Anulado" : "Ativo"} ·{" "}
+                          {partner.default_payment_type === "valor fixo"
+                            ? `${formatEuro(partner.default_payment_value)} fixa`
+                            : `${Number(partner.default_payment_rate || 0)}% sobre valor financiado`}
+                        </span>
+                      </div>
+
+                      <div style={partnerManagementActions}>
+                        <button type="button" style={smallButton} onClick={() => openEditPartner(partner)}>
+                          Editar
+                        </button>
+
+                        <button
+                          type="button"
+                          style={partner.is_active === false ? smallPaidButton : smallGrayButton}
+                          onClick={() => togglePartnerActive(partner)}
+                        >
+                          {partner.is_active === false ? "Reativar" : "Anular"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </section>
 
@@ -1055,9 +1090,16 @@ const clientButton = { background: "#0f766e", color: "white", padding: "12px 16p
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
 
-const partnerManagementGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 };
-const partnerManagementCard = { background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 14, padding: 14, display: "grid", gap: 12 };
+const compactPanel = { background: "#f0fdf4", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
+const compactPanelHeader = { display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start", marginBottom: 14 };
+const compactStatsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 };
+const compactStat = { background: "#dcfce7", border: "1px solid #86efac", borderRadius: 12, padding: 12, display: "grid", gap: 4 };
+const compactStatValue = { color: "#047857", fontSize: 22 };
+const partnerManagementList = { display: "grid", gap: 8, marginTop: 14 };
+const partnerManagementRow = { background: "#ecfdf5", border: "1px solid #86efac", borderRadius: 12, padding: "10px 12px", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" };
+const partnerMeta = { display: "block", marginTop: 4, color: "#6b7280", fontSize: 12 };
 const inactivePartnerCard = { opacity: 0.55, background: "#f3f4f6", border: "1px solid #d1d5db" };
 const partnerManagementActions = { display: "flex", gap: 8, flexWrap: "wrap" };
-
- 
+const smallButton = { background: "#059669", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
+const smallGrayButton = { background: "#6b7280", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
+const smallPaidButton = { background: "#16a34a", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
