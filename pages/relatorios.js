@@ -1,4 +1,4 @@
-import { useState } from "react";
+mport { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
