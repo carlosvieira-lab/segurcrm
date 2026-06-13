@@ -82,6 +82,31 @@ function calculateAnnualCommission(policy) {
   return commission;
 }
 
+const officialBranchList = [
+  "AUTOMÓVEL",
+  "CASA",
+  "SAUDE",
+  "ATCO",
+  "ATCP",
+  "MREMP",
+  "VIDA",
+  "APS",
+  "FINANCEIROS",
+  "VIAGEM",
+  "CAES E GATOS",
+  "OUTROS",
+];
+
+function normalizeBranch(value) {
+  return String(value || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+const officialBranchSet = new Set(officialBranchList.map(normalizeBranch));
+
 function parsePolicyStartDate(startDate) {
   if (!startDate) return null;
 
@@ -450,6 +475,45 @@ function buildWhatsappLink(phone) {
   return `https://wa.me/351${numbers}`;
 }
 
+function buildGeneraliBranchesToClassifyReport(policies) {
+  return policies
+    .filter((policy) => {
+      const insurerName = String(policy.insurers?.name || "")
+        .toLowerCase()
+        .trim();
+
+      const branch = normalizeBranch(policy.branch);
+
+      return (
+        insurerName.includes("generali") &&
+        policy.status !== "anulada" &&
+        policy.client_id &&
+        branch &&
+        !officialBranchSet.has(branch)
+      );
+    })
+    .map((policy) => ({
+      id: policy.id,
+      clientId: policy.client_id,
+      clientName: policy.clients?.name || "Sem cliente",
+      clientNif: policy.clients?.nif || "-",
+      clientPhone: policy.clients?.phone || "-",
+      clientEmail: policy.clients?.email || "-",
+      policyNumber: policy.policy_number || "-",
+      importedBranch: policy.branch || "-",
+      startDate: policy.start_date || null,
+      annualPremium: Number(policy.annual_premium || 0),
+      status: policy.status || "ativa",
+    }))
+    .sort((a, b) => {
+      const branchCompare = String(a.importedBranch).localeCompare(String(b.importedBranch));
+
+      if (branchCompare !== 0) return branchCompare;
+
+      return a.clientName.localeCompare(b.clientName);
+    });
+}
+
 function buildGeneraliClientsReport(policies, opportunities) {
   const opportunitiesByClient = new Map();
 
@@ -558,8 +622,9 @@ function exportCsv(filename, header, rows) {
 }
 
 export default function Relatorios({ clients, policies, opportunities }) {
-  const [selectedReport, setSelectedReport] = useState("topClientesPremio");
-  const [generaliView, setGeneraliView] = useState("pendentes");
+  const [selectedReport, setSelectedReport] = useState("generaliRamosClassificar");
+  const [showOnlyGeneraliWithoutOpportunity, setShowOnlyGeneraliWithoutOpportunity] = useState(true);
+  const [showOnlyGeneraliPending, setShowOnlyGeneraliPending] = useState(true);
   const [workedGeneraliClients, setWorkedGeneraliClients] = useState(() => {
     const initial = new Set();
 
@@ -604,6 +669,17 @@ export default function Relatorios({ clients, policies, opportunities }) {
     ),
   };
 
+  const generaliBranchesToClassify = buildGeneraliBranchesToClassifyReport(policies);
+
+  const generaliBranchesToClassifyTotals = {
+    policies: generaliBranchesToClassify.length,
+    clients: new Set(generaliBranchesToClassify.map((item) => item.clientId)).size,
+    premium: generaliBranchesToClassify.reduce(
+      (sum, item) => sum + Number(item.annualPremium || 0),
+      0
+    ),
+  };
+
   const generaliClients = buildGeneraliClientsReport(policies, opportunities);
 
   const generaliClientsWithWorkState = generaliClients.map((client) => ({
@@ -612,21 +688,8 @@ export default function Relatorios({ clients, policies, opportunities }) {
   }));
 
   const generaliClientsFiltered = generaliClientsWithWorkState.filter((client) => {
-    if (generaliView === "pendentes") {
-      return !client.isWorked;
-    }
-
-    if (generaliView === "trabalhados") {
-      return client.isWorked;
-    }
-
-    if (generaliView === "semOportunidade") {
-      return !client.hasOpportunity;
-    }
-
-    if (generaliView === "comOportunidade") {
-      return client.hasOpportunity;
-    }
+    if (showOnlyGeneraliWithoutOpportunity && client.hasOpportunity) return false;
+    if (showOnlyGeneraliPending && client.isWorked) return false;
 
     return true;
   });
@@ -809,6 +872,38 @@ export default function Relatorios({ clients, policies, opportunities }) {
     );
   }
 
+  function exportGeneraliBranchesToClassifyCsv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+      "Nº Apólice",
+      "Ramo atual",
+      "Data início",
+      "Prémio anual",
+      "Estado",
+    ];
+
+    const rows = generaliBranchesToClassify.map((item) => [
+      item.clientName,
+      item.clientNif,
+      item.clientPhone,
+      item.clientEmail,
+      item.policyNumber,
+      item.importedBranch,
+      formatDate(item.startDate),
+      item.annualPremium.toFixed(2),
+      item.status,
+    ]);
+
+    exportCsv(
+      "generali_ramos_por_classificar.csv",
+      header,
+      rows
+    );
+  }
+
   function exportGeneraliClientsCsv() {
     const header = [
       "Cliente",
@@ -970,6 +1065,11 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
     if (selectedReport === "realVida2026") {
       exportRealVida2026Csv();
+      return;
+    }
+
+    if (selectedReport === "generaliRamosClassificar") {
+      exportGeneraliBranchesToClassifyCsv();
       return;
     }
 
@@ -1274,6 +1374,101 @@ export default function Relatorios({ clients, policies, opportunities }) {
           </section>
         )}
 
+        {selectedReport === "generaliRamosClassificar" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Generali — Ramos por classificar
+            </h2>
+
+            <p style={muted}>
+              Mostra apenas apólices Generali em vigor cujo ramo atual não pertence à lista oficial usada na criação/edição de apólices.
+              Quando corrigires o ramo na ficha do cliente para um dos ramos oficiais, a apólice desaparece automaticamente deste relatório.
+            </p>
+
+            <div style={officialBranchesBox}>
+              <strong>Ramos oficiais aceites:</strong>{" "}
+              {officialBranchList.join(", ")}
+            </div>
+
+            <div style={summaryGrid}>
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Apólices por classificar</span>
+                <strong style={summaryValue}>{generaliBranchesToClassifyTotals.policies}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Clientes envolvidos</span>
+                <strong style={summaryValue}>{generaliBranchesToClassifyTotals.clients}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Prémio anual</span>
+                <strong style={summaryValue}>{formatEuro(generaliBranchesToClassifyTotals.premium)}</strong>
+              </div>
+            </div>
+
+            {generaliBranchesToClassify.length === 0 ? (
+              <p style={muted}>
+                Sem apólices Generali com ramos fora da lista oficial.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderGeneraliClassify}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Telefone</span>
+                  <span>Email</span>
+                  <span>Apólice</span>
+                  <span>Ramo atual</span>
+                  <span>Data início</span>
+                  <span>Prémio</span>
+                  <span>Ações</span>
+                </div>
+
+                {generaliBranchesToClassify.map((item) => {
+                  const whatsappLink = buildWhatsappLink(item.clientPhone);
+                  const emailLink = buildEmailLink(item.clientEmail, item.clientName);
+
+                  return (
+                    <div key={item.id} style={tableRowGeneraliClassify}>
+                      <strong>{item.clientName}</strong>
+                      <span>{item.clientNif}</span>
+                      <span>{item.clientPhone}</span>
+                      <span>{item.clientEmail}</span>
+                      <span>{item.policyNumber}</span>
+                      <strong style={branchWarningValue}>{item.importedBranch}</strong>
+                      <span>{formatDate(item.startDate)}</span>
+                      <strong style={premiumValue}>{formatEuro(item.annualPremium)}</strong>
+
+                      <div style={generaliActions}>
+                        <Link href={`/clientes/${item.clientId}`} style={openClientButton}>
+                          Abrir ficha
+                        </Link>
+
+                        {whatsappLink ? (
+                          <a href={whatsappLink} target="_blank" rel="noreferrer" style={whatsappButton}>
+                            WhatsApp
+                          </a>
+                        ) : (
+                          <span style={disabledAction}>Sem WhatsApp</span>
+                        )}
+
+                        {emailLink ? (
+                          <a href={emailLink} style={emailButton}>
+                            Email
+                          </a>
+                        ) : (
+                          <span style={disabledAction}>Sem Email</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
         {selectedReport === "generaliClientes" && (
           <section style={panel}>
             <h2 style={panelTitle}>
@@ -1327,66 +1522,28 @@ export default function Relatorios({ clients, policies, opportunities }) {
             </div>
 
             <div style={filterRow}>
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
-                  ...(generaliView === "pendentes" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("pendentes")}
-              >
-                Pendentes
-              </button>
+              <label style={filterCheck}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyGeneraliWithoutOpportunity}
+                  onChange={(event) =>
+                    setShowOnlyGeneraliWithoutOpportunity(event.target.checked)
+                  }
+                />
+                Mostrar apenas clientes sem oportunidade
+              </label>
 
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
-                  ...(generaliView === "trabalhados" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("trabalhados")}
-              >
-                Trabalhados
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
-                  ...(generaliView === "semOportunidade" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("semOportunidade")}
-              >
-                Sem oportunidade
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
-                  ...(generaliView === "comOportunidade" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("comOportunidade")}
-              >
-                Com oportunidade
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...filterButton,
-                  ...(generaliView === "todos" ? activeFilterButton : {}),
-                }}
-                onClick={() => setGeneraliView("todos")}
-              >
-                Todos
-              </button>
+              <label style={filterCheck}>
+                <input
+                  type="checkbox"
+                  checked={showOnlyGeneraliPending}
+                  onChange={(event) =>
+                    setShowOnlyGeneraliPending(event.target.checked)
+                  }
+                />
+                Mostrar apenas pendentes
+              </label>
             </div>
-
-            <p style={muted}>
-              A vista <strong>Pendentes</strong> mostra os clientes Generali que ainda não foram marcados como trabalhados. 
-              Quando crias oportunidade ou clicas em trabalhado, deixam de aparecer nesta lista.
-            </p>
 
             {generaliClientsFiltered.length === 0 ? (
               <p style={muted}>
@@ -1690,6 +1847,11 @@ const reportOptions = [
     description: "Apólices Real Vida iniciadas em 2026.",
   },
   {
+    value: "generaliRamosClassificar",
+    label: "Generali - Ramos por classificar",
+    description: "Apólices Generali cujo ramo não pertence à lista oficial do CRM.",
+  },
+  {
     value: "generaliClientes",
     label: "Generali - Clientes para oportunidades",
     description: "Clientes Generali com botões para abrir ficha, criar oportunidade e WhatsApp.",
@@ -1957,6 +2119,43 @@ const summaryValue = {
   fontSize: 24,
 };
 
+const officialBranchesBox = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  color: "#1e3a8a",
+  padding: 14,
+  borderRadius: 14,
+  marginBottom: 18,
+  lineHeight: 1.5,
+};
+
+const branchWarningValue = {
+  color: "#b45309",
+};
+
+const tableHeaderGeneraliClassify = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 1.1fr 1.5fr 1fr 1fr 2.2fr",
+  gap: 10,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 13,
+  minWidth: 1450,
+};
+
+const tableRowGeneraliClassify = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr 1.5fr 1.1fr 1.5fr 1fr 1fr 2.2fr",
+  gap: 10,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+  minWidth: 1450,
+  fontSize: 13,
+};
+
 const openClientButton = {
   background: "#2563eb",
   color: "white",
@@ -1988,22 +2187,6 @@ const filterCheck = {
   borderRadius: 12,
   color: "#374151",
   fontWeight: "bold",
-};
-
-const filterButton = {
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  padding: "11px 14px",
-  borderRadius: 12,
-  color: "#374151",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const activeFilterButton = {
-  background: "#2563eb",
-  color: "white",
-  border: "1px solid #2563eb",
 };
 
 const tableHeaderGenerali = {
