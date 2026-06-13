@@ -162,6 +162,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [showPartnersPanel, setShowPartnersPanel] = useState(false);
+  const [showCruzadosRanking, setShowCruzadosRanking] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [paymentFilter, setPaymentFilter] = useState("todos");
@@ -246,6 +247,63 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
     return [...map.values()].sort((a, b) => b.pending - a.pending);
   }, [deals]);
+
+  const cruzadosRanking = useMemo(() => {
+    const startDate = "2026-01-03";
+    const endDate = "2026-12-30";
+
+    const eligibleTypes = ["Crédito Habitação", "Crédito Pessoal"];
+    const map = new Map();
+
+    deals
+      .filter((deal) => {
+        const dealDate = String(deal.commission_received_at || deal.created_at || "").slice(0, 10);
+
+        return (
+          deal.status === "CONTRATADO" &&
+          eligibleTypes.includes(deal.deal_type) &&
+          deal.source_partner_id &&
+          dealDate >= startDate &&
+          dealDate <= endDate
+        );
+      })
+      .forEach((deal) => {
+        const partnerId = deal.source_partner_id;
+        const partnerName = deal.source_partner?.name || "Sem parceiro";
+        const amount = Number(deal.amount || 0);
+
+        if (!map.has(partnerId)) {
+          map.set(partnerId, {
+            partnerId,
+            partnerName,
+            totalAmount: 0,
+            dealsCount: 0,
+            biggestDeal: 0,
+          });
+        }
+
+        const item = map.get(partnerId);
+        item.totalAmount += amount;
+        item.dealsCount += 1;
+        item.biggestDeal = Math.max(item.biggestDeal, amount);
+      });
+
+    return [...map.values()]
+      .map((item) => ({
+        ...item,
+        eligible: item.totalAmount >= 580000,
+      }))
+      .sort((a, b) => {
+        if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
+        return b.biggestDeal - a.biggestDeal;
+      });
+  }, [deals]);
+
+  const cruzadosPrizes = [
+    "1º lugar — Viagem no valor de 2.500 €",
+    "2º lugar — Viagem no valor de 2.000 €",
+    "3º lugar — Viagem no valor de 1.500 €",
+  ];
 
   function selectClient(clientId) {
     const client = clients.find((item) => item.id === clientId);
@@ -564,6 +622,13 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
             <button style={button} onClick={() => setShowDealForm(!showDealForm)}>+ Novo negócio</button>
             <button
               style={secondaryButton}
+              onClick={() => setShowCruzadosRanking(!showCruzadosRanking)}
+            >
+              🏆 Ranking Cruzados
+            </button>
+
+            <button
+              style={secondaryButton}
               onClick={() => {
                 resetPartnerForm();
                 setShowPartnerForm(!showPartnerForm);
@@ -676,6 +741,71 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 )}
               </div>
             </form>
+          </section>
+        )}
+
+        {showCruzadosRanking && (
+          <section style={cruzadosPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>🏆 Ranking Anual — Os Cruzados 2026</h2>
+                <p style={muted}>
+                  Concurso anual de parceiros para Crédito Habitação e Crédito Pessoal.
+                  Período: 03-01-2026 a 30-12-2026.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                style={grayButton}
+                onClick={() => setShowCruzadosRanking(false)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div style={cruzadosRules}>
+              <strong>Regras principais</strong>
+              <span>Apuramento mínimo: contratação de 580.000 €.</span>
+              <span>Desempate: parceiro com o processo contratado de maior valor.</span>
+              <span>Reporte: dia 1 e dia 15 de cada mês.</span>
+            </div>
+
+            <div style={cruzadosPrizeGrid}>
+              {cruzadosPrizes.map((prize) => (
+                <div key={prize} style={cruzadosPrize}>
+                  {prize}
+                </div>
+              ))}
+            </div>
+
+            {cruzadosRanking.length === 0 ? (
+              <p style={muted}>Ainda não existem parceiros com negócios contratados elegíveis para o ranking.</p>
+            ) : (
+              <div style={rankingTable}>
+                <div style={rankingHeader}>
+                  <span>#</span>
+                  <span>Parceiro</span>
+                  <span>Total contratado</span>
+                  <span>Negócios</span>
+                  <span>Maior processo</span>
+                  <span>Estado</span>
+                </div>
+
+                {cruzadosRanking.map((item, index) => (
+                  <div key={item.partnerId} style={rankingRow}>
+                    <strong>{index + 1}</strong>
+                    <strong>{item.partnerName}</strong>
+                    <span>{formatEuro(item.totalAmount)}</span>
+                    <span>{item.dealsCount}</span>
+                    <span>{formatEuro(item.biggestDeal)}</span>
+                    <span style={item.eligible ? eligibleBadge : notEligibleBadge}>
+                      {item.eligible ? "Apurado" : `Faltam ${formatEuro(580000 - item.totalAmount)}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -1103,3 +1233,13 @@ const partnerManagementActions = { display: "flex", gap: 8, flexWrap: "wrap" };
 const smallButton = { background: "#059669", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
 const smallGrayButton = { background: "#6b7280", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
 const smallPaidButton = { background: "#16a34a", color: "white", border: "none", padding: "8px 10px", borderRadius: 8, cursor: "pointer", fontWeight: "bold", fontSize: 12 };
+
+const cruzadosPanel = { background: "#ecfeff", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(14,116,144,0.18)", border: "1px solid #67e8f9" };
+const cruzadosRules = { background: "#cffafe", border: "1px solid #67e8f9", color: "#155e75", borderRadius: 14, padding: 14, display: "grid", gap: 6, marginBottom: 14 };
+const cruzadosPrizeGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 16 };
+const cruzadosPrize = { background: "#f0fdfa", border: "1px solid #5eead4", color: "#0f766e", borderRadius: 12, padding: 12, fontWeight: "bold" };
+const rankingTable = { overflowX: "auto", display: "grid", gap: 6 };
+const rankingHeader = { display: "grid", gridTemplateColumns: "50px 2fr 1.2fr 0.8fr 1.2fr 1.2fr", gap: 10, background: "#164e63", color: "white", padding: "10px 12px", borderRadius: 10, fontWeight: "bold", minWidth: 850 };
+const rankingRow = { display: "grid", gridTemplateColumns: "50px 2fr 1.2fr 0.8fr 1.2fr 1.2fr", gap: 10, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "10px 12px", borderRadius: 10, alignItems: "center", minWidth: 850 };
+const eligibleBadge = { background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
+const notEligibleBadge = { background: "#fee2e2", color: "#991b1b", borderRadius: 999, padding: "6px 10px", fontWeight: "bold", textAlign: "center" };
