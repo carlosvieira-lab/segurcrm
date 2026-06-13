@@ -409,7 +409,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
   }
 
   async function markCommissionReceived(deal) {
-    const value = prompt("Comissão recebida", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
+    const value = prompt("Comissão efetivamente recebida", String(deal.received_commission || deal.expected_commission || "").replace(".", ","));
     if (value === null) return;
 
     await updateDeal(deal, {
@@ -433,14 +433,14 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
           <div style={headerButtons}>
             <button style={button} onClick={() => setShowDealForm(!showDealForm)}>+ Novo negócio</button>
-            <button style={secondaryButton} onClick={() => setShowPartnerForm(!showPartnerForm)}>+ Banco/Parceiro</button>
+            <button style={secondaryButton} onClick={() => setShowPartnerForm(!showPartnerForm)}>+ Adicionar banco/parceiro</button>
           </div>
         </header>
 
         <section style={summaryGrid}>
           <Summary title="Montante financiado" value={formatEuro(totals.amount)} />
-          <Summary title="Comissão prevista" value={formatEuro(totals.expected)} />
-          <Summary title="Comissão recebida" value={formatEuro(totals.received)} />
+          <Summary title="Comissão estimada" value={formatEuro(totals.expected)} />
+          <Summary title="Comissão efetivamente recebida" value={formatEuro(totals.received)} />
           <Summary title="A pagar parceiros" value={formatEuro(totals.partnerPending)} />
           <Summary title="Pago parceiros" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
@@ -448,7 +448,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
         {showPartnerForm && (
           <section style={formCard}>
-            <h2 style={sectionTitle}>Novo banco ou parceiro</h2>
+            <h2 style={sectionTitle}>Adicionar banco ou parceiro</h2>
 
             <form style={formGrid} onSubmit={createPartner}>
               <label style={fieldLabel}>Nome
@@ -476,7 +476,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <textarea style={textarea} value={partnerForm.notes} onChange={(event) => setPartnerForm({ ...partnerForm, notes: event.target.value })} />
               </label>
 
-              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar banco/parceiro"}</button>
+              <button style={button} disabled={saving}>{saving ? "A guardar..." : "Guardar"}</button>
             </form>
           </section>
         )}
@@ -597,15 +597,15 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
                 <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
               </label>
 
-              <label style={fieldLabel}>% Comissão recebida
+              <label style={fieldLabel}>% Comissão efetivamente recebida
                 <input style={input} inputMode="decimal" value={dealForm.commission_rate} onChange={(event) => updateDealForm({ ...dealForm, commission_rate: event.target.value })} placeholder="Ex: 1,25" />
               </label>
 
-              <label style={fieldLabel}>Comissão prevista
+              <label style={fieldLabel}>Comissão estimada
                 <input style={input} inputMode="decimal" value={dealForm.expected_commission} onChange={(event) => setDealForm({ ...dealForm, expected_commission: event.target.value })} />
               </label>
 
-              <label style={fieldLabel}>Comissão recebida
+              <label style={fieldLabel}>Comissão efetivamente recebida
                 <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} />
               </label>
 
@@ -697,8 +697,8 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
                     <div style={miniGrid}>
                       <Mini title="Montante" value={formatEuro(deal.amount)} />
-                      <Mini title="Comissão prevista" value={formatEuro(deal.expected_commission)} />
-                      <Mini title="Comissão recebida" value={formatEuro(deal.received_commission)} />
+                      <Mini title="Comissão estimada" value={formatEuro(deal.expected_commission)} />
+                      <Mini title="Comissão efetivamente recebida" value={formatEuro(deal.received_commission)} />
                       <Mini title="A pagar parceiro" value={formatEuro(partnerDue)} />
                     </div>
 
@@ -717,7 +717,7 @@ export default function NegociosFinanceiros({ deals, partners, clients }) {
 
                     <div style={actionRow}>
                       {deal.client_id && <Link href={`/clientes/${deal.client_id}`} style={clientButton}>Abrir cliente</Link>}
-                      <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>Comissão recebida</button>
+                      <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>Comissão efetivamente recebida</button>
                       {deal.partner_payment_status === "pago" ? (
                         <button style={grayButton} onClick={() => markPartnerPending(deal)}>Reabrir pagamento</button>
                       ) : (
@@ -754,24 +754,24 @@ const headerButtons = { display: "flex", gap: 10, flexWrap: "wrap" };
 const title = { fontSize: 42, margin: 0 };
 const subtitle = { color: "#6b7280", marginTop: 8, maxWidth: 780 };
 const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginBottom: 24 };
-const summaryBox = { background: "white", padding: 18, borderRadius: 16, display: "grid", gap: 8, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
+const summaryBox = { background: "#f0fdf4", padding: 18, borderRadius: 16, display: "grid", gap: 8, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const summaryLabel = { color: "#6b7280", fontSize: 13, fontWeight: "bold" };
 const summaryValue = { color: "#2563eb", fontSize: 24 };
-const formCard = { background: "white", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
+const formCard = { background: "#f0fdf4", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const sectionTitle = { marginTop: 0 };
 const formGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 };
 const fieldLabel = { display: "flex", flexDirection: "column", gap: 6, color: "#374151", fontWeight: "bold", fontSize: 13 };
-const input = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "white" };
-const textarea = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "white", minHeight: 90, fontFamily: "Arial, sans-serif" };
+const input = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "#f0fdf4" };
+const textarea = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14, background: "#f0fdf4", minHeight: 90, fontFamily: "Arial, sans-serif" };
 const button = { background: "#111827", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const secondaryButton = { background: "#2563eb", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const paidButton = { background: "#16a34a", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
 const grayButton = { background: "#6b7280", color: "white", border: "none", padding: "12px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" };
-const panel = { background: "white", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.08)" };
+const panel = { background: "#f0fdf4", padding: 24, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const partnerGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 };
 const partnerBox = { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14, display: "grid", gap: 6 };
 const partnerPending = { color: "#dc2626", fontSize: 24 };
-const filterCard = { background: "white", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 };
+const filterCard = { background: "#f0fdf4", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)", display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 };
 const searchInput = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 };
 const dealsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 18 };
 const dealCard = { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 16, padding: 18 };
@@ -779,13 +779,11 @@ const dealTop = { display: "flex", justifyContent: "space-between", gap: 12, ali
 const dealTitle = { margin: 0, fontSize: 22 };
 const statusBadge = { background: "#dbeafe", color: "#1d4ed8", padding: "7px 10px", borderRadius: 999, fontSize: 12, fontWeight: "bold" };
 const miniGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14 };
-const miniBox = { background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 6 };
+const miniBox = { background: "#f0fdf4", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 6 };
 const infoGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 };
-const infoBox = { background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 6 };
-const notesBox = { background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginTop: 12 };
+const infoBox = { background: "#f0fdf4", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, display: "grid", gap: 6 };
+const notesBox = { background: "#f0fdf4", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginTop: 12 };
 const actionRow = { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 };
 const clientButton = { background: "#0f766e", color: "white", padding: "12px 16px", borderRadius: 10, textDecoration: "none", fontWeight: "bold" };
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
-
-      
