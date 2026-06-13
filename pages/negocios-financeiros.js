@@ -401,6 +401,7 @@ function dealMatchesTypes(deal, types) {
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
   const [showDealForm, setShowDealForm] = useState(false);
   const [editingDealId, setEditingDealId] = useState(null);
+  const [openDealId, setOpenDealId] = useState(null);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
@@ -2461,52 +2462,92 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
             <div style={dealsGrid}>
               {filteredDeals.map((deal) => {
                 const partnerDue = calculatePartnerPayment(deal.amount, deal.partner_payment_type, deal.partner_payment_rate, deal.partner_payment_value);
-                const difference = Number(deal.received_commission || 0) - Number(deal.expected_commission || 0);
                 const contractDays = daysBetween(deal.entry_date, deal.contract_date);
+                const isOpen = openDealId === deal.id;
 
                 return (
-                  <article key={deal.id} style={dealCard}>
-                    <div style={dealTop}>
+                  <article key={deal.id} style={compactDealCard}>
+                    <div style={compactDealHeader}>
                       <div>
-                        <h3 style={dealTitle}>{deal.client_name}</h3>
-                        <p style={muted}>{deal.deal_type} · {deal.bank_partner?.name || "Sem banco"}</p>
+                        <h3 style={compactDealTitle}>{deal.client_name}</h3>
+                        <p style={muted}>
+                          {deal.deal_type} · {deal.bank_partner?.name || "Sem banco"} · {deal.source_partner?.name || "Sem parceiro"}
+                        </p>
                       </div>
+
                       <span style={statusBadge}>{deal.status}</span>
                     </div>
 
-                    <div style={miniGrid}>
+                    <div style={compactDealMetrics}>
                       <Mini title="Montante" value={formatEuro(deal.amount)} />
-                      <Mini title="Comissão Teórica" value={formatEuro(deal.expected_commission)} />
                       <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
-                      <Mini title="Diferença" value={formatEuro(difference)} />
                       <Mini title="Comissão parceiro" value={formatEuro(partnerDue)} />
                       <Mini title="Tempo" value={formatDays(contractDays)} />
                     </div>
 
-                    <div style={infoGrid}>
-                      <Info label="NIF" value={deal.client_nif || "-"} />
-                      <Info label="Telefone" value={deal.client_phone || "-"} />
-                      <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
-                      <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
-                      <Info label="% Comissão Banco" value={`${Number(deal.commission_rate || 0)}%`} />
-                      <Info label="Data entrada" value={formatDate(deal.entry_date)} />
-                      <Info label="Data contratação" value={formatDate(deal.contract_date)} />
-                      <Info label="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
-                      <Info label="Estado pagamento parceiro" value={deal.partner_payment_status} />
-                      <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
-                    </div>
-
-                    {deal.notes && <div style={notesBox}><strong>Notas</strong><p>{deal.notes}</p></div>}
-
                     <div style={actionRow}>
-                      {deal.client_id && <Link href={`/clientes/${deal.client_id}`} style={clientButton}>Abrir cliente</Link>}
-                      <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>Comissão efetivamente recebida</button>
-                      {deal.partner_payment_status === "pago" ? (
-                        <button style={grayButton} onClick={() => markPartnerPending(deal)}>Reabrir pagamento</button>
-                      ) : (
-                        <button style={paidButton} onClick={() => markPartnerPaid(deal)}>Marcar parceiro pago</button>
+                      <button
+                        type="button"
+                        style={secondaryButton}
+                        onClick={() => setOpenDealId(isOpen ? null : deal.id)}
+                      >
+                        {isOpen ? "Fechar detalhes" : "Abrir detalhes"}
+                      </button>
+
+                      <button type="button" style={button} onClick={() => openEditDeal(deal)}>
+                        Editar negócio
+                      </button>
+
+                      {deal.client_id && (
+                        <Link href={`/clientes/${deal.client_id}`} style={clientButton}>
+                          Abrir cliente
+                        </Link>
                       )}
                     </div>
+
+                    {isOpen && (
+                      <div style={dealDetailsBox}>
+                        <div style={miniGrid}>
+                          <Mini title="Comissão Teórica" value={formatEuro(deal.expected_commission)} />
+                          <Mini title="% Comissão Banco" value={`${Number(deal.commission_rate || 0)}%`} />
+                          <Mini title="Data entrada" value={formatDate(deal.entry_date)} />
+                          <Mini title="Data contratação" value={formatDate(deal.contract_date)} />
+                          <Mini title="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
+                          <Mini title="Estado pagamento parceiro" value={deal.partner_payment_status} />
+                        </div>
+
+                        <div style={infoGrid}>
+                          <Info label="NIF" value={deal.client_nif || "-"} />
+                          <Info label="Telefone" value={deal.client_phone || "-"} />
+                          <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
+                          <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
+                          <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
+                        </div>
+
+                        {deal.notes && (
+                          <div style={notesBox}>
+                            <strong>Notas</strong>
+                            <p>{deal.notes}</p>
+                          </div>
+                        )}
+
+                        <div style={actionRow}>
+                          <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>
+                            Comissão Real
+                          </button>
+
+                          {deal.partner_payment_status === "pago" ? (
+                            <button style={grayButton} onClick={() => markPartnerPending(deal)}>
+                              Reabrir pagamento
+                            </button>
+                          ) : (
+                            <button style={paidButton} onClick={() => markPartnerPaid(deal)}>
+                              Marcar parceiro pago
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -2559,7 +2600,7 @@ const partnerBox = { background: "#f9fafb", border: "1px solid #e5e7eb", borderR
 const partnerPending = { color: "#dc2626", fontSize: 24 };
 const filterCard = { background: "#f0fdf4", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)", display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 };
 const searchInput = { padding: 12, borderRadius: 10, border: "1px solid #d1d5db", fontSize: 14 };
-const dealsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 18 };
+const dealsGrid = { display: "grid", gridTemplateColumns: "1fr", gap: 12 };
 const dealCard = { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 16, padding: 18 };
 const dealTop = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 14 };
 const dealTitle = { margin: 0, fontSize: 22 };
@@ -2627,3 +2668,9 @@ const classificationBadge = { borderRadius: 999, padding: "7px 10px", fontWeight
 const analysisTable = { display: "grid", gap: 6, overflowX: "auto" };
 const analysisTableHeader = { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, background: "#0f172a", color: "white", padding: "10px 12px", borderRadius: 10, fontWeight: "bold", minWidth: 800 };
 const analysisTableRow = { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 10, background: "#f8fafc", border: "1px solid #e2e8f0", padding: "10px 12px", borderRadius: 10, minWidth: 800 };
+
+const compactDealCard = { background: "#f9fafb", border: "1px solid #d1fae5", borderRadius: 16, padding: 16 };
+const compactDealHeader = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 };
+const compactDealTitle = { margin: 0, fontSize: 20 };
+const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 };
+const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
