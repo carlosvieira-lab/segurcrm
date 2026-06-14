@@ -763,6 +763,90 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     return [...map.values()].sort((a, b) => b.totalAmount - a.totalAmount);
   }, [deals]);
 
+  const bankRanking = useMemo(() => {
+    return bankAnalysis
+      .map((bank) => {
+        const contractedCount = bank.statusMap?.CONTRATADO?.count || 0;
+        const contractedAmount = bank.statusMap?.CONTRATADO?.amount || 0;
+        const conversionRate = bank.processCount ? (contractedCount / bank.processCount) * 100 : 0;
+        const averageTicket = bank.processCount ? bank.totalAmount / bank.processCount : 0;
+        const averageContractDays = bank.contractDaysCount
+          ? Math.round(bank.totalContractDays / bank.contractDaysCount)
+          : null;
+
+        return {
+          ...bank,
+          contractedCount,
+          contractedAmount,
+          conversionRate,
+          averageTicket,
+          averageContractDays,
+        };
+      })
+      .sort((a, b) => b.contractedAmount - a.contractedAmount);
+  }, [bankAnalysis]);
+
+  const conversionFunnel = useMemo(() => {
+    const stages = [
+      "LEAD",
+      "AGUARDA DOCS",
+      "ENV BANCO",
+      "AVALIAÇÃO",
+      "APROVADO",
+      "AGUARDA CONTR",
+      "CONTRATADO",
+    ];
+
+    const rows = stages.map((status, index) => {
+      const items = deals.filter((deal) => deal.status === status);
+      const amount = items.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+      const previous = index === 0 ? null : stages[index - 1];
+
+      return {
+        status,
+        count: items.length,
+        amount,
+        previousStatus: previous,
+        fromPreviousRate: null,
+      };
+    });
+
+    const withRates = rows.map((row, index) => {
+      if (index === 0) return row;
+
+      const previousCount = rows[index - 1].count;
+
+      return {
+        ...row,
+        fromPreviousRate: previousCount > 0 ? (row.count / previousCount) * 100 : 0,
+      };
+    });
+
+    const leadCount = rows[0]?.count || 0;
+    const contractedCount = rows.find((row) => row.status === "CONTRATADO")?.count || 0;
+    const globalConversion = leadCount > 0 ? (contractedCount / leadCount) * 100 : 0;
+
+    const losses = withRates.slice(1).map((row, index) => {
+      const previous = rows[index];
+      const lost = Math.max((previous?.count || 0) - row.count, 0);
+
+      return {
+        from: previous?.status || "",
+        to: row.status,
+        lost,
+        rate: row.fromPreviousRate || 0,
+      };
+    });
+
+    const biggestLoss = losses.sort((a, b) => b.lost - a.lost)[0] || null;
+
+    return {
+      rows: withRates,
+      globalConversion,
+      biggestLoss,
+    };
+  }, [deals]);
+
   const partnerAnalysis = useMemo(() => {
     const campaignCostByPartner = {};
     const contestCostByPartner = {};
@@ -2616,6 +2700,83 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
             </section>
 
             <section style={analysisBlock}>
+              <h3>🏆 Ranking de Bancos</h3>
+
+              {bankRanking.length === 0 ? (
+                <p style={muted}>Sem bancos para ranking.</p>
+              ) : (
+                <div style={bankRankingList}>
+                  {bankRanking.map((bank, index) => (
+                    <article key={bank.key} style={bankRankingRow}>
+                      <strong style={rankNumber}>{index + 1}º</strong>
+
+                      <div>
+                        <strong>{bank.name}</strong>
+                        <p style={muted}>
+                          {bank.contractedCount} contratados · {bank.processCount} processos totais
+                        </p>
+                      </div>
+
+                      <Mini title="Contratado" value={formatEuro(bank.contractedAmount)} />
+                      <Mini title="Total em carteira" value={formatEuro(bank.totalAmount)} />
+                      <Mini title="Ticket médio" value={formatEuro(bank.averageTicket)} />
+                      <Mini title="Conversão" value={`${bank.conversionRate.toFixed(1)}%`} />
+                      <Mini title="Tempo médio" value={formatDays(bank.averageContractDays)} />
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={analysisBlock}>
+              <h3>🔄 Funil de Conversão</h3>
+
+              <div style={funnelSummaryGrid}>
+                <Summary title="Conversão global" value={`${conversionFunnel.globalConversion.toFixed(1)}%`} />
+                <Summary
+                  title="Maior perda"
+                  value={
+                    conversionFunnel.biggestLoss
+                      ? `${conversionFunnel.biggestLoss.from} → ${conversionFunnel.biggestLoss.to}`
+                      : "-"
+                  }
+                />
+                <Summary
+                  title="Processos perdidos no gargalo"
+                  value={conversionFunnel.biggestLoss ? conversionFunnel.biggestLoss.lost : 0}
+                />
+              </div>
+
+              <div style={funnelList}>
+                {conversionFunnel.rows.map((row, index) => {
+                  const maxCount = Math.max(...conversionFunnel.rows.map((item) => item.count), 1);
+                  const width = `${Math.max((row.count / maxCount) * 100, row.count > 0 ? 8 : 0)}%`;
+
+                  return (
+                    <div key={row.status} style={funnelRow}>
+                      <div style={funnelLabel}>
+                        <strong>{row.status}</strong>
+                        <span style={muted}>
+                          {row.count} processos · {formatEuro(row.amount)}
+                        </span>
+                      </div>
+
+                      <div style={funnelBarOuter}>
+                        <div style={{ ...funnelBarInner, width }}>
+                          {row.count}
+                        </div>
+                      </div>
+
+                      <div style={funnelRate}>
+                        {index === 0 ? "Entrada" : `${row.fromPreviousRate.toFixed(1)}% da fase anterior`}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section style={analysisBlock}>
               <h3>🏦 Ficha relatório por banco</h3>
 
               <div style={bankReportControls}>
@@ -3498,3 +3659,14 @@ const goalsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minm
 const goalCard = { background: "white", border: "1px solid #c7d2fe", borderRadius: 14, padding: 14 };
 const goalProgressOuter = { background: "#e5e7eb", borderRadius: 999, overflow: "hidden", height: 14, marginBottom: 12 };
 const goalProgressInner = { background: "#4f46e5", height: "100%", borderRadius: 999 };
+
+const bankRankingList = { display: "grid", gap: 10 };
+const bankRankingRow = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: "60px minmax(200px, 1.5fr) repeat(5, minmax(120px, 1fr))", gap: 10, alignItems: "center", overflowX: "auto" };
+const rankNumber = { fontSize: 22, color: "#0f172a" };
+const funnelSummaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 14 };
+const funnelList = { display: "grid", gap: 10 };
+const funnelRow = { display: "grid", gridTemplateColumns: "190px 1fr 180px", gap: 12, alignItems: "center", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 12 };
+const funnelLabel = { display: "grid", gap: 4 };
+const funnelBarOuter = { background: "#e5e7eb", borderRadius: 999, overflow: "hidden", height: 26 };
+const funnelBarInner = { background: "#0f766e", color: "white", height: "100%", borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", minWidth: 0 };
+const funnelRate = { fontWeight: "bold", color: "#374151", textAlign: "right" };
