@@ -167,6 +167,32 @@ function normalizeText(value) {
     .trim();
 }
 
+function getNameSearchTokens(value) {
+  return normalizeText(value)
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function matchesFlexibleName(fullName, searchValue) {
+  const nameTokens = getNameSearchTokens(fullName);
+  const searchTokens = getNameSearchTokens(searchValue);
+
+  if (searchTokens.length === 0) return true;
+
+  return searchTokens.every((token) =>
+    nameTokens.some((nameToken) => nameToken.includes(token))
+  );
+}
+
+function buildClientSearchText(client) {
+  return normalizeText(`
+    ${client?.name || ""}
+    ${client?.nif || ""}
+    ${client?.phone || ""}
+    ${client?.email || ""}
+  `);
+}
+
 function onlyNumbers(value) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -691,7 +717,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     const searchNumbers = onlyNumbers(search);
     const dealNumbers = `${onlyNumbers(deal.client_nif)} ${onlyNumbers(deal.client_phone)}`;
 
-    if (searchText && !text.includes(searchText) && !(searchNumbers && dealNumbers.includes(searchNumbers))) return false;
+    const clientNameMatch = matchesFlexibleName(deal.client_name, search);
+    if (
+      searchText &&
+      !text.includes(searchText) &&
+      !clientNameMatch &&
+      !(searchNumbers && dealNumbers.includes(searchNumbers))
+    ) return false;
     if (statusFilter !== "todos" && deal.status !== statusFilter) return false;
     if (paymentFilter !== "todos" && deal.partner_payment_status !== paymentFilter) return false;
 
