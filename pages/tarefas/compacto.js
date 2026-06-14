@@ -15,10 +15,10 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
-  const { data: opportunities } = await supabase
-    .from("opportunities")
-    .select("*, clients(id, name, nif, phone)")
-    .order("contact_date", { ascending: true });
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*, clients(id, name, nif, phone), policies(id, policy_number, branch, license_plate)")
+    .order("created_at", { ascending: false });
 
   const { data: clients } = await supabase
     .from("clients")
@@ -27,13 +27,47 @@ export async function getServerSideProps() {
 
   return {
     props: {
-      opportunities: opportunities || [],
+      tasks: tasks || [],
       clients: clients || [],
     },
   };
 }
 
-function cleanText(value) {
+function formatDate(date) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function todayIso() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function normalizePriority(priority) {
+  const p = String(priority || "NORMAL").toUpperCase().trim();
+
+  if (p === "URGENTE") return "URGENTE";
+  if (p === "MUITO URGENTE") return "MUITO URGENTE";
+
+  return "NORMAL";
+}
+
+function normalizeCategory(category) {
+  const c = String(category || "").toLowerCase().trim();
+
+  if (c.includes("comercial")) return "COMERCIAL";
+
+  if (
+    c.includes("administrativa") ||
+    c.includes("administrativo") ||
+    c.includes("admin")
+  ) {
+    return "ADMINISTRATIVA";
+  }
+
+  return "SEM CATEGORIA";
+}
+
+function clean(value) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
@@ -45,416 +79,200 @@ function onlyNumbers(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
-function formatDate(date) {
-  if (!date) return "-";
-  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
-}
+function taskMatchesSearch(task, search) {
+  const text = clean(`
+    ${task.title || ""}
+    ${task.description || ""}
+    ${task.category || ""}
+    ${task.priority || ""}
+    ${task.status || ""}
+    ${task.origin || ""}
+    ${task.clients?.name || ""}
+    ${task.clients?.nif || ""}
+    ${task.clients?.phone || ""}
+    ${task.policies?.policy_number || ""}
+    ${task.policies?.branch || ""}
+    ${task.policies?.license_plate || ""}
+  `);
 
-function isIsoDate(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim());
-}
+  const numbers = `
+    ${onlyNumbers(task.clients?.nif)}
+    ${onlyNumbers(task.clients?.phone)}
+  `;
 
-function toIsoDate(year, month, day) {
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function isValidDateParts(year, month, day) {
-  const date = new Date(year, month - 1, day);
+  const searchText = clean(search);
+  const searchNumbers = onlyNumbers(search);
 
   return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day
+    !searchText ||
+    text.includes(searchText) ||
+    (searchNumbers && numbers.includes(searchNumbers))
   );
 }
 
-function parseSmartRenewalDate(value) {
-  const text = String(value || "").trim();
-
-  if (!text) return "";
-  if (isIsoDate(text)) return text;
-
-  const match = text.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
-
-  if (!match) return "";
-
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  let year = match[3]
-    ? Number(match[3].length === 2 ? `20${match[3]}` : match[3])
-    : today.getFullYear();
-
-  if (!isValidDateParts(year, month, day)) return "";
-
-  let candidate = new Date(year, month - 1, day);
-  candidate.setHours(0, 0, 0, 0);
-
-  if (!match[3] && candidate < today) {
-    year += 1;
-  }
-
-  return toIsoDate(year, month, day);
-}
-
-function formatSmartDateHelp(date) {
-  if (!date) return "";
-  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
-}
-
-function addMonths(dateString, months) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  date.setMonth(date.getMonth() + months);
-  return date.toISOString().split("T")[0];
-}
-
-function todayText() {
-  return new Date().toLocaleString("pt-PT", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
-}
-
-function buildWhatsappLink(phone) {
-  const numbers = onlyNumbers(phone);
-  if (!numbers) return "";
-  if (numbers.startsWith("351")) return `https://wa.me/${numbers}`;
-  return `https://wa.me/351${numbers}`;
-}
-
-const opportunityStatuses = [
-  "lead",
-  "contactado",
-  "proposta enviada",
-  "em negociação",
-  "ganho",
-  "perdido",
-];
-
-function normalizeOpportunityStatus(status) {
-  const value = String(status || "").toLowerCase().trim();
-
-  if (value === "por contactar") return "lead";
-  if (value === "proposta") return "proposta enviada";
-  if (value === "negociação" || value === "negociacao") return "em negociação";
-
-  return opportunityStatuses.includes(value) ? value : "lead";
-}
-
-function statusLabel(status) {
-  const normalized = normalizeOpportunityStatus(status);
-
-  if (normalized === "lead") return "Lead";
-  if (normalized === "contactado") return "Contactado";
-  if (normalized === "proposta enviada") return "Proposta Enviada";
-  if (normalized === "em negociação") return "Em Negociação";
-  if (normalized === "ganho") return "Ganho";
-  if (normalized === "perdido") return "Perdido";
-
-  return normalized;
-}
-
-function statusBadgeStyle(status) {
-  const normalized = normalizeOpportunityStatus(status);
-
-  if (normalized === "ganho") return { background: "#dcfce7", color: "#166534" };
-  if (normalized === "perdido") return { background: "#fee2e2", color: "#991b1b" };
-  if (normalized === "proposta enviada") return { background: "#ede9fe", color: "#5b21b6" };
-  if (normalized === "em negociação") return { background: "#fef3c7", color: "#92400e" };
-  if (normalized === "contactado") return { background: "#dbeafe", color: "#1d4ed8" };
-
-  return { background: "#e5e7eb", color: "#111827" };
-}
-
-export default function Oportunidades({ opportunities, clients }) {
+export default function TarefasCompacto({ tasks, clients }) {
   const router = useRouter();
-  const [clientNif, setClientNif] = useState("");
-  const [clientId, setClientId] = useState(null);
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
-  const [opportunityText, setOpportunityText] = useState("");
-  const [renewalDate, setRenewalDate] = useState("");
-  const [renewalDateInput, setRenewalDateInput] = useState("");
-  const [contactDate, setContactDate] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [clientFound, setClientFound] = useState(false);
+  const today = todayIso();
+
   const [search, setSearch] = useState("");
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    client_id: "",
+    description: "",
+    category: "ADMINISTRATIVA",
+    priority: "NORMAL",
+    due_date: "",
+  });
+
+  const [showEditTaskForm, setShowEditTaskForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editTaskForm, setEditTaskForm] = useState({
+    title: "",
+    description: "",
+    category: "ADMINISTRATIVA",
+    priority: "NORMAL",
+    due_date: "",
+  });
 
   useEffect(() => {
-    setContactDate(addMonths(renewalDate, -1));
-  }, [renewalDate]);
+    const clientId =
+      typeof router.query.cliente === "string"
+        ? router.query.cliente
+        : Array.isArray(router.query.cliente)
+        ? router.query.cliente[0]
+        : "";
 
-  function handleRenewalDateInput(value) {
-    setRenewalDateInput(value);
+    if (!clientId) return;
 
-    const parsed = parseSmartRenewalDate(value);
+    const localClient = clients.find((client) => client.id === clientId);
 
-    if (parsed) {
-      setRenewalDate(parsed);
-      return;
+    setShowTaskForm(true);
+    setTaskForm((current) => ({
+      ...current,
+      client_id: clientId,
+      title: current.title || "",
+      description: current.description || "",
+    }));
+
+    if (localClient?.name && !taskForm.title) {
+      setTaskForm((current) => ({
+        ...current,
+        client_id: clientId,
+      }));
     }
-
-    if (!value) {
-      setRenewalDate("");
-    }
-  }
-
-  useEffect(() => {
-    async function loadClientFromQuery() {
-      const clientId = router.query.cliente;
-
-      if (!clientId) return;
-
-      const localClient = clients.find((client) => client.id === clientId);
-
-      if (localClient) {
-        selectClient(localClient);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, nif, phone")
-        .eq("id", clientId)
-        .maybeSingle();
-
-      if (error || !data) return;
-
-      selectClient(data);
-    }
-
-    loadClientFromQuery();
   }, [router.query.cliente, clients]);
 
-  useEffect(() => {
-    const nifClean = onlyNumbers(clientNif);
+  const openTasks = tasks.filter((task) => task.status !== "concluida");
 
-    if (nifClean.length < 8) {
-      setClientFound(false);
-      setClientId(null);
-      return;
-    }
+  const filteredTasks = openTasks
+    .filter((task) => taskMatchesSearch(task, search))
+    .sort((a, b) => {
+      const dateA = a.due_date || "9999-12-31";
+      const dateB = b.due_date || "9999-12-31";
 
-    const timer = setTimeout(() => {
-      const found = findClientLocal({
-        nif: clientNif,
-        phone: "",
-        name: "",
-      });
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
 
-      if (found) {
-        selectClient(found);
-      } else {
-        setClientFound(false);
-        setClientId(null);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [clientNif]);
-
-  function findClientLocal({ nif, phone, name }) {
-    const nifClean = onlyNumbers(nif);
-    const phoneClean = onlyNumbers(phone);
-    const nameClean = cleanText(name);
-
-    return (
-      clients.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
-      clients.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
-      clients.find((client) => nameClean && cleanText(client.name) === nameClean) ||
-      null
-    );
-  }
-
-  async function findClient({ nif, phone, name }) {
-    const local = findClientLocal({ nif, phone, name });
-    if (local) return local;
-
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, name, nif, phone");
-
-    if (error || !data) return null;
-
-    const nifClean = onlyNumbers(nif);
-    const phoneClean = onlyNumbers(phone);
-    const nameClean = cleanText(name);
-
-    return (
-      data.find((client) => nifClean && onlyNumbers(client.nif) === nifClean) ||
-      data.find((client) => phoneClean && onlyNumbers(client.phone) === phoneClean) ||
-      data.find((client) => nameClean && cleanText(client.name) === nameClean) ||
-      null
-    );
-  }
-
-  function selectClient(client) {
-    setClientId(client.id);
-    setClientName(client.name || "");
-    setClientNif(client.nif || "");
-    setClientPhone(client.phone || "");
-    setClientFound(true);
-  }
-
-  async function searchClientByNif() {
-    if (!clientNif) return;
-
-    const found = await findClient({
-      nif: clientNif,
-      phone: clientPhone,
-      name: clientName,
+      return String(a.title || "").localeCompare(String(b.title || ""), "pt-PT");
     });
 
-    if (found) {
-      selectClient(found);
-    } else {
-      setClientId(null);
-      setClientFound(false);
-      alert("Cliente não encontrado em carteira. Podes preencher manualmente.");
-    }
+  const overdueTasks = filteredTasks.filter(
+    (task) => task.due_date && task.due_date < today
+  );
+
+  const todayTasks = filteredTasks.filter((task) => task.due_date === today);
+
+  const futureTasks = filteredTasks.filter(
+    (task) => task.due_date && task.due_date > today
+  );
+
+  const noDateTasks = filteredTasks.filter((task) => !task.due_date);
+
+  function resetTaskForm() {
+    setTaskForm({
+      title: "",
+      client_id: "",
+      description: "",
+      category: "ADMINISTRATIVA",
+      priority: "NORMAL",
+      due_date: "",
+    });
   }
 
-  async function createOpportunity(e) {
-    e.preventDefault();
+  async function createTask(event) {
+    event.preventDefault();
 
-    if (!clientName) {
-      alert("Preenche o nome do cliente.");
-      return;
-    }
-
-    if (!opportunityText) {
-      alert("Preenche a descrição da oportunidade.");
-      return;
-    }
-
-    if (!renewalDate) {
-      alert("Preenche a data de vencimento.");
+    if (!taskForm.title.trim()) {
+      alert("Indica o título da tarefa.");
       return;
     }
 
     setSaving(true);
 
-    let finalClientId = clientId;
-    let finalClientName = clientName;
-    let finalClientNif = clientNif;
-    let finalClientPhone = clientPhone;
-
-    if (!finalClientId) {
-      const found = await findClient({
-        nif: clientNif,
-        phone: clientPhone,
-        name: clientName,
-      });
-
-      if (found) {
-        finalClientId = found.id;
-        finalClientName = found.name || clientName;
-        finalClientNif = found.nif || clientNif;
-        finalClientPhone = found.phone || clientPhone;
-      }
-    }
-
-    const procedureText = `${todayText()} - Oportunidade criada: ${opportunityText}`;
-
-    const { error } = await supabase.from("opportunities").insert({
-      client_id: finalClientId || null,
-      client_nif: finalClientNif || null,
-      client_phone: finalClientPhone || null,
-      name: finalClientName,
-      insurance_type: opportunityText,
-      renewal_date: renewalDate,
-      contact_date: contactDate || null,
-      status: "lead",
-      procedure_notes: procedureText,
-    });
-
-    if (error) {
-      setSaving(false);
-      alert(error.message);
-      return;
-    }
-
-    await supabase.from("tasks").insert({
-      client_id: finalClientId || null,
-      title: `Contactar ${finalClientName} para oportunidade`,
-      category: "COMERCIAL",
-      priority: "NORMAL",
+    const { error } = await supabase.from("tasks").insert({
+      title: taskForm.title,
+      client_id: taskForm.client_id || null,
+      description: taskForm.description,
+      category: normalizeCategory(taskForm.category),
+      priority: normalizePriority(taskForm.priority),
       status: "aberta",
-      due_date: contactDate || null,
-      origin: "automática - oportunidade",
-      description: `Tarefa criada a partir de oportunidade comercial. Contactar cliente 1 mês antes do vencimento da apólice na congénere. Oportunidade: ${opportunityText}`,
+      due_date: taskForm.due_date || null,
+      origin: "manual - tarefas compacto",
     });
 
     setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
     window.location.reload();
   }
 
-  async function editOpportunity(item) {
-    const name = prompt("Nome do cliente", item.name || item.clients?.name || "");
-    if (name === null) return;
+  function editTask(task) {
+    setEditingTaskId(task.id);
+    setShowEditTaskForm(true);
+    setShowTaskForm(false);
 
-    const client_nif = prompt("NIF", item.client_nif || item.clients?.nif || "");
-    if (client_nif === null) return;
-
-    const client_phone = prompt(
-      "Contacto telefónico",
-      item.client_phone || item.clients?.phone || ""
-    );
-    if (client_phone === null) return;
-
-    const insurance_type = prompt(
-      "Descrição da oportunidade",
-      item.insurance_type || ""
-    );
-    if (insurance_type === null) return;
-
-    const renewal_date_raw = prompt(
-      "Data de vencimento (AAAA-MM-DD ou DD-MM)",
-      item.renewal_date || ""
-    );
-    if (renewal_date_raw === null) return;
-
-    const renewal_date =
-      parseSmartRenewalDate(renewal_date_raw) || renewal_date_raw;
-
-    const contact_date_raw = prompt(
-      "Data para contactar (AAAA-MM-DD ou DD-MM)",
-      item.contact_date || addMonths(renewal_date, -1) || ""
-    );
-    if (contact_date_raw === null) return;
-
-    const contact_date =
-      parseSmartRenewalDate(contact_date_raw) || contact_date_raw;
-
-    const status = prompt(
-      "Estado comercial (lead, contactado, proposta enviada, em negociação, ganho, perdido)",
-      normalizeOpportunityStatus(item.status) || "lead"
-    );
-    if (status === null) return;
-
-    const foundClient = await findClient({
-      nif: client_nif,
-      phone: client_phone,
-      name,
+    setEditTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      category: normalizeCategory(task.category),
+      priority: normalizePriority(task.priority),
+      due_date: task.due_date || "",
     });
 
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 100);
+  }
+
+  async function saveTask(event) {
+    event.preventDefault();
+
+    if (!editingTaskId) {
+      alert("Não foi possível identificar a tarefa.");
+      return;
+    }
+
+    if (!editTaskForm.title.trim()) {
+      alert("Indica o título da tarefa.");
+      return;
+    }
+
     const { error } = await supabase
-      .from("opportunities")
+      .from("tasks")
       .update({
-        client_id: foundClient?.id || item.client_id || null,
-        client_nif: client_nif || foundClient?.nif || null,
-        client_phone: client_phone || foundClient?.phone || null,
-        name: name || foundClient?.name || "",
-        insurance_type,
-        renewal_date: renewal_date || null,
-        contact_date: contact_date || null,
-        status: normalizeOpportunityStatus(status),
+        title: editTaskForm.title,
+        description: editTaskForm.description,
+        category: normalizeCategory(editTaskForm.category),
+        priority: normalizePriority(editTaskForm.priority),
+        due_date: editTaskForm.due_date || null,
       })
-      .eq("id", item.id);
+      .eq("id", editingTaskId);
 
     if (error) {
       alert(error.message);
@@ -464,19 +282,11 @@ export default function Oportunidades({ opportunities, clients }) {
     window.location.reload();
   }
 
-  async function addProcedure(item) {
-    const note = prompt("Novo procedimento / cronologia");
-    if (!note) return;
-
-    const previous = item.procedure_notes || "";
-    const next = previous
-      ? `${previous}\n\n${todayText()} - ${note}`
-      : `${todayText()} - ${note}`;
-
+  async function completeTask(taskId) {
     const { error } = await supabase
-      .from("opportunities")
-      .update({ procedure_notes: next })
-      .eq("id", item.id);
+      .from("tasks")
+      .update({ status: "concluida" })
+      .eq("id", taskId);
 
     if (error) {
       alert(error.message);
@@ -486,389 +296,353 @@ export default function Oportunidades({ opportunities, clients }) {
     window.location.reload();
   }
 
-  async function updateStatus(item, status) {
-    const previous = item.procedure_notes || "";
-
-    let nextStatus = status;
-    let nextRenewalDate = item.renewal_date;
-    let nextContactDate = item.contact_date;
-
-    let line = `${todayText()} - Estado alterado para ${status}`;
-
-    if (status === "perdido") {
-      const renewal = new Date(item.renewal_date);
-      renewal.setFullYear(renewal.getFullYear() + 1);
-
-      const contact = new Date(item.contact_date || item.renewal_date);
-      contact.setFullYear(contact.getFullYear() + 1);
-
-      nextRenewalDate = renewal.toISOString().split("T")[0];
-      nextContactDate = contact.toISOString().split("T")[0];
-      nextStatus = "lead";
-
-      line =
-        `${todayText()} - Oportunidade não concretizada. ` +
-        `Novo contacto agendado para ${formatDate(nextContactDate)}`;
-    }
-
-    const next = previous ? `${previous}\n\n${line}` : line;
-
-    const { error } = await supabase
-      .from("opportunities")
-      .update({
-        status: nextStatus,
-        renewal_date: nextRenewalDate,
-        contact_date: nextContactDate,
-        procedure_notes: next,
-      })
-      .eq("id", item.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    window.location.reload();
-  }
-
-  const searchClean = cleanText(search);
-  const searchNumbers = onlyNumbers(search);
-
-  const filtered = opportunities.filter((item) => {
-    const text = cleanText(`
-      ${item.name || ""}
-      ${item.client_nif || ""}
-      ${item.client_phone || ""}
-      ${item.insurance_type || ""}
-      ${item.status || ""}
-      ${item.renewal_date || ""}
-      ${item.contact_date || ""}
-      ${item.procedure_notes || ""}
-      ${item.clients?.name || ""}
-      ${item.clients?.nif || ""}
-      ${item.clients?.phone || ""}
-    `);
-
-    const numbers = `
-      ${onlyNumbers(item.client_nif)}
-      ${onlyNumbers(item.client_phone)}
-      ${onlyNumbers(item.clients?.nif)}
-      ${onlyNumbers(item.clients?.phone)}
-    `;
-
-    return (
-      !searchClean ||
-      text.includes(searchClean) ||
-      (searchNumbers && numbers.includes(searchNumbers))
-    );
-  });
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const leads = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "lead"
-  );
-
-  const contacted = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "contactado"
-  );
-
-  const proposals = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "proposta enviada"
-  );
-
-  const negotiation = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "em negociação"
-  );
-
-  const won = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "ganho"
-  );
-
-  const lost = filtered.filter(
-    (item) => normalizeOpportunityStatus(item.status) === "perdido"
-  );
-
-  const overdueFollowups = filtered.filter(
-    (item) =>
-      normalizeOpportunityStatus(item.status) !== "ganho" &&
-      normalizeOpportunityStatus(item.status) !== "perdido" &&
-      item.contact_date &&
-      item.contact_date <= today
-  );
+  const selectedClient = clients.find((client) => client.id === taskForm.client_id);
 
   return (
     <div style={page}>
-      <Sidebar active="oportunidades" />
+      <Sidebar active="tarefas-compacto" />
 
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Oportunidades Comerciais</h1>
+            <h1 style={title}>Tarefas Compacto ✅</h1>
             <p style={subtitle}>
-              Gestão do funil comercial. As ações e contactos ficam separados nas Tarefas.
+              Página exclusiva de tarefas. Não comunica com Oportunidades.
             </p>
           </div>
+
+          <button
+            type="button"
+            style={button}
+            onClick={() => {
+              setShowEditTaskForm(false);
+              setShowTaskForm(true);
+            }}
+          >
+            + Nova tarefa
+          </button>
         </header>
 
         <section style={searchCard}>
           <input
             style={searchInput}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filtrar oportunidades por cliente, NIF, telefone, estado, oportunidade ou procedimento..."
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Pesquisar tarefa, cliente, NIF, telefone, apólice ou matrícula..."
           />
         </section>
 
-        <section style={formCard}>
-          <h2>Nova oportunidade</h2>
+        {showTaskForm && (
+          <section style={formCard}>
+            <div style={formHeader}>
+              <h2>Nova tarefa</h2>
 
-          <form style={form} onSubmit={createOpportunity}>
-            <label style={label}>NIF do cliente</label>
-
-            <div style={nifRow}>
-              <input
-                style={input}
-                value={clientNif}
-                onChange={(e) => setClientNif(e.target.value)}
-                placeholder="NIF"
-              />
-
-              <button type="button" style={darkButton} onClick={searchClientByNif}>
-                Procurar
+              <button
+                type="button"
+                style={cancelButton}
+                onClick={() => {
+                  setShowTaskForm(false);
+                  resetTaskForm();
+                }}
+              >
+                Fechar
               </button>
             </div>
 
-            {clientFound && (
-              <p style={successText}>Cliente encontrado e dados preenchidos automaticamente.</p>
-            )}
-
-            {clientFound && clientId && (
-              <div style={linkedClientBox}>
-                Cliente importado da ficha: <strong>{clientName}</strong>
-              </div>
-            )}
-
-            <label style={label}>Nome do cliente</label>
-            <input
-              style={input}
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Nome do cliente"
-            />
-
-            <label style={label}>Contacto telefónico</label>
-            <input
-              style={input}
-              value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value)}
-              placeholder="Telefone"
-            />
-
-            <label style={label}>Oportunidade / seguro a captar</label>
-            <textarea
-              style={textarea}
-              value={opportunityText}
-              onChange={(e) => setOpportunityText(e.target.value)}
-              placeholder="Ex: Seguro automóvel na companhia X, cliente demonstrou interesse em transferir..."
-            />
-
-            <label style={label}>Data de vencimento da apólice na congénere</label>
-            <input
-              type="text"
-              style={input}
-              value={renewalDateInput}
-              onChange={(e) => handleRenewalDateInput(e.target.value)}
-              onBlur={(e) => {
-                const parsed = parseSmartRenewalDate(e.target.value);
-
-                if (parsed) {
-                  setRenewalDateInput(formatSmartDateHelp(parsed));
-                  setRenewalDate(parsed);
+            <form style={formGrid} onSubmit={createTask}>
+              <input
+                style={input}
+                placeholder="Título da tarefa"
+                value={taskForm.title}
+                onChange={(event) =>
+                  setTaskForm({ ...taskForm, title: event.target.value })
                 }
-              }}
-              placeholder="Ex: 20-04, 20/08 ou 2026-08-20"
-            />
+                required
+              />
 
-            {renewalDate && (
-              <div style={dateHelpBox}>
-                <strong>✓ Vencimento interpretado:</strong>{" "}
-                {formatSmartDateHelp(renewalDate)}
-                <br />
-                <strong>✓ Contacto automático:</strong>{" "}
-                {formatSmartDateHelp(contactDate)}
+              <select
+                style={input}
+                value={taskForm.client_id}
+                onChange={(event) =>
+                  setTaskForm({ ...taskForm, client_id: event.target.value })
+                }
+              >
+                <option value="">Tarefa geral / sem cliente</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name} · {client.nif || "-"}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                style={input}
+                value={taskForm.category}
+                onChange={(event) =>
+                  setTaskForm({ ...taskForm, category: event.target.value })
+                }
+              >
+                <option value="ADMINISTRATIVA">Administrativa</option>
+                <option value="COMERCIAL">Comercial</option>
+              </select>
+
+              <select
+                style={input}
+                value={taskForm.priority}
+                onChange={(event) =>
+                  setTaskForm({ ...taskForm, priority: event.target.value })
+                }
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="URGENTE">Urgente</option>
+                <option value="MUITO URGENTE">Muito urgente</option>
+              </select>
+
+              <label style={fieldLabel}>
+                Data limite
+                <input
+                  style={input}
+                  type="date"
+                  value={taskForm.due_date}
+                  onChange={(event) =>
+                    setTaskForm({ ...taskForm, due_date: event.target.value })
+                  }
+                />
+              </label>
+
+              {selectedClient && (
+                <div style={linkedClientBox}>
+                  Cliente associado: <strong>{selectedClient.name}</strong>
+                </div>
+              )}
+
+              <textarea
+                style={{ ...textarea, gridColumn: "1 / -1" }}
+                placeholder="Descrição"
+                value={taskForm.description}
+                onChange={(event) =>
+                  setTaskForm({ ...taskForm, description: event.target.value })
+                }
+              />
+
+              <div style={formButtons}>
+                <button type="submit" style={button} disabled={saving}>
+                  {saving ? "A guardar..." : "Guardar tarefa"}
+                </button>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => {
+                    setShowTaskForm(false);
+                    resetTaskForm();
+                  }}
+                >
+                  Cancelar
+                </button>
               </div>
-            )}
-
-            {renewalDateInput && !renewalDate && (
-              <div style={dateWarningBox}>
-                ⚠ Não consegui interpretar a data. Usa formato 20-04, 20/04 ou 2026-08-20.
-              </div>
-            )}
-
-            <label style={label}>Data automática para contacto</label>
-            <input style={inputDisabled} value={contactDate || ""} readOnly />
-
-            <button style={button} disabled={saving}>
-              {saving ? "A guardar..." : "Guardar oportunidade"}
-            </button>
-          </form>
-        </section>
-
-        <section style={statsGrid}>
-          <StatCard title="Leads" value={leads.length} color="#111827" />
-          <StatCard title="Contactados" value={contacted.length} color="#2563eb" />
-          <StatCard title="Propostas" value={proposals.length} color="#7c3aed" />
-          <StatCard title="Negociação" value={negotiation.length} color="#f59e0b" />
-          <StatCard title="Ganhas" value={won.length} color="#16a34a" />
-          <StatCard title="Perdidas" value={lost.length} color="#6b7280" />
-        </section>
-
-        {overdueFollowups.length > 0 && (
-          <section style={warningSection}>
-            <strong>Atenção:</strong> Existem {overdueFollowups.length} oportunidades com data de contacto vencida.
-            A ação deve ser acompanhada na página de Tarefas.
+            </form>
           </section>
         )}
 
-        <Section title="Lead">
-          <OpportunityGrid items={leads} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+        {showEditTaskForm && (
+          <section style={editFormCard}>
+            <div style={formHeader}>
+              <h2>Editar tarefa</h2>
 
-        <Section title="Contactado">
-          <OpportunityGrid items={contacted} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+              <button
+                type="button"
+                style={cancelButton}
+                onClick={() => {
+                  setShowEditTaskForm(false);
+                  setEditingTaskId(null);
+                }}
+              >
+                Fechar
+              </button>
+            </div>
 
-        <Section title="Proposta Enviada">
-          <OpportunityGrid items={proposals} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+            <form style={formGrid} onSubmit={saveTask}>
+              <input
+                style={input}
+                placeholder="Título da tarefa"
+                value={editTaskForm.title}
+                onChange={(event) =>
+                  setEditTaskForm({ ...editTaskForm, title: event.target.value })
+                }
+                required
+              />
 
-        <Section title="Em Negociação">
-          <OpportunityGrid items={negotiation} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+              <select
+                style={input}
+                value={editTaskForm.category}
+                onChange={(event) =>
+                  setEditTaskForm({ ...editTaskForm, category: event.target.value })
+                }
+              >
+                <option value="ADMINISTRATIVA">Administrativa</option>
+                <option value="COMERCIAL">Comercial</option>
+              </select>
 
-        <Section title="Ganhas">
-          <OpportunityGrid items={won} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+              <select
+                style={input}
+                value={editTaskForm.priority}
+                onChange={(event) =>
+                  setEditTaskForm({ ...editTaskForm, priority: event.target.value })
+                }
+              >
+                <option value="NORMAL">Normal</option>
+                <option value="URGENTE">Urgente</option>
+                <option value="MUITO URGENTE">Muito urgente</option>
+              </select>
 
-        <Section title="Perdidas">
-          <OpportunityGrid items={lost} editOpportunity={editOpportunity} addProcedure={addProcedure} updateStatus={updateStatus} />
-        </Section>
+              <label style={fieldLabel}>
+                Data limite
+                <input
+                  style={input}
+                  type="date"
+                  value={editTaskForm.due_date}
+                  onChange={(event) =>
+                    setEditTaskForm({ ...editTaskForm, due_date: event.target.value })
+                  }
+                />
+              </label>
+
+              <textarea
+                style={{ ...textarea, gridColumn: "1 / -1" }}
+                placeholder="Descrição"
+                value={editTaskForm.description}
+                onChange={(event) =>
+                  setEditTaskForm({ ...editTaskForm, description: event.target.value })
+                }
+              />
+
+              <div style={formButtons}>
+                <button type="submit" style={button}>
+                  Guardar alterações
+                </button>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => {
+                    setShowEditTaskForm(false);
+                    setEditingTaskId(null);
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
+        <section style={statsGrid}>
+          <StatCard title="Vencidas" value={overdueTasks.length} color="#dc2626" />
+          <StatCard title="Hoje" value={todayTasks.length} color="#7c3aed" />
+          <StatCard title="Futuras" value={futureTasks.length} color="#2563eb" />
+          <StatCard title="Sem data" value={noDateTasks.length} color="#6b7280" />
+          <StatCard title="Total abertas" value={filteredTasks.length} color="#111827" />
+        </section>
+
+        <TaskSection title="Vencidas" items={overdueTasks} editTask={editTask} completeTask={completeTask} />
+        <TaskSection title="Hoje" items={todayTasks} editTask={editTask} completeTask={completeTask} />
+        <TaskSection title="Futuras" items={futureTasks} editTask={editTask} completeTask={completeTask} />
+        <TaskSection title="Sem data" items={noDateTasks} editTask={editTask} completeTask={completeTask} />
       </main>
     </div>
   );
 }
 
-function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus }) {
-  if (items.length === 0) {
-    return <p style={muted}>Sem registos.</p>;
-  }
-
+function TaskSection({ title, items, editTask, completeTask }) {
   return (
-    <div style={grid}>
-      {items.map((item) => {
-        const phone = item.client_phone || item.clients?.phone || "";
-        const whatsappLink = buildWhatsappLink(phone);
+    <section style={section}>
+      <h2 style={sectionTitle}>{title}: {items.length}</h2>
 
-        const today = new Date().toISOString().split("T")[0];
-        const isToday = item.contact_date === today;
-
-        return (
-          <div
-            key={item.id}
-            style={{
-              ...opportunityCard,
-              ...(isToday ? opportunityTodayCard : {}),
-            }}
-          >
-            <div style={topLine}>
-              <h3>{item.name || item.clients?.name || "Sem nome"}</h3>
-              <span style={{ ...statusBadge, ...statusBadgeStyle(item.status) }}>
-                {statusLabel(item.status)}
-              </span>
-            </div>
-
-            <p><strong>NIF:</strong> {item.client_nif || item.clients?.nif || "-"}</p>
-            <p><strong>Telefone:</strong> {phone || "-"}</p>
-            <p><strong>Oportunidade:</strong> {item.insurance_type || "-"}</p>
-            <p><strong>Vencimento:</strong> {formatDate(item.renewal_date)}</p>
-            <p><strong>Contactar em:</strong> {formatDate(item.contact_date)}</p>
-
-            <div style={quickActions}>
-              {item.client_id && (
-                <Link href={`/clientes/${item.client_id}`} style={clientLink}>
-                  Abrir ficha do cliente
-                </Link>
-              )}
-
-              {whatsappLink && (
-                <a
-                  href={whatsappLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={whatsappButton}
-                >
-                  WhatsApp
-                </a>
-              )}
-
-              {item.client_id && (
-                <Link
-                  href={`/tarefas/compacto?cliente=${item.client_id}&origem=oportunidade`}
-                  style={taskLink}
-                >
-                  Criar tarefa
-                </Link>
-              )}
-            </div>
-
-            <div style={procedureBox}>
-              <strong>Procedimentos / cronologia</strong>
-              <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
-            </div>
-
-            <div style={buttonGroup}>
-              <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
-                Editar
-              </button>
-
-              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
-                + Procedimento
-              </button>
-
-              <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => updateStatus(item, "contactado")}>
-                Contactado
-              </button>
-
-              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => updateStatus(item, "proposta enviada")}>
-                Proposta enviada
-              </button>
-
-              <button style={{ ...smallButton, background: "#f59e0b" }} onClick={() => updateStatus(item, "em negociação")}>
-                Em negociação
-              </button>
-
-              <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => updateStatus(item, "ganho")}>
-                Ganho
-              </button>
-
-              <button style={{ ...smallButton, background: "#dc2626" }} onClick={() => updateStatus(item, "perdido")}>
-                Perdido
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+      {items.length === 0 ? (
+        <p style={muted}>Sem tarefas.</p>
+      ) : (
+        <div style={taskGrid}>
+          {items.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              editTask={editTask}
+              completeTask={completeTask}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
-function Section({ title, children }) {
+function TaskCard({ task, editTask, completeTask }) {
+  const priority = normalizePriority(task.priority);
+  const category = normalizeCategory(task.category);
+
   return (
-    <section style={section}>
-      <h2 style={sectionTitle}>{title}</h2>
-      {children}
-    </section>
+    <article style={taskCard}>
+      <div style={taskTop}>
+        <h3 style={taskTitle}>{task.title || "Sem título"}</h3>
+
+        <div style={badgeRow}>
+          <span style={{ ...badge, ...priorityStyle(priority) }}>
+            {priority}
+          </span>
+
+          <span style={{ ...badge, ...categoryStyle(category) }}>
+            {category}
+          </span>
+        </div>
+      </div>
+
+      <p><strong>Data limite:</strong> {formatDate(task.due_date)}</p>
+
+      <p>
+        <strong>Cliente:</strong>{" "}
+        {task.clients?.name ? (
+          <Link href={`/clientes/${task.clients.id}`} style={link}>
+            {task.clients.name}
+          </Link>
+        ) : (
+          "Tarefa geral"
+        )}
+      </p>
+
+      {task.policies && (
+        <p>
+          <strong>Apólice:</strong>{" "}
+          {task.policies.policy_number || "-"} · {task.policies.license_plate || "-"}
+        </p>
+      )}
+
+      <p><strong>Descrição:</strong> {task.description || "-"}</p>
+
+      <div style={buttonGroup}>
+        {task.client_id && (
+          <Link href={`/clientes/${task.client_id}`} style={smallLinkButton}>
+            Abrir cliente
+          </Link>
+        )}
+
+        <button
+          type="button"
+          style={{ ...smallButton, background: "#2563eb" }}
+          onClick={() => editTask(task)}
+        >
+          Editar
+        </button>
+
+        <button
+          type="button"
+          style={{ ...smallButton, background: "#16a34a" }}
+          onClick={() => completeTask(task.id)}
+        >
+          Concluir
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -881,274 +655,251 @@ function StatCard({ title, value, color }) {
   );
 }
 
+function priorityStyle(priority) {
+  if (priority === "MUITO URGENTE") return { background: "#fee2e2", color: "#991b1b" };
+  if (priority === "URGENTE") return { background: "#fef3c7", color: "#92400e" };
+  return { background: "#dbeafe", color: "#1d4ed8" };
+}
+
+function categoryStyle(category) {
+  if (category === "COMERCIAL") return { background: "#ede9fe", color: "#5b21b6" };
+  if (category === "ADMINISTRATIVA") return { background: "#ccfbf1", color: "#0f766e" };
+  return { background: "#e5e7eb", color: "#374151" };
+}
+
 const page = {
   display: "flex",
   minHeight: "100vh",
-  background: "#f3f4f6",
+  background: "#f1f5f9",
   fontFamily: "Arial, sans-serif",
 };
 
 const main = {
   flex: 1,
-  padding: 40,
+  padding: 24,
 };
 
 const header = {
-  marginBottom: 30,
+  marginBottom: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
 };
 
 const title = {
-  fontSize: 42,
+  fontSize: 34,
   margin: 0,
+  color: "#7c3aed",
+  fontWeight: 900,
 };
 
 const subtitle = {
-  color: "#6b7280",
-  marginTop: 10,
+  color: "#475569",
+  marginTop: 6,
+  fontSize: 15,
 };
 
 const searchCard = {
   background: "white",
-  padding: 18,
-  borderRadius: 18,
-  marginBottom: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  padding: 12,
+  borderRadius: 16,
+  marginBottom: 14,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const searchInput = {
   width: "100%",
-  padding: 15,
+  padding: 12,
   borderRadius: 12,
-  border: "1px solid #d1d5db",
-  fontSize: 16,
+  border: "1px solid #cbd5e1",
+  fontSize: 15,
+  boxSizing: "border-box",
 };
 
 const formCard = {
-  background: "white",
-  padding: 24,
+  background: "linear-gradient(135deg, #ffffff, #f5f3ff)",
+  padding: 16,
   borderRadius: 18,
-  marginBottom: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  marginBottom: 14,
+  border: "1px solid #ddd6fe",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
-const form = {
-  display: "grid",
+const editFormCard = {
+  background: "linear-gradient(135deg, #fffbeb, #ffffff)",
+  padding: 16,
+  borderRadius: 18,
+  marginBottom: 14,
+  border: "1px solid #f59e0b",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const formHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 12,
-  maxWidth: 720,
 };
 
-const label = {
-  fontSize: 13,
-  color: "#6b7280",
-  fontWeight: "bold",
-};
-
-const nifRow = {
+const formGrid = {
   display: "grid",
-  gridTemplateColumns: "1fr auto",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 10,
 };
 
 const input = {
-  padding: 13,
+  padding: 11,
   borderRadius: 10,
-  border: "1px solid #d1d5db",
-  fontSize: 15,
-};
-
-const dateHelpBox = {
-  background: "#dcfce7",
-  color: "#166534",
-  border: "1px solid #86efac",
-  padding: 12,
-  borderRadius: 10,
-  fontWeight: "bold",
-  lineHeight: 1.6,
-};
-
-const dateWarningBox = {
-  background: "#fff7ed",
-  color: "#9a3412",
-  border: "1px solid #fdba74",
-  padding: 12,
-  borderRadius: 10,
-  fontWeight: "bold",
-};
-
-const inputDisabled = {
-  padding: 13,
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  background: "#f3f4f6",
-  fontSize: 15,
+  border: "1px solid #cbd5e1",
+  fontSize: 14,
+  boxSizing: "border-box",
+  width: "100%",
 };
 
 const textarea = {
-  padding: 13,
+  padding: 11,
   borderRadius: 10,
-  border: "1px solid #d1d5db",
-  minHeight: 100,
-  fontSize: 15,
+  border: "1px solid #cbd5e1",
+  minHeight: 78,
+  fontSize: 14,
   fontFamily: "Arial, sans-serif",
+  boxSizing: "border-box",
+  width: "100%",
 };
 
-const button = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: 14,
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const darkButton = {
-  background: "#111827",
-  color: "white",
-  border: "none",
-  padding: "0 16px",
-  borderRadius: 10,
-  cursor: "pointer",
-  fontWeight: "bold",
-};
-
-const successText = {
-  color: "#166534",
-  fontWeight: "bold",
+const fieldLabel = {
+  display: "grid",
+  gap: 6,
+  color: "#374151",
+  fontSize: 13,
 };
 
 const linkedClientBox = {
   background: "#dcfce7",
   color: "#166534",
-  padding: 12,
+  padding: 10,
   borderRadius: 10,
   fontWeight: "bold",
+  gridColumn: "1 / -1",
+};
+
+const formButtons = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  gridColumn: "1 / -1",
+};
+
+const button = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 10,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const cancelButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 10,
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: 18,
-  marginBottom: 24,
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+  marginBottom: 14,
 };
 
 const statCard = {
   background: "white",
-  padding: 24,
-  borderRadius: 18,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const cardLabel = {
-  color: "#6b7280",
+  color: "#334155",
   margin: 0,
+  fontWeight: 800,
+  fontSize: 13,
 };
 
 const cardValue = {
-  fontSize: 32,
-  marginTop: 12,
+  fontSize: 30,
+  margin: "4px 0 0",
+  lineHeight: 1,
 };
 
 const section = {
   background: "white",
-  padding: 24,
+  padding: 16,
   borderRadius: 18,
-  marginBottom: 24,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  marginBottom: 14,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const sectionTitle = {
-  marginTop: 0,
+  margin: "0 0 12px",
+  color: "#0f172a",
+  fontSize: 21,
+  fontWeight: 900,
 };
 
-const grid = {
+const taskGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
-  gap: 18,
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 12,
 };
 
-const opportunityCard = {
-  background: "#f9fafb",
-  padding: 20,
-  borderRadius: 16,
+const taskCard = {
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  padding: 14,
+  borderRadius: 14,
 };
 
-const opportunityTodayCard = {
-  background: "#dcfce7",
-  border: "1px solid #86efac",
-};
-
-const topLine = {
+const taskTop = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 12,
-  alignItems: "center",
+  alignItems: "flex-start",
+  gap: 10,
 };
 
-const statusBadge = {
-  background: "#e5e7eb",
-  color: "#111827",
+const taskTitle = {
+  margin: 0,
+};
+
+const badgeRow = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const badge = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
-};
-
-const quickActions = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 10,
-};
-
-const clientLink = {
-  background: "#0f766e",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 8,
-  textDecoration: "none",
-  display: "inline-block",
-  fontWeight: "bold",
-};
-
-const whatsappButton = {
-  background: "#16a34a",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 8,
-  textDecoration: "none",
-  display: "inline-block",
-  fontWeight: "bold",
-};
-
-const taskLink = {
-  background: "#7c3aed",
-  color: "white",
-  padding: "10px 14px",
-  borderRadius: 8,
-  textDecoration: "none",
-  display: "inline-block",
-  fontWeight: "bold",
-};
-
-const procedureBox = {
-  background: "white",
-  padding: 14,
-  borderRadius: 12,
-  marginTop: 16,
-};
-
-const procedureText = {
-  whiteSpace: "pre-wrap",
-  fontFamily: "Arial, sans-serif",
-  margin: "10px 0 0",
+  whiteSpace: "nowrap",
 };
 
 const buttonGroup = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginTop: 16,
+  marginTop: 14,
 };
 
 const smallButton = {
@@ -1160,16 +911,21 @@ const smallButton = {
   fontWeight: "bold",
 };
 
-const muted = {
-  color: "#6b7280",
+const smallLinkButton = {
+  background: "#111827",
+  color: "white",
+  padding: "9px 12px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
 };
 
-const warningSection = {
-  background: "#fff7ed",
-  border: "1px solid #fdba74",
-  color: "#9a3412",
-  padding: 16,
-  borderRadius: 14,
-  marginBottom: 24,
+const link = {
+  color: "#2563eb",
   fontWeight: "bold",
+  textDecoration: "none",
+};
+
+const muted = {
+  color: "#64748b",
 };
