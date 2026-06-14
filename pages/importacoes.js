@@ -118,27 +118,90 @@ function parseNumber(value) {
 
   if (typeof value === "number") return value;
 
-  const text = String(value)
+  let text = String(value)
     .replace(/\s/g, "")
-    .replace("€", "")
+    .replace(/€/g, "")
     .trim();
 
   if (!text) return 0;
 
-  // Formato PT: 1.234,56
-  if (text.includes(",")) {
-    return (
-      Number(
-        text
-          .replace(/\./g, "")
-          .replace(",", ".")
-      ) || 0
-    );
+  const isNegative =
+    text.startsWith("-") ||
+    /^\(.*\)$/.test(text);
+
+  text = text.replace(/[()]/g, "").replace(/^-/, "");
+
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+
+  if (hasComma && hasDot) {
+    const lastComma = text.lastIndexOf(",");
+    const lastDot = text.lastIndexOf(".");
+
+    if (lastComma > lastDot) {
+      text = text.replace(/\./g, "").replace(",", ".");
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    text = text.replace(/\./g, "").replace(",", ".");
   }
 
-  // Formato EN/Excel: 1234.56
-  return Number(text) || 0;
+  const number = Number(text) || 0;
+
+  return isNegative ? -number : number;
 }
+
+function daysBetweenIsoDates(startDate, endDate) {
+  if (!startDate || !endDate) return 0;
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+
+  const diff = Math.round((end - start) / 86400000);
+
+  return diff > 0 ? diff : 0;
+}
+
+function annualizePremiumByReceiptPeriod(premiumValue, startDate, endDate) {
+  const premium = parseNumber(premiumValue);
+  const days = daysBetweenIsoDates(startDate, endDate);
+
+  if (!premium || !days) return premium;
+
+  if (days >= 360 && days <= 370) return premium;
+
+  if (days >= 175 && days <= 190) return premium * 2;
+
+  if (days >= 85 && days <= 95) return premium * 4;
+
+  if (days >= 27 && days <= 32) return premium * 12;
+
+  return premium * (365 / days);
+}
+
+function keepExistingOrFill(existingValue, importedValue) {
+  const existing = String(existingValue || "").trim();
+  const imported = String(importedValue || "").trim();
+
+  return existing || imported || null;
+}
+
+function buildClientEnrichmentPayload(existingClient, importedClient) {
+  if (!existingClient || !importedClient) return {};
+
+  return {
+    name: keepExistingOrFill(existingClient.name, importedClient.name),
+    phone: keepExistingOrFill(existingClient.phone, importedClient.phone),
+    email: keepExistingOrFill(existingClient.email, importedClient.email),
+    address: keepExistingOrFill(existingClient.address, importedClient.address),
+    city: keepExistingOrFill(existingClient.city, importedClient.city),
+    postal_code: keepExistingOrFill(existingClient.postal_code, importedClient.postal_code),
+  };
+}
+
 
 function normalizePaymentFrequency(value) {
   const text = cleanText(value);
@@ -243,6 +306,15 @@ function loadSheetJs() {
 
     document.body.appendChild(script);
   });
+}
+
+function Summary({ title, value }) {
+  return (
+    <div style={summaryCard}>
+      <span>{title}</span>
+      <strong>{value}</strong>
+    </div>
+  );
 }
 
 export default function Importacoes({ clients, policies, insurers }) {
@@ -380,17 +452,21 @@ export default function Importacoes({ clients, policies, insurers }) {
           : getCell(row, ["Situacao", "Situação", "Estado"])
       );
 
-      const premium = parseNumber(
-        isGenerali
-          ? getCell(row, ["Prémio Comercial", "Premio Comercial", "Prémio", "Premio"])
-          : getCell(row, ["Premio", "Prémio"])
-      );
+      const premiumRaw = isGenerali
+        ? getCell(row, ["Prémio Comercial", "Premio Comercial", "Prémio", "Premio"])
+        : getCell(row, ["Premio", "Prémio"]);
 
-      const commercialPremium = parseNumber(
-        isGenerali
-          ? getCell(row, ["Prémio Comercial", "Premio Comercial"])
-          : getCell(row, ["PremioComercial", "Prémio Comercial"])
-      );
+      const commercialPremiumRaw = isGenerali
+        ? getCell(row, ["Prémio Comercial", "Premio Comercial"])
+        : getCell(row, ["PremioComercial", "Prémio Comercial"]);
+
+      const premium = isGenerali
+        ? annualizePremiumByReceiptPeriod(premiumRaw, startDate, renewalDate)
+        : parseNumber(premiumRaw);
+
+      const commercialPremium = isGenerali
+        ? annualizePremiumByReceiptPeriod(commercialPremiumRaw || premiumRaw, startDate, renewalDate)
+        : parseNumber(commercialPremiumRaw);
 
       const paymentFrequency = normalizePaymentFrequency(
         isGenerali
@@ -451,6 +527,9 @@ export default function Importacoes({ clients, policies, insurers }) {
         commercialPremium,
         paymentFrequency,
         commission,
+        commissionCollection,
+        commissionDistribution,
+        commissionTotalRaw: commissionRaw,
         existingClient,
         existingPolicy,
       };
@@ -789,7 +868,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   async function confirmGeneraliImport() {
     const confirm = window.confirm(
-      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão enriquecidos com telefone, email, morada, localidade e código postal.\n- Clientes novos serão criados.\n- Apólices já existentes serão atualizadas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices."
+      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão usados e NÃO serão duplicados.\n- Dados do cliente existente só são preenchidos se estiverem vazios.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices.\n- A comissão importada é a soma da Comissão Cobrança + Comissão Distribuição.\n- O prémio comercial anual é calculado pelo período do recibo."
     );
 
     if (!confirm) return;
@@ -911,25 +990,7 @@ export default function Importacoes({ clients, policies, insurers }) {
         const existingPolicy = localPoliciesByNumber.get(normalizedPolicyNumber);
 
         if (existingPolicy) {
-          const { error: policyUpdateError } = await supabase
-            .from("policies")
-            .update({
-              client_id: client.id,
-              insurer_id: generali.id,
-              status: row.status,
-              branch: row.branch || "",
-              renewal_date: row.renewalDate || null,
-              annual_premium: row.commercialPremium || row.premium || 0,
-              payment_frequency: row.paymentFrequency || "Anual",
-              commission_per_payment: row.commission || 0,
-            })
-            .eq("id", existingPolicy.id);
-
-          if (policyUpdateError) {
-            throw policyUpdateError;
-          }
-
-          result.policiesUpdated += 1;
+          result.policiesExistingIgnored += 1;
           continue;
         }
 
@@ -1022,7 +1083,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <p style={muted}>
             {importMode === "realvida"
               ? "Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634."
-              : "Importação/atualização mensal Generali. Cria clientes e apólices novas, enriquece clientes existentes e atualiza apólices já existentes com prémio, comissão, fracionamento, renovação, ramo e estado. Não grava data de início e não anula apólices que não venham no ficheiro."}
+              : "Esta fase lê e valida o Excel Generali em pré-visualização, sem gravar nada no CRM. Vamos confirmar clientes, NIF, telefone, email, morada, apólice, ramo, prémio, comissão e datas antes de ativar a importação final."}
           </p>
 
           {importMode === "realvida" && !realVida && (
@@ -1106,7 +1167,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                     onClick={confirmGeneraliImport}
                     disabled={importing}
                   >
-                    {importing ? "A importar..." : "Confirmar importação/atualização Generali"}
+                    {importing ? "A importar..." : "Confirmar importação Generali"}
                   </button>
                 )}
               </div>
@@ -1170,8 +1231,8 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <span>Ramo</span>
                   <span>Início</span>
                   <span>Até</span>
-                  <span>Prémio comercial</span>
-                  <span>Comissão</span>
+                  <span>Prémio anual</span>
+                  <span>Comissão total</span>
                   <span>Cliente</span>
                   <span>Apólice</span>
                 </div>
