@@ -214,15 +214,17 @@ function encodeOpportunityText(item) {
 }
 
 function buildNewClientOpportunityHref(item) {
-  if (item?.existingClient?.id) {
+  if (!item) return "/oportunidades";
+
+  if (item.existingClient?.id) {
     return `/oportunidades?cliente=${item.existingClient.id}`;
   }
 
   const params = new URLSearchParams();
 
-  if (item?.clientName) params.set("nome", item.clientName);
-  if (item?.nif) params.set("nif", item.nif);
-  if (item?.phone) params.set("telefone", item.phone);
+  if (item.clientName) params.set("nome", item.clientName);
+  if (item.nif) params.set("nif", item.nif);
+  if (item.phone) params.set("telefone", item.phone);
 
   params.set("descricao", decodeURIComponent(encodeOpportunityText(item)));
 
@@ -1814,4 +1816,3 @@ const miniOpportunityButton = {
   fontWeight: "bold",
   display: "inline-block",
 };
-
