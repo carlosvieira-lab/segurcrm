@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../../components/Sidebar";
 
@@ -18,17 +18,11 @@ export async function getServerSideProps() {
   const { data: tasks } = await supabase
     .from("tasks")
     .select("*, clients(id, name, nif, phone), policies(id, policy_number, branch, license_plate)")
-    .order("created_at", { ascending: false });
-
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name, nif, phone")
-    .order("name", { ascending: true });
+    .order("due_date", { ascending: true });
 
   return {
     props: {
       tasks: tasks || [],
-      clients: clients || [],
     },
   };
 }
@@ -36,6 +30,14 @@ export async function getServerSideProps() {
 function formatDate(date) {
   if (!date) return "-";
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function formatDateTime(date) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("pt-PT", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(date));
 }
 
 function todayIso() {
@@ -54,7 +56,9 @@ function normalizePriority(priority) {
 function normalizeCategory(category) {
   const c = String(category || "").toLowerCase().trim();
 
-  if (c.includes("comercial")) return "COMERCIAL";
+  if (c.includes("comercial")) {
+    return "COMERCIAL";
+  }
 
   if (
     c.includes("administrativa") ||
@@ -67,68 +71,141 @@ function normalizeCategory(category) {
   return "SEM CATEGORIA";
 }
 
-function clean(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+function sortByDueDate(a, b) {
+  const dateA = a.due_date || "9999-12-31";
+  const dateB = b.due_date || "9999-12-31";
+
+  if (dateA !== dateB) {
+    return dateA.localeCompare(dateB);
+  }
+
+  const priorityOrder = {
+    "MUITO URGENTE": 0,
+    URGENTE: 1,
+    NORMAL: 2,
+  };
+
+  const priorityA = priorityOrder[normalizePriority(a.priority)] ?? 2;
+  const priorityB = priorityOrder[normalizePriority(b.priority)] ?? 2;
+
+  if (priorityA !== priorityB) {
+    return priorityA - priorityB;
+  }
+
+  return String(a.title || "").localeCompare(String(b.title || ""), "pt-PT");
 }
 
-function onlyNumbers(value) {
-  return String(value || "").replace(/\D/g, "");
-}
-
-function taskMatchesSearch(task, search) {
-  const text = clean(`
-    ${task.title || ""}
-    ${task.description || ""}
-    ${task.category || ""}
-    ${task.priority || ""}
-    ${task.status || ""}
-    ${task.origin || ""}
-    ${task.clients?.name || ""}
-    ${task.clients?.nif || ""}
-    ${task.clients?.phone || ""}
-    ${task.policies?.policy_number || ""}
-    ${task.policies?.branch || ""}
-    ${task.policies?.license_plate || ""}
-  `);
-
-  const numbers = `
-    ${onlyNumbers(task.clients?.nif)}
-    ${onlyNumbers(task.clients?.phone)}
-  `;
-
-  const searchText = clean(search);
-  const searchNumbers = onlyNumbers(search);
-
-  return (
-    !searchText ||
-    text.includes(searchText) ||
-    (searchNumbers && numbers.includes(searchNumbers))
-  );
-}
-
-export default function TarefasCompacto({ tasks, clients }) {
-  const router = useRouter();
+function taskTiming(task) {
   const today = todayIso();
 
+  if (!task.due_date) {
+    return {
+      label: "Sem data",
+      color: "#64748b",
+      background: "#f1f5f9",
+    };
+  }
+
+  if (task.due_date < today) {
+    return {
+      label: "Atrasada",
+      color: "#b91c1c",
+      background: "#fee2e2",
+    };
+  }
+
+  if (task.due_date === today) {
+    return {
+      label: "Hoje",
+      color: "#c2410c",
+      background: "#ffedd5",
+    };
+  }
+
+  return {
+    label: "Futura",
+    color: "#1d4ed8",
+    background: "#dbeafe",
+  };
+}
+
+function getClientName(task) {
+  return task.clients?.name || task.client_name || "";
+}
+
+function getClientNif(task) {
+  return task.clients?.nif || task.client_nif || "";
+}
+
+function getClientPhone(task) {
+  return task.clients?.phone || task.client_phone || "";
+}
+
+function getInitials(name) {
+  const words = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+}
+
+export default function TarefasCompacto({ tasks }) {
+  const router = useRouter();
+  const dashboardFilter = router.query.filtro || "";
+
+  const [priorityFilter, setPriorityFilter] = useState("TODAS");
+  const [categoryFilter, setCategoryFilter] = useState("TODAS");
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+  const [showDetail, setShowDetail] = useState(true);
+
   const [showTaskForm, setShowTaskForm] = useState(false);
-  const [saving, setSaving] = useState(false);
 
   const [taskForm, setTaskForm] = useState({
     title: "",
-    client_id: "",
+    client_id: null,
+    client_name: "",
+    client_phone: "",
     description: "",
     category: "ADMINISTRATIVA",
     priority: "NORMAL",
     due_date: "",
   });
 
+  useEffect(() => {
+    async function loadClientFromQuery() {
+      const clientId = router.query.cliente;
+
+      if (!clientId) return;
+
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, nif, phone")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (error || !data) return;
+
+      setShowTaskForm(true);
+
+      setTaskForm((current) => ({
+        ...current,
+        client_id: data.id,
+        client_name: data.name || "",
+        client_phone: data.phone || "",
+      }));
+    }
+
+    loadClientFromQuery();
+  }, [router.query.cliente]);
+
   const [showEditTaskForm, setShowEditTaskForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
+
   const [editTaskForm, setEditTaskForm] = useState({
     title: "",
     description: "",
@@ -137,92 +214,135 @@ export default function TarefasCompacto({ tasks, clients }) {
     due_date: "",
   });
 
-  useEffect(() => {
-    const clientId =
-      typeof router.query.cliente === "string"
-        ? router.query.cliente
-        : Array.isArray(router.query.cliente)
-        ? router.query.cliente[0]
-        : "";
+  const openTasks = tasks.filter((t) => t.status !== "concluida");
+  const completedTasks = tasks.filter((t) => t.status === "concluida");
 
-    if (!clientId) return;
+  const today = todayIso();
 
-    const localClient = clients.find((client) => client.id === clientId);
-
-    setShowTaskForm(true);
-    setTaskForm((current) => ({
-      ...current,
-      client_id: clientId,
-      title: current.title || "",
-      description: current.description || "",
-    }));
-
-    if (localClient?.name && !taskForm.title) {
-      setTaskForm((current) => ({
-        ...current,
-        client_id: clientId,
-      }));
-    }
-  }, [router.query.cliente, clients]);
-
-  const openTasks = tasks.filter((task) => task.status !== "concluida");
-
-  const filteredTasks = openTasks
-    .filter((task) => taskMatchesSearch(task, search))
-    .sort((a, b) => {
-      const dateA = a.due_date || "9999-12-31";
-      const dateB = b.due_date || "9999-12-31";
-
-      if (dateA !== dateB) return dateA.localeCompare(dateB);
-
-      return String(a.title || "").localeCompare(String(b.title || ""), "pt-PT");
-    });
-
-  const overdueTasks = filteredTasks.filter(
-    (task) => task.due_date && task.due_date < today
+  const overdueTasks = openTasks.filter(
+    (t) => t.due_date && t.due_date < today
   );
 
-  const todayTasks = filteredTasks.filter((task) => task.due_date === today);
-
-  const futureTasks = filteredTasks.filter(
-    (task) => task.due_date && task.due_date > today
+  const todayTasks = openTasks.filter(
+    (t) => t.due_date === today
   );
 
-  const noDateTasks = filteredTasks.filter((task) => !task.due_date);
+  const normalTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "NORMAL"
+  );
 
-  function resetTaskForm() {
-    setTaskForm({
-      title: "",
-      client_id: "",
-      description: "",
-      category: "ADMINISTRATIVA",
-      priority: "NORMAL",
-      due_date: "",
-    });
+  const urgentTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "URGENTE"
+  );
+
+  const veryUrgentTasks = openTasks.filter(
+    (t) => normalizePriority(t.priority) === "MUITO URGENTE"
+  );
+
+  const administrativeTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "ADMINISTRATIVA"
+  );
+
+  const commercialTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "COMERCIAL"
+  );
+
+  const uncategorizedTasks = openTasks.filter(
+    (t) => normalizeCategory(t.category) === "SEM CATEGORIA"
+  );
+
+  const searchClean = String(search || "").toLowerCase().trim();
+
+  let filteredTasks = openTasks.filter((task) => {
+    if (!searchClean) return true;
+
+    const text = `
+      ${task.title || ""}
+      ${task.description || ""}
+      ${task.status || ""}
+      ${task.category || ""}
+      ${task.priority || ""}
+      ${getClientName(task)}
+      ${getClientNif(task)}
+      ${getClientPhone(task)}
+      ${task.policies?.policy_number || ""}
+      ${task.policies?.branch || ""}
+      ${task.policies?.license_plate || ""}
+    `.toLowerCase();
+
+    return text.includes(searchClean);
+  });
+
+  if (priorityFilter !== "TODAS") {
+    filteredTasks = filteredTasks.filter(
+      (t) => normalizePriority(t.priority) === priorityFilter
+    );
   }
 
-  async function createTask(event) {
-    event.preventDefault();
+  if (categoryFilter !== "TODAS") {
+    filteredTasks = filteredTasks.filter(
+      (t) => normalizeCategory(t.category) === categoryFilter
+    );
+  }
+
+  if (dashboardFilter === "vencidas") {
+    filteredTasks = filteredTasks.filter(
+      (t) => t.due_date && t.due_date < today
+    );
+  }
+
+  if (dashboardFilter === "hoje") {
+    filteredTasks = filteredTasks.filter(
+      (t) => t.due_date === today
+    );
+  }
+
+  filteredTasks = filteredTasks.sort(sortByDueDate);
+
+  const doNowTasks = openTasks
+    .filter((task) => {
+      const priority = normalizePriority(task.priority);
+      return (
+        (task.due_date && task.due_date <= today) ||
+        priority === "MUITO URGENTE"
+      );
+    })
+    .sort(sortByDueDate);
+
+  const nextTasks = openTasks
+    .filter((task) => task.due_date && task.due_date > today)
+    .sort(sortByDueDate);
+
+  const selectedTask =
+    filteredTasks.find((task) => task.id === selectedId) ||
+    doNowTasks.find((task) => task.id === selectedId) ||
+    nextTasks.find((task) => task.id === selectedId) ||
+    null;
+
+  const filteredTitle =
+    dashboardFilter === "vencidas"
+      ? "Tarefas vencidas"
+      : dashboardFilter === "hoje"
+      ? "Tarefas para hoje"
+      : "Todas as tarefas";
+
+  async function createTask(e) {
+    e.preventDefault();
 
     if (!taskForm.title.trim()) {
       alert("Indica o título da tarefa.");
       return;
     }
 
-    setSaving(true);
-
     const { error } = await supabase.from("tasks").insert({
       title: taskForm.title,
-      client_id: taskForm.client_id || null,
       description: taskForm.description,
       category: normalizeCategory(taskForm.category),
       priority: normalizePriority(taskForm.priority),
       status: "aberta",
       due_date: taskForm.due_date || null,
-      origin: "manual - tarefas compacto",
+      client_id: taskForm.client_id || null,
     });
-
-    setSaving(false);
 
     if (error) {
       alert(error.message);
@@ -246,12 +366,15 @@ export default function TarefasCompacto({ tasks, clients }) {
     });
 
     setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
     }, 100);
   }
 
-  async function saveTask(event) {
-    event.preventDefault();
+  async function saveTask(e) {
+    e.preventDefault();
 
     if (!editingTaskId) {
       alert("Não foi possível identificar a tarefa.");
@@ -285,7 +408,9 @@ export default function TarefasCompacto({ tasks, clients }) {
   async function completeTask(taskId) {
     const { error } = await supabase
       .from("tasks")
-      .update({ status: "concluida" })
+      .update({
+        status: "concluida",
+      })
       .eq("id", taskId);
 
     if (error) {
@@ -296,8 +421,6 @@ export default function TarefasCompacto({ tasks, clients }) {
     window.location.reload();
   }
 
-  const selectedClient = clients.find((client) => client.id === taskForm.client_id);
-
   return (
     <div style={page}>
       <Sidebar active="tarefas-compacto" />
@@ -305,81 +428,39 @@ export default function TarefasCompacto({ tasks, clients }) {
       <main style={main}>
         <header style={header}>
           <div>
-            <h1 style={title}>Tarefas Compacto ✅</h1>
-            <p style={subtitle}>
-              Página exclusiva de tarefas. Não comunica com Oportunidades.
-            </p>
+            <h1 style={title}>✅ Tarefas</h1>
+            <p style={subtitle}>Gestão por prioridade, categoria e data limite.</p>
           </div>
 
-          <button
-            type="button"
-            style={button}
-            onClick={() => {
-              setShowEditTaskForm(false);
-              setShowTaskForm(true);
-            }}
-          >
+          <button style={button} onClick={() => setShowTaskForm(true)}>
             + Nova tarefa
           </button>
         </header>
 
-        <section style={searchCard}>
-          <input
-            style={searchInput}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Pesquisar tarefa, cliente, NIF, telefone, apólice ou matrícula..."
-          />
-        </section>
+        {(showTaskForm || showEditTaskForm) && (
+          <section style={showEditTaskForm ? editFormCard : formCard}>
+            <h2 style={formTitle}>{showEditTaskForm ? "Editar Tarefa" : "Nova Tarefa"}</h2>
 
-        {showTaskForm && (
-          <section style={formCard}>
-            <div style={formHeader}>
-              <h2>Nova tarefa</h2>
-
-              <button
-                type="button"
-                style={cancelButton}
-                onClick={() => {
-                  setShowTaskForm(false);
-                  resetTaskForm();
-                }}
-              >
-                Fechar
-              </button>
-            </div>
-
-            <form style={formGrid} onSubmit={createTask}>
+            <form onSubmit={showEditTaskForm ? saveTask : createTask} style={formGrid}>
               <input
                 style={input}
                 placeholder="Título da tarefa"
-                value={taskForm.title}
-                onChange={(event) =>
-                  setTaskForm({ ...taskForm, title: event.target.value })
+                value={showEditTaskForm ? editTaskForm.title : taskForm.title}
+                onChange={(e) =>
+                  showEditTaskForm
+                    ? setEditTaskForm({ ...editTaskForm, title: e.target.value })
+                    : setTaskForm({ ...taskForm, title: e.target.value })
                 }
                 required
               />
 
               <select
                 style={input}
-                value={taskForm.client_id}
-                onChange={(event) =>
-                  setTaskForm({ ...taskForm, client_id: event.target.value })
-                }
-              >
-                <option value="">Tarefa geral / sem cliente</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name} · {client.nif || "-"}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                style={input}
-                value={taskForm.category}
-                onChange={(event) =>
-                  setTaskForm({ ...taskForm, category: event.target.value })
+                value={showEditTaskForm ? editTaskForm.category : taskForm.category}
+                onChange={(e) =>
+                  showEditTaskForm
+                    ? setEditTaskForm({ ...editTaskForm, category: e.target.value })
+                    : setTaskForm({ ...taskForm, category: e.target.value })
                 }
               >
                 <option value="ADMINISTRATIVA">Administrativa</option>
@@ -388,9 +469,11 @@ export default function TarefasCompacto({ tasks, clients }) {
 
               <select
                 style={input}
-                value={taskForm.priority}
-                onChange={(event) =>
-                  setTaskForm({ ...taskForm, priority: event.target.value })
+                value={showEditTaskForm ? editTaskForm.priority : taskForm.priority}
+                onChange={(e) =>
+                  showEditTaskForm
+                    ? setEditTaskForm({ ...editTaskForm, priority: e.target.value })
+                    : setTaskForm({ ...taskForm, priority: e.target.value })
                 }
               >
                 <option value="NORMAL">Normal</option>
@@ -398,36 +481,31 @@ export default function TarefasCompacto({ tasks, clients }) {
                 <option value="MUITO URGENTE">Muito urgente</option>
               </select>
 
-              <label style={fieldLabel}>
-                Data limite
-                <input
-                  style={input}
-                  type="date"
-                  value={taskForm.due_date}
-                  onChange={(event) =>
-                    setTaskForm({ ...taskForm, due_date: event.target.value })
-                  }
-                />
-              </label>
-
-              {selectedClient && (
-                <div style={linkedClientBox}>
-                  Cliente associado: <strong>{selectedClient.name}</strong>
-                </div>
-              )}
+              <input
+                style={input}
+                type="date"
+                value={showEditTaskForm ? editTaskForm.due_date : taskForm.due_date}
+                onChange={(e) =>
+                  showEditTaskForm
+                    ? setEditTaskForm({ ...editTaskForm, due_date: e.target.value })
+                    : setTaskForm({ ...taskForm, due_date: e.target.value })
+                }
+              />
 
               <textarea
-                style={{ ...textarea, gridColumn: "1 / -1" }}
+                style={textarea}
                 placeholder="Descrição"
-                value={taskForm.description}
-                onChange={(event) =>
-                  setTaskForm({ ...taskForm, description: event.target.value })
+                value={showEditTaskForm ? editTaskForm.description : taskForm.description}
+                onChange={(e) =>
+                  showEditTaskForm
+                    ? setEditTaskForm({ ...editTaskForm, description: e.target.value })
+                    : setTaskForm({ ...taskForm, description: e.target.value })
                 }
               />
 
               <div style={formButtons}>
-                <button type="submit" style={button} disabled={saving}>
-                  {saving ? "A guardar..." : "Guardar tarefa"}
+                <button type="submit" style={button}>
+                  {showEditTaskForm ? "Guardar alterações" : "Guardar tarefa"}
                 </button>
 
                 <button
@@ -435,97 +513,6 @@ export default function TarefasCompacto({ tasks, clients }) {
                   style={cancelButton}
                   onClick={() => {
                     setShowTaskForm(false);
-                    resetTaskForm();
-                  }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </section>
-        )}
-
-        {showEditTaskForm && (
-          <section style={editFormCard}>
-            <div style={formHeader}>
-              <h2>Editar tarefa</h2>
-
-              <button
-                type="button"
-                style={cancelButton}
-                onClick={() => {
-                  setShowEditTaskForm(false);
-                  setEditingTaskId(null);
-                }}
-              >
-                Fechar
-              </button>
-            </div>
-
-            <form style={formGrid} onSubmit={saveTask}>
-              <input
-                style={input}
-                placeholder="Título da tarefa"
-                value={editTaskForm.title}
-                onChange={(event) =>
-                  setEditTaskForm({ ...editTaskForm, title: event.target.value })
-                }
-                required
-              />
-
-              <select
-                style={input}
-                value={editTaskForm.category}
-                onChange={(event) =>
-                  setEditTaskForm({ ...editTaskForm, category: event.target.value })
-                }
-              >
-                <option value="ADMINISTRATIVA">Administrativa</option>
-                <option value="COMERCIAL">Comercial</option>
-              </select>
-
-              <select
-                style={input}
-                value={editTaskForm.priority}
-                onChange={(event) =>
-                  setEditTaskForm({ ...editTaskForm, priority: event.target.value })
-                }
-              >
-                <option value="NORMAL">Normal</option>
-                <option value="URGENTE">Urgente</option>
-                <option value="MUITO URGENTE">Muito urgente</option>
-              </select>
-
-              <label style={fieldLabel}>
-                Data limite
-                <input
-                  style={input}
-                  type="date"
-                  value={editTaskForm.due_date}
-                  onChange={(event) =>
-                    setEditTaskForm({ ...editTaskForm, due_date: event.target.value })
-                  }
-                />
-              </label>
-
-              <textarea
-                style={{ ...textarea, gridColumn: "1 / -1" }}
-                placeholder="Descrição"
-                value={editTaskForm.description}
-                onChange={(event) =>
-                  setEditTaskForm({ ...editTaskForm, description: event.target.value })
-                }
-              />
-
-              <div style={formButtons}>
-                <button type="submit" style={button}>
-                  Guardar alterações
-                </button>
-
-                <button
-                  type="button"
-                  style={cancelButton}
-                  onClick={() => {
                     setShowEditTaskForm(false);
                     setEditingTaskId(null);
                   }}
@@ -538,86 +525,284 @@ export default function TarefasCompacto({ tasks, clients }) {
         )}
 
         <section style={statsGrid}>
-          <StatCard title="Vencidas" value={overdueTasks.length} color="#dc2626" />
-          <StatCard title="Hoje" value={todayTasks.length} color="#7c3aed" />
-          <StatCard title="Futuras" value={futureTasks.length} color="#2563eb" />
-          <StatCard title="Sem data" value={noDateTasks.length} color="#6b7280" />
-          <StatCard title="Total abertas" value={filteredTasks.length} color="#111827" />
+          <StatCard title="Abertas" value={openTasks.length} color="#2563eb" icon="📋" />
+          <StatCard title="Atrasadas" value={overdueTasks.length} color="#dc2626" icon="⏰" />
+          <StatCard title="Urgentes" value={urgentTasks.length + veryUrgentTasks.length} color="#f59e0b" icon="❗" />
+          <StatCard title="Hoje" value={todayTasks.length} color="#16a34a" icon="📅" />
+          <StatCard title="Concluídas" value={completedTasks.length} color="#7c3aed" icon="✅" />
         </section>
 
-        <TaskSection title="Vencidas" items={overdueTasks} editTask={editTask} completeTask={completeTask} />
-        <TaskSection title="Hoje" items={todayTasks} editTask={editTask} completeTask={completeTask} />
-        <TaskSection title="Futuras" items={futureTasks} editTask={editTask} completeTask={completeTask} />
-        <TaskSection title="Sem data" items={noDateTasks} editTask={editTask} completeTask={completeTask} />
+        <section style={workArea}>
+          <div style={leftColumn}>
+            <section style={urgentSection}>
+              <div style={sectionTop}>
+                <h2 style={urgentTitle}>🔥 Fazer Agora ({doNowTasks.length})</h2>
+                <button type="button" style={ghostButton} onClick={() => setPriorityFilter("TODAS")}>
+                  Ver todas →
+                </button>
+              </div>
+
+              {doNowTasks.length === 0 ? (
+                <p style={muted}>Sem tarefas urgentes.</p>
+              ) : (
+                <div style={urgentGrid}>
+                  {doNowTasks.slice(0, 3).map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      selected={selectedId === task.id}
+                      compact
+                      onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
+                      editTask={editTask}
+                      completeTask={completeTask}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={nextSection}>
+              <div style={sectionTop}>
+                <h2 style={sectionTitle}>📅 Próximas Tarefas ({nextTasks.length})</h2>
+                <button type="button" style={ghostButton} onClick={() => { setSelectedId(nextTasks[0]?.id || null); setShowDetail(true); }}>
+                  Ver detalhe →
+                </button>
+              </div>
+
+              {nextTasks.length === 0 ? (
+                <p style={muted}>Sem próximas tarefas.</p>
+              ) : (
+                <div style={tableWrap}>
+                  <table style={table}>
+                    <thead>
+                      <tr>
+                        <th style={th}>Data limite</th>
+                        <th style={th}>Tarefa</th>
+                        <th style={th}>Cliente</th>
+                        <th style={th}>Categoria</th>
+                        <th style={th}>Prioridade</th>
+                        <th style={th}>Estado</th>
+                        <th style={th}>Abrir</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {nextTasks.slice(0, 8).map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          selected={selectedId === task.id}
+                          onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section style={allSection}>
+              <div style={sectionTop}>
+                <h2 style={sectionTitle}>{filteredTitle}: {filteredTasks.length}</h2>
+              </div>
+
+              <div style={filters}>
+                <input
+                  style={searchInput}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Pesquisar tarefa, cliente, NIF, telefone, descrição..."
+                />
+
+                <select style={filterSelect} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="TODAS">Todas as categorias</option>
+                  <option value="ADMINISTRATIVA">Administrativas</option>
+                  <option value="COMERCIAL">Comerciais</option>
+                  <option value="SEM CATEGORIA">Sem categoria</option>
+                </select>
+
+                <select style={filterSelect} value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+                  <option value="TODAS">Todas as prioridades</option>
+                  <option value="NORMAL">Normais</option>
+                  <option value="URGENTE">Urgentes</option>
+                  <option value="MUITO URGENTE">Muito urgentes</option>
+                </select>
+
+                <button type="button" style={clearButton} onClick={() => {
+                  setSearch("");
+                  setCategoryFilter("TODAS");
+                  setPriorityFilter("TODAS");
+                }}>
+                  Limpar
+                </button>
+              </div>
+
+              {filteredTasks.length === 0 ? (
+                <p style={muted}>Sem tarefas nesta seleção.</p>
+              ) : (
+                <div style={taskListGrid}>
+                  {filteredTasks.slice(0, 10).map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      selected={selectedId === task.id}
+                      onOpen={() => {
+                        setSelectedId(task.id);
+                        setShowDetail(true);
+                      }}
+                      editTask={editTask}
+                      completeTask={completeTask}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {showDetail && (
+            <div style={rightColumn}>
+              {selectedTask ? (
+                <TaskDetail
+                  task={selectedTask}
+                  editTask={editTask}
+                  completeTask={completeTask}
+                  onClose={() => {
+                    setSelectedId(null);
+                    setShowDetail(false);
+                  }}
+                />
+              ) : (
+                <div style={emptyDetail}>
+                  <h2>Detalhe da Tarefa</h2>
+                  <p>Seleciona uma tarefa para ver o detalhe completo.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );
 }
 
-function TaskSection({ title, items, editTask, completeTask }) {
+function StatCard({ title, value, color, icon }) {
   return (
-    <section style={section}>
-      <h2 style={sectionTitle}>{title}: {items.length}</h2>
-
-      {items.length === 0 ? (
-        <p style={muted}>Sem tarefas.</p>
-      ) : (
-        <div style={taskGrid}>
-          {items.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              editTask={editTask}
-              completeTask={completeTask}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+    <div style={statCard}>
+      <div style={{ ...statIcon, color, background: `${color}18` }}>{icon}</div>
+      <div>
+        <p style={cardLabel}>{title}</p>
+        <h2 style={{ ...cardValue, color }}>{value}</h2>
+      </div>
+    </div>
   );
 }
 
-function TaskCard({ task, editTask, completeTask }) {
+function TaskRow({ task, selected, onOpen }) {
+  const timing = taskTiming(task);
   const priority = normalizePriority(task.priority);
   const category = normalizeCategory(task.category);
+  const clientName = getClientName(task);
 
   return (
-    <article style={taskCard}>
-      <div style={taskTop}>
-        <h3 style={taskTitle}>{task.title || "Sem título"}</h3>
+    <tr style={selected ? selectedRow : tr}>
+      <td style={td}>
+        <strong>{formatDate(task.due_date)}</strong>
+      </td>
 
-        <div style={badgeRow}>
-          <span style={{ ...badge, ...priorityStyle(priority) }}>
-            {priority}
-          </span>
+      <td style={td}>{task.title || "Sem título"}</td>
 
-          <span style={{ ...badge, ...categoryStyle(category) }}>
-            {category}
-          </span>
-        </div>
-      </div>
-
-      <p><strong>Data limite:</strong> {formatDate(task.due_date)}</p>
-
-      <p>
-        <strong>Cliente:</strong>{" "}
-        {task.clients?.name ? (
-          <Link href={`/clientes/${task.clients.id}`} style={link}>
-            {task.clients.name}
-          </Link>
+      <td style={td}>
+        {clientName ? (
+          <div>
+            <strong>{clientName}</strong>
+            <div style={smallMuted}>Cliente da carteira</div>
+          </div>
         ) : (
           "Tarefa geral"
         )}
-      </p>
+      </td>
 
-      {task.policies && (
-        <p>
-          <strong>Apólice:</strong>{" "}
-          {task.policies.policy_number || "-"} · {task.policies.license_plate || "-"}
-        </p>
+      <td style={td}>
+        <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
+      </td>
+
+      <td style={td}>
+        <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
+      </td>
+
+      <td style={td}>
+        <span style={{ ...miniBadge, color: timing.color, background: timing.background }}>
+          {timing.label}
+        </span>
+      </td>
+
+      <td style={td}>
+        <button style={openIconButton} onClick={onOpen}>›</button>
+      </td>
+    </tr>
+  );
+}
+
+function TaskCard({ task, selected, compact = false, onOpen, editTask, completeTask }) {
+  const priority = normalizePriority(task.priority);
+  const category = normalizeCategory(task.category);
+  const timing = taskTiming(task);
+  const clientName = getClientName(task);
+  const clientNif = getClientNif(task);
+  const clientPhone = getClientPhone(task);
+
+  return (
+    <div style={{ ...taskCard, ...(selected ? selectedCard : {}) }}>
+      <div style={taskTop}>
+        <button type="button" style={taskTitleButton} onClick={onOpen}>
+          {task.title || "Sem título"}
+        </button>
+
+        <div style={badgeRow}>
+          <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
+          <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
+        </div>
+      </div>
+
+      <div style={taskMetaGrid}>
+        <InfoLine icon="📅" label="Data limite" value={formatDate(task.due_date)} />
+        <InfoLine icon="📌" label="Estado" value={task.status || "aberta"} />
+      </div>
+
+      {clientName ? (
+        <div style={clientBox}>
+          <div style={clientTop}>
+            <span style={avatar}>{getInitials(clientName)}</span>
+            <div>
+              <strong>Cliente da carteira</strong>
+              <div>{clientName}</div>
+            </div>
+          </div>
+
+          <div style={clientData}>
+            <span>NIF: {clientNif || "-"}</span>
+            <span>Telefone: {clientPhone || "-"}</span>
+          </div>
+        </div>
+      ) : (
+        <div style={generalTaskBox}>Tarefa geral sem cliente associado</div>
       )}
 
-      <p><strong>Descrição:</strong> {task.description || "-"}</p>
+      {!compact && task.description && (
+        <p style={description}>{task.description}</p>
+      )}
+
+      {task.policies && (
+        <div style={policyBox}>
+          Apólice: {task.policies.policy_number || "-"} · {task.policies.branch || "-"} · {task.policies.license_plate || "-"}
+        </div>
+      )}
 
       <div style={buttonGroup}>
         {task.client_id && (
@@ -626,45 +811,146 @@ function TaskCard({ task, editTask, completeTask }) {
           </Link>
         )}
 
-        <button
-          type="button"
-          style={{ ...smallButton, background: "#2563eb" }}
-          onClick={() => editTask(task)}
-        >
+        <button style={{ ...smallButton, background: "#2563eb" }} onClick={() => editTask(task)}>
           Editar
         </button>
 
-        <button
-          type="button"
-          style={{ ...smallButton, background: "#16a34a" }}
-          onClick={() => completeTask(task.id)}
-        >
+        <button style={{ ...smallButton, background: "#16a34a" }} onClick={() => completeTask(task.id)}>
           Concluir
         </button>
       </div>
-    </article>
+    </div>
   );
 }
 
-function StatCard({ title, value, color }) {
+function TaskDetail({ task, editTask, completeTask, onClose }) {
+  const priority = normalizePriority(task.priority);
+  const category = normalizeCategory(task.category);
+  const timing = taskTiming(task);
+  const clientName = getClientName(task);
+  const clientNif = getClientNif(task);
+  const clientPhone = getClientPhone(task);
+
   return (
-    <div style={statCard}>
-      <p style={cardLabel}>{title}</p>
-      <h2 style={{ ...cardValue, color }}>{value}</h2>
+    <aside style={detailPanel}>
+      <div style={detailHeader}>
+        <h2 style={detailTitle}>Detalhe da Tarefa</h2>
+
+        <button type="button" onClick={onClose} style={closeDetailButton}>
+          ✕
+        </button>
+      </div>
+
+      <h3 style={detailTaskTitle}>{task.title || "Sem título"}</h3>
+
+      <div style={detailBadges}>
+        <span style={{ ...miniBadge, ...priorityStyle(priority) }}>{priority}</span>
+        <span style={{ ...miniBadge, ...categoryStyle(category) }}>{category}</span>
+        <span style={{ ...miniBadge, color: timing.color, background: timing.background }}>{timing.label}</span>
+      </div>
+
+      <div style={detailGrid}>
+        <InfoLine icon="📅" label="Data limite" value={formatDate(task.due_date)} />
+        <InfoLine icon="📌" label="Estado" value={task.status || "aberta"} />
+        <InfoLine icon="🕒" label="Criada em" value={formatDateTime(task.created_at)} />
+      </div>
+
+      {clientName ? (
+        <div style={detailClientBox}>
+          <strong>👤 Cliente da carteira</strong>
+          <div style={detailClientName}>{clientName}</div>
+          <div>NIF: {clientNif || "-"}</div>
+          <div>Telefone: {clientPhone || "-"}</div>
+        </div>
+      ) : (
+        <div style={generalTaskBox}>Tarefa geral sem cliente associado</div>
+      )}
+
+      {task.policies && (
+        <div style={detailBlock}>
+          <strong>Apólice</strong>
+          <p>
+            {task.policies.policy_number || "-"} · {task.policies.branch || "-"} · {task.policies.license_plate || "-"}
+          </p>
+        </div>
+      )}
+
+      <div style={detailBlock}>
+        <strong>Descrição</strong>
+        <p>{task.description || "-"}</p>
+      </div>
+
+      <div style={detailButtons}>
+        {task.client_id && (
+          <Link href={`/clientes/${task.client_id}`} style={fullDarkButton}>
+            Abrir cliente
+          </Link>
+        )}
+
+        <button style={fullBlueButton} onClick={() => editTask(task)}>
+          Editar
+        </button>
+
+        <button style={fullGreenButton} onClick={() => completeTask(task.id)}>
+          Concluir
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function InfoLine({ icon, label, value }) {
+  return (
+    <div style={infoLine}>
+      <span>{icon}</span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+      </div>
     </div>
   );
 }
 
 function priorityStyle(priority) {
-  if (priority === "MUITO URGENTE") return { background: "#fee2e2", color: "#991b1b" };
-  if (priority === "URGENTE") return { background: "#fef3c7", color: "#92400e" };
-  return { background: "#dbeafe", color: "#1d4ed8" };
+  if (priority === "MUITO URGENTE") {
+    return {
+      background: "#fee2e2",
+      color: "#991b1b",
+    };
+  }
+
+  if (priority === "URGENTE") {
+    return {
+      background: "#fef3c7",
+      color: "#92400e",
+    };
+  }
+
+  return {
+    background: "#dbeafe",
+    color: "#1d4ed8",
+  };
 }
 
 function categoryStyle(category) {
-  if (category === "COMERCIAL") return { background: "#ede9fe", color: "#5b21b6" };
-  if (category === "ADMINISTRATIVA") return { background: "#ccfbf1", color: "#0f766e" };
-  return { background: "#e5e7eb", color: "#374151" };
+  if (category === "COMERCIAL") {
+    return {
+      background: "#ede9fe",
+      color: "#5b21b6",
+    };
+  }
+
+  if (category === "ADMINISTRATIVA") {
+    return {
+      background: "#ccfbf1",
+      color: "#0f766e",
+    };
+  }
+
+  return {
+    background: "#e5e7eb",
+    color: "#374151",
+  };
 }
 
 const page = {
@@ -680,72 +966,63 @@ const main = {
 };
 
 const header = {
-  marginBottom: 14,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 18,
+  marginBottom: 18,
 };
 
 const title = {
-  fontSize: 34,
+  fontSize: 36,
   margin: 0,
-  color: "#7c3aed",
+  color: "#0f172a",
   fontWeight: 900,
+  lineHeight: 1.05,
 };
 
 const subtitle = {
   color: "#475569",
-  marginTop: 6,
+  marginTop: 8,
   fontSize: 15,
 };
 
-const searchCard = {
-  background: "white",
-  padding: 12,
-  borderRadius: 16,
-  marginBottom: 14,
-  border: "1px solid #e5e7eb",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-};
-
-const searchInput = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 12,
-  border: "1px solid #cbd5e1",
-  fontSize: 15,
-  boxSizing: "border-box",
+const button = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const formCard = {
-  background: "linear-gradient(135deg, #ffffff, #f5f3ff)",
+  background: "linear-gradient(135deg, #dbeafe, #eff6ff)",
   padding: 16,
   borderRadius: 18,
-  marginBottom: 14,
-  border: "1px solid #ddd6fe",
+  marginBottom: 16,
+  border: "1px solid #bfdbfe",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
 const editFormCard = {
-  background: "linear-gradient(135deg, #fffbeb, #ffffff)",
+  background: "linear-gradient(135deg, #fef3c7, #fffbeb)",
   padding: 16,
   borderRadius: 18,
-  marginBottom: 14,
+  marginBottom: 16,
   border: "1px solid #f59e0b",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
-const formHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
+const formTitle = {
+  margin: "0 0 12px",
+  fontSize: 20,
 };
 
 const formGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 10,
 };
 
@@ -754,119 +1031,171 @@ const input = {
   borderRadius: 10,
   border: "1px solid #cbd5e1",
   fontSize: 14,
-  boxSizing: "border-box",
   width: "100%",
+  boxSizing: "border-box",
 };
 
 const textarea = {
   padding: 11,
   borderRadius: 10,
   border: "1px solid #cbd5e1",
-  minHeight: 78,
+  minHeight: 82,
   fontSize: 14,
-  fontFamily: "Arial, sans-serif",
-  boxSizing: "border-box",
   width: "100%",
-};
-
-const fieldLabel = {
-  display: "grid",
-  gap: 6,
-  color: "#374151",
-  fontSize: 13,
-};
-
-const linkedClientBox = {
-  background: "#dcfce7",
-  color: "#166534",
-  padding: 10,
-  borderRadius: 10,
-  fontWeight: "bold",
+  boxSizing: "border-box",
   gridColumn: "1 / -1",
+  fontFamily: "Arial, sans-serif",
 };
 
 const formButtons = {
   display: "flex",
   gap: 10,
-  flexWrap: "wrap",
   gridColumn: "1 / -1",
-};
-
-const button = {
-  background: "#7c3aed",
-  color: "white",
-  border: "none",
-  padding: "12px 16px",
-  borderRadius: 10,
-  fontWeight: 800,
-  cursor: "pointer",
 };
 
 const cancelButton = {
   background: "#6b7280",
   color: "white",
   border: "none",
-  padding: "10px 14px",
+  padding: "12px 18px",
   borderRadius: 10,
-  fontWeight: 800,
   cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const statsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
   gap: 12,
-  marginBottom: 14,
+  marginBottom: 16,
 };
 
 const statCard = {
   background: "white",
-  padding: 14,
+  padding: 16,
   borderRadius: 16,
   border: "1px solid #e5e7eb",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+};
+
+const statIcon = {
+  width: 48,
+  height: 48,
+  borderRadius: 999,
+  display: "grid",
+  placeItems: "center",
+  fontSize: 22,
 };
 
 const cardLabel = {
   color: "#334155",
   margin: 0,
   fontWeight: 800,
-  fontSize: 13,
+  fontSize: 14,
 };
 
 const cardValue = {
-  fontSize: 30,
   margin: "4px 0 0",
+  fontSize: 31,
   lineHeight: 1,
 };
 
-const section = {
+const workArea = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) 330px",
+  gap: 16,
+  alignItems: "start",
+};
+
+const leftColumn = {
+  display: "grid",
+  gap: 16,
+};
+
+const rightColumn = {
+  position: "sticky",
+  top: 16,
+};
+
+const urgentSection = {
+  background: "linear-gradient(135deg, #fff7ed, #fee2e2)",
+  padding: 16,
+  borderRadius: 18,
+  border: "1px solid #fecaca",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const nextSection = {
   background: "white",
   padding: 16,
   borderRadius: 18,
-  marginBottom: 14,
+  border: "1px solid #bfdbfe",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const allSection = {
+  background: "white",
+  padding: 16,
+  borderRadius: 18,
   border: "1px solid #e5e7eb",
   boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
 };
 
-const sectionTitle = {
-  margin: "0 0 12px",
-  color: "#0f172a",
-  fontSize: 21,
+const sectionTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const urgentTitle = {
+  margin: 0,
+  color: "#9a3412",
+  fontSize: 20,
   fontWeight: 900,
 };
 
-const taskGrid = {
+const sectionTitle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const ghostButton = {
+  background: "transparent",
+  color: "#2563eb",
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const urgentGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+  gap: 12,
+};
+
+const taskListGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
   gap: 12,
 };
 
 const taskCard = {
   background: "#f8fafc",
-  border: "1px solid #e2e8f0",
   padding: 14,
   borderRadius: 14,
+  border: "1px solid #e5e7eb",
+};
+
+const selectedCard = {
+  outline: "3px solid #16a34a",
+  background: "#f0fdf4",
 };
 
 const taskTop = {
@@ -874,10 +1203,19 @@ const taskTop = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 10,
+  marginBottom: 10,
 };
 
-const taskTitle = {
-  margin: 0,
+const taskTitleButton = {
+  border: "none",
+  background: "transparent",
+  padding: 0,
+  textAlign: "left",
+  cursor: "pointer",
+  fontWeight: 900,
+  fontSize: 17,
+  color: "#0f172a",
+  lineHeight: 1.2,
 };
 
 const badgeRow = {
@@ -887,19 +1225,95 @@ const badgeRow = {
   justifyContent: "flex-end",
 };
 
-const badge = {
-  padding: "6px 10px",
+const miniBadge = {
+  padding: "5px 9px",
   borderRadius: 999,
   fontSize: 12,
   fontWeight: "bold",
   whiteSpace: "nowrap",
 };
 
+const taskMetaGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+  marginBottom: 10,
+};
+
+const infoLine = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#475569",
+  fontSize: 13,
+};
+
+const clientBox = {
+  background: "white",
+  border: "1px solid #bbf7d0",
+  padding: 10,
+  borderRadius: 12,
+  marginBottom: 10,
+};
+
+const clientTop = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  color: "#166534",
+  marginBottom: 8,
+};
+
+const avatar = {
+  width: 34,
+  height: 34,
+  minWidth: 34,
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#15803d",
+  display: "grid",
+  placeItems: "center",
+  fontWeight: 900,
+};
+
+const clientData = {
+  display: "grid",
+  gap: 3,
+  color: "#334155",
+  fontSize: 13,
+};
+
+const generalTaskBox = {
+  background: "#f1f5f9",
+  color: "#64748b",
+  padding: 10,
+  borderRadius: 12,
+  marginBottom: 10,
+  fontWeight: 700,
+};
+
+const description = {
+  color: "#334155",
+  fontSize: 14,
+  lineHeight: 1.35,
+  margin: "8px 0",
+};
+
+const policyBox = {
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  padding: 9,
+  borderRadius: 10,
+  fontSize: 13,
+  fontWeight: 700,
+  marginBottom: 10,
+};
+
 const buttonGroup = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginTop: 14,
+  marginTop: 10,
 };
 
 const smallButton = {
@@ -920,12 +1334,209 @@ const smallLinkButton = {
   fontWeight: "bold",
 };
 
-const link = {
-  color: "#2563eb",
-  fontWeight: "bold",
+const tableWrap = {
+  overflowX: "auto",
+};
+
+const table = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 13,
+};
+
+const th = {
+  textAlign: "left",
+  color: "#475569",
+  padding: "9px 8px",
+  borderBottom: "1px solid #e5e7eb",
+  whiteSpace: "nowrap",
+};
+
+const tr = {
+  background: "white",
+};
+
+const selectedRow = {
+  background: "#f0fdf4",
+};
+
+const td = {
+  padding: "9px 8px",
+  borderBottom: "1px solid #e5e7eb",
+  verticalAlign: "middle",
+};
+
+const smallMuted = {
+  color: "#64748b",
+  fontSize: 12,
+  marginTop: 3,
+};
+
+const openIconButton = {
+  border: "1px solid #e5e7eb",
+  background: "white",
+  borderRadius: 8,
+  width: 30,
+  height: 30,
+  cursor: "pointer",
+  fontWeight: 900,
+};
+
+const filters = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 1fr) 180px 180px auto",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const searchInput = {
+  padding: 11,
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  fontSize: 14,
+};
+
+const filterSelect = {
+  padding: 11,
+  borderRadius: 10,
+  border: "1px solid #cbd5e1",
+  fontSize: 14,
+  background: "white",
+};
+
+const clearButton = {
+  background: "white",
+  color: "#334155",
+  border: "1px solid #cbd5e1",
+  borderRadius: 10,
+  padding: "0 14px",
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const detailPanel = {
+  background: "white",
+  borderRadius: 18,
+  padding: 16,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
+};
+
+const emptyDetail = {
+  background: "white",
+  borderRadius: 18,
+  padding: 18,
+  border: "1px solid #e5e7eb",
+  color: "#64748b",
+};
+
+const detailTitle = {
+  margin: "0 0 14px",
+  color: "#0f172a",
+  fontSize: 20,
+};
+
+const detailTaskTitle = {
+  margin: "0 0 10px",
+  fontSize: 20,
+  color: "#0f172a",
+};
+
+const detailBadges = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  marginBottom: 14,
+};
+
+const detailGrid = {
+  display: "grid",
+  gap: 10,
+  marginBottom: 14,
+};
+
+const detailClientBox = {
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  padding: 12,
+  borderRadius: 12,
+  color: "#166534",
+  marginBottom: 12,
+  display: "grid",
+  gap: 4,
+};
+
+const detailClientName = {
+  color: "#0f172a",
+  fontWeight: 900,
+  fontSize: 16,
+};
+
+const detailBlock = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 12,
+  marginBottom: 12,
+};
+
+const detailButtons = {
+  display: "grid",
+  gap: 9,
+};
+
+const fullDarkButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
   textDecoration: "none",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const fullBlueButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const fullGreenButton = {
+  background: "#16a34a",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const muted = {
   color: "#64748b",
+};
+
+
+const detailHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const closeDetailButton = {
+  border: "none",
+  background: "#ef4444",
+  color: "white",
+  width: 34,
+  height: 34,
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: 18,
 };
