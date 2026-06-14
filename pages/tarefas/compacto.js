@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+mport { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -170,6 +170,7 @@ export default function TarefasCompacto({ tasks }) {
     title: "",
     client_id: null,
     client_name: "",
+    client_nif: "",
     client_phone: "",
     description: "",
     category: "ADMINISTRATIVA",
@@ -179,24 +180,29 @@ export default function TarefasCompacto({ tasks }) {
 
   useEffect(() => {
     async function loadClientFromQuery() {
-      const clientId = router.query.cliente;
+      const queryClientId = Array.isArray(router.query.cliente)
+        ? router.query.cliente[0]
+        : router.query.cliente;
 
-      if (!clientId) return;
+      if (!queryClientId) return;
 
       const { data, error } = await supabase
         .from("clients")
         .select("id, name, nif, phone")
-        .eq("id", clientId)
+        .eq("id", queryClientId)
         .maybeSingle();
 
       if (error || !data) return;
 
+      setShowEditTaskForm(false);
+      setEditingTaskId(null);
       setShowTaskForm(true);
 
       setTaskForm((current) => ({
         ...current,
         client_id: data.id,
         client_name: data.name || "",
+        client_nif: data.nif || "",
         client_phone: data.phone || "",
       }));
     }
@@ -492,6 +498,15 @@ export default function TarefasCompacto({ tasks }) {
                     : setTaskForm({ ...taskForm, due_date: e.target.value })
                 }
               />
+
+              {!showEditTaskForm && taskForm.client_id && (
+                <div style={linkedClientBox}>
+                  <strong>Cliente associado</strong>
+                  <span>{taskForm.client_name || "-"}</span>
+                  <span>NIF: {taskForm.client_nif || "-"}</span>
+                  <span>Contacto: {taskForm.client_phone || "-"}</span>
+                </div>
+              )}
 
               <textarea
                 style={textarea}
@@ -1050,6 +1065,18 @@ const textarea = {
   boxSizing: "border-box",
   gridColumn: "1 / -1",
   fontFamily: "Arial, sans-serif",
+};
+
+const linkedClientBox = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  padding: 12,
+  borderRadius: 12,
+  fontWeight: "bold",
+  gridColumn: "1 / -1",
+  display: "grid",
+  gap: 4,
 };
 
 const formButtons = {
