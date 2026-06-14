@@ -121,6 +121,13 @@ function getAlertStyle(days) {
   return { background: "#dcfce7", color: "#166534" };
 }
 
+function getAlertLabel(days) {
+  if (days === null || days === undefined) return "⚪ Sem data";
+  if (days > 30) return `🔴 ${days} dias`;
+  if (days > 15) return `🟠 ${days} dias`;
+  return `🟢 ${days} dias`;
+}
+
 function parseDecimal(value) {
   if (value === "" || value === null || value === undefined) return 0;
   if (typeof value === "number") return value;
@@ -2206,6 +2213,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               <Summary title="Concursos por liquidar" value={financeAgendaTotals.contests} />
             </section>
 
+            <div style={trafficLegend}>
+              <strong>Semáforo:</strong>
+              <span>🟢 até 15 dias</span>
+              <span>🟠 16 a 30 dias</span>
+              <span>🔴 mais de 30 dias</span>
+            </div>
+
             <section style={agendaBlock}>
               <h3>💰 Comissões por receber</h3>
               {commissionsToReceive.length === 0 ? <p style={muted}>Sem comissões pendentes.</p> : (
@@ -2217,7 +2231,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <p style={muted}>{deal.bank_partner?.name || "Sem banco"} · {deal.deal_type}</p>
                       </div>
                       <span>{formatEuro(deal.expected_commission)}</span>
-                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{formatDays(deal.pendingDays)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{getAlertLabel(deal.pendingDays)}</span>
                       <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
                     </div>
                   ))}
@@ -2236,7 +2250,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <p style={muted}>{deal.client_name} · {deal.deal_type}</p>
                       </div>
                       <span>{formatEuro(deal.partnerDue)}</span>
-                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{formatDays(deal.pendingDays)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{getAlertLabel(deal.pendingDays)}</span>
                       <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
                     </div>
                   ))}
@@ -2255,7 +2269,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <p style={muted}>{item.campaignName}</p>
                       </div>
                       <span>{formatEuro(item.cost)}</span>
-                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{formatDays(item.pendingDays)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{getAlertLabel(item.pendingDays)}</span>
                       <span style={muted}>{formatEuro(item.totalAmount)}</span>
                     </div>
                   ))}
@@ -2274,7 +2288,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <p style={muted}>{item.contestName}</p>
                       </div>
                       <span>{formatEuro(item.prizeAmount)}</span>
-                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{formatDays(item.pendingDays)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{getAlertLabel(item.pendingDays)}</span>
                       <span style={muted}>{formatEuro(item.totalAmount)}</span>
                     </div>
                   ))}
@@ -3172,3 +3186,4 @@ const agendaBlock = { background: "white", border: "1px solid #fed7aa", borderRa
 const agendaList = { display: "grid", gap: 8 };
 const agendaRow = { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 12px", display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 10, alignItems: "center" };
 const alertBadge = { borderRadius: 999, padding: "7px 10px", fontWeight: "bold", textAlign: "center", fontSize: 12 };
+const trafficLegend = { background: "white", border: "1px solid #fed7aa", borderRadius: 12, padding: 12, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", marginBottom: 14 };
