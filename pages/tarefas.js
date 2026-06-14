@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+mport { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -82,33 +82,6 @@ export default function Tarefas({ tasks }) {
     priority: "NORMAL",
     due_date: "",
   });
-
-  useEffect(() => {
-    async function loadClientFromQuery() {
-      const clientId = router.query.cliente;
-
-      if (!clientId) return;
-
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, phone")
-        .eq("id", clientId)
-        .maybeSingle();
-
-      if (error || !data) return;
-
-      setShowTaskForm(true);
-
-      setTaskForm((current) => ({
-        ...current,
-        client_id: data.id,
-        client_name: data.name || "",
-        client_phone: data.phone || "",
-      }));
-    }
-
-    loadClientFromQuery();
-  }, [router.query.cliente]);
 
   const [showEditTaskForm, setShowEditTaskForm] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -200,11 +173,13 @@ export default function Tarefas({ tasks }) {
 
     const { error } = await supabase.from("tasks").insert({
       title: taskForm.title,
+      client_id: taskForm.client_id || null,
       description: taskForm.description,
       category: normalizeCategory(taskForm.category),
       priority: normalizePriority(taskForm.priority),
       status: "aberta",
       due_date: taskForm.due_date || null,
+      origin: "manual - tarefas",
     });
 
     if (error) {
@@ -394,7 +369,19 @@ export default function Tarefas({ tasks }) {
                 <button
                   type="button"
                   style={cancelButton}
-                  onClick={() => setShowTaskForm(false)}
+                  onClick={() => {
+                    setShowTaskForm(false);
+                    setTaskForm({
+                      title: "",
+                      client_id: null,
+                      client_name: "",
+                      client_phone: "",
+                      description: "",
+                      category: "ADMINISTRATIVA",
+                      priority: "NORMAL",
+                      due_date: "",
+                    });
+                  }}
                 >
                   Cancelar
                 </button>
