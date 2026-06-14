@@ -70,6 +70,11 @@ export async function getServerSideProps() {
     .select("*")
     .order("start_date", { ascending: false });
 
+  const { data: dealHistory } = await supabase
+    .from("financial_deal_history")
+    .select("*")
+    .order("changed_at", { ascending: false });
+
   return {
     props: {
       deals: deals || [],
@@ -78,6 +83,7 @@ export async function getServerSideProps() {
       contests: contests || [],
       campaigns: campaigns || [],
       goals: goals || [],
+      dealHistory: dealHistory || [],
     },
   };
 }
@@ -491,6 +497,41 @@ function getOperationalAlertLimit(status) {
   return limits[status] || null;
 }
 
+function getHistoryFieldLabel(fieldName) {
+  const labels = {
+    status: "Estado",
+    bank_partner_id: "Banco",
+    source_partner_id: "Parceiro",
+    amount: "Montante",
+    commission_rate: "% Comissão Banco",
+    expected_commission: "Comissão Teórica",
+    received_commission: "Comissão Real",
+    commission_received_at: "Data recebimento comissão",
+    entry_date: "Data entrada",
+    contract_date: "Data contratação",
+    partner_payment_type: "Tipo pagamento parceiro",
+    partner_payment_rate: "% parceiro",
+    partner_payment_value: "Valor fixo parceiro",
+    partner_payment_status: "Estado pagamento parceiro",
+    partner_paid_at: "Data pagamento parceiro",
+    next_action: "Próxima ação",
+    next_action_date: "Data próxima ação",
+    next_action_notes: "Notas próxima ação",
+    deal_type: "Tipo de negócio",
+  };
+
+  return labels[fieldName] || fieldName;
+}
+
+function normalizeHistoryValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
+}
+
+function valuesAreDifferent(oldValue, newValue) {
+  return normalizeHistoryValue(oldValue) !== normalizeHistoryValue(newValue);
+}
+
 function buildClientWhatsappMessage(deal) {
   const name = deal.client_name || "";
   const status = deal.status || "";
@@ -570,7 +611,7 @@ Loja de Seguros de Trajouce`;
 
 
 
-export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals }) {
+export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals, dealHistory }) {
   const [showDealForm, setShowDealForm] = useState(false);
   const [editingDealId, setEditingDealId] = useState(null);
   const [openDealId, setOpenDealId] = useState(null);
@@ -607,6 +648,17 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   const inactivePartners = partners.filter((p) => p.is_active === false);
   const bancos = activePartners.filter((p) => p.partner_type === "Banco");
   const parceiros = activePartners.filter((p) => p.partner_type !== "Banco");
+
+  const historiesByDeal = useMemo(() => {
+    const map = {};
+
+    (dealHistory || []).forEach((item) => {
+      if (!map[item.deal_id]) map[item.deal_id] = [];
+      map[item.deal_id].push(item);
+    });
+
+    return map;
+  }, [dealHistory]);
 
   const selectedContest =
     contests.find((contest) => contest.id === selectedContestId) ||
@@ -1434,6 +1486,58 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     });
   }, [goals, deals, partners]);
 
+  async function recordDealHistory(dealId, changes) {
+    if (!dealId || !changes || changes.length === 0) return;
+
+    const rows = changes.map((change) => ({
+      deal_id: dealId,
+      field_name: change.field_name,
+      old_value: normalizeHistoryValue(change.old_value),
+      new_value: normalizeHistoryValue(change.new_value),
+    }));
+
+    const { error } = await supabase.from("financial_deal_history").insert(rows);
+
+    if (error) {
+      console.error("Erro ao gravar histórico:", error.message);
+    }
+  }
+
+  function buildDealHistoryChanges(oldDeal, payload) {
+    if (!oldDeal) return [];
+
+    const fieldsToAudit = [
+      "deal_type",
+      "bank_partner_id",
+      "source_partner_id",
+      "amount",
+      "commission_rate",
+      "expected_commission",
+      "received_commission",
+      "commission_received_at",
+      "entry_date",
+      "contract_date",
+      "partner_payment_type",
+      "partner_payment_rate",
+      "partner_payment_value",
+      "partner_payment_status",
+      "partner_paid_at",
+      "status",
+      "next_action",
+      "next_action_date",
+      "next_action_notes",
+    ];
+
+    return fieldsToAudit
+      .filter((field) => Object.prototype.hasOwnProperty.call(payload, field))
+      .filter((field) => valuesAreDifferent(oldDeal[field], payload[field]))
+      .map((field) => ({
+        field_name: field,
+        old_value: oldDeal[field],
+        new_value: payload[field],
+      }));
+  }
+
   function selectContest(contestId) {
     const contest = contests.find((item) => item.id === contestId) || null;
 
@@ -2151,9 +2255,18 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       notes: dealForm.notes || null,
     };
 
+    const originalDeal = editingDealId
+      ? deals.find((deal) => deal.id === editingDealId)
+      : null;
+
     const { error } = editingDealId
       ? await supabase.from("financial_deals").update(payload).eq("id", editingDealId)
       : await supabase.from("financial_deals").insert(payload);
+
+    if (!error && editingDealId && originalDeal) {
+      const changes = buildDealHistoryChanges(originalDeal, payload);
+      await recordDealHistory(editingDealId, changes);
+    }
 
     setSaving(false);
 
@@ -2166,7 +2279,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   }
 
   async function updateDeal(deal, updates) {
+    const changes = buildDealHistoryChanges(deal, updates);
     const { error } = await supabase.from("financial_deals").update(updates).eq("id", deal.id);
+
+    if (!error) {
+      await recordDealHistory(deal.id, changes);
+    }
 
     if (error) {
       alert(error.message);
@@ -3718,6 +3836,24 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                           </div>
                         )}
 
+                        <div style={historyBox}>
+                          <strong>📜 Histórico de alterações</strong>
+
+                          {(historiesByDeal[deal.id] || []).length === 0 ? (
+                            <p style={smallMuted}>Sem alterações registadas.</p>
+                          ) : (
+                            <div style={historyList}>
+                              {(historiesByDeal[deal.id] || []).slice(0, 12).map((item) => (
+                                <div key={item.id} style={historyRow}>
+                                  <span style={smallMuted}>{formatDate(item.changed_at)}</span>
+                                  <strong>{getHistoryFieldLabel(item.field_name)}</strong>
+                                  <span>{item.old_value || "-"} → {item.new_value || "-"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         <div style={actionRow}>
                           <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>
                             Comissão Real
@@ -3898,3 +4034,6 @@ const funnelLabel = { display: "grid", gap: 4 };
 const funnelBarOuter = { background: "#e5e7eb", borderRadius: 999, overflow: "hidden", height: 26 };
 const funnelBarInner = { background: "#0f766e", color: "white", height: "100%", borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", minWidth: 0 };
 const funnelRate = { fontWeight: "bold", color: "#374151", textAlign: "right" };
+const historyBox = { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 12, padding: 12, marginTop: 12 };
+const historyList = { display: "grid", gap: 6, marginTop: 8 };
+const historyRow = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", display: "grid", gridTemplateColumns: "120px 170px 1fr", gap: 10, alignItems: "center", fontSize: 13 };
