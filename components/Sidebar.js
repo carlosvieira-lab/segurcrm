@@ -76,13 +76,19 @@ export default function Sidebar({ active }) {
           <MenuItem href="/importacoes" label="Importações" active={active === "importacoes"} />
 
           <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
+
           <MenuItem
             href="/tarefas/compacto"
             label="Tarefas Compacto"
             active={active === "tarefas-compacto"}
           />
 
-          <MenuItem href="/oportunidades" label="Oportunidades" active={active === "oportunidades"} />
+          <MenuItem
+            href="/oportunidades"
+            label="Oportunidades"
+            active={active === "oportunidades"}
+          />
+
           <MenuItem
             href="/oportunidades/compacto"
             label="Oportunidades Compacto"
@@ -101,12 +107,21 @@ export default function Sidebar({ active }) {
 }
 
 function MenuItem({ href, label, active }) {
+  const isNegociosFinanceiros = href === "/negocios-financeiros";
+
   return (
     <Link
       href={href}
       style={{
         ...menuItem,
         ...(active ? activeMenuItem : {}),
+
+        ...(isNegociosFinanceiros
+          ? {
+              background: "#facc15",
+              color: "#000000",
+            }
+          : {}),
       }}
     >
       {label}
