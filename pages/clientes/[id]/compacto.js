@@ -1004,7 +1004,7 @@ const timelineItems = createTimeline(
             )}
 
             <Link
-              href={`/tarefas?cliente=${client.id}`}
+              href={`/tarefas/compacto?cliente=${client.id}&origem=cliente`}
               style={taskShortcutButton}
             >
               + Nova tarefa
