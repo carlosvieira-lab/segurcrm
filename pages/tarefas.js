@@ -1,4 +1,4 @@
-mport { useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
