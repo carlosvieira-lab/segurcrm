@@ -336,17 +336,6 @@ export default function OportunidadesCompacto({ opportunities, clients }) {
       return;
     }
 
-    await supabase.from("tasks").insert({
-      client_id: finalClientId || null,
-      title: `Contactar ${finalClientName} para oportunidade`,
-      category: "COMERCIAL",
-      priority: "NORMAL",
-      status: "aberta",
-      due_date: contactDate || null,
-      origin: "automática - oportunidade",
-      description: `Contactar cliente 1 mês antes do vencimento da apólice na congénere. Oportunidade: ${opportunityText}`,
-    });
-
     setSaving(false);
     window.location.reload();
   }
@@ -657,6 +646,12 @@ export default function OportunidadesCompacto({ opportunities, clients }) {
             <div>
               <label style={label}>Data automática para contacto</label>
               <input style={inputDisabled} value={contactDate || ""} readOnly />
+            </div>
+
+            <div style={wideField}>
+              <p style={separationNotice}>
+                Esta oportunidade fica apenas em Oportunidades. Não cria tarefas automaticamente.
+              </p>
             </div>
 
             <button style={button} disabled={saving}>
@@ -1470,4 +1465,12 @@ const smallButton = {
 const muted = {
   color: "#64748b",
 };
-
+const separationNotice = {
+  margin: 0,
+  background: "#ecfdf5",
+  color: "#166534",
+  border: "1px solid #bbf7d0",
+  borderRadius: 10,
+  padding: 10,
+  fontWeight: "bold",
+};
