@@ -296,6 +296,9 @@ function buildInitialDealForm() {
     commission_received_at: "",
     entry_date: "",
     contract_date: "",
+    next_action: "",
+    next_action_date: "",
+    next_action_notes: "",
     partner_payment_type: "percentagem",
     partner_payment_rate: "",
     partner_payment_value: "",
@@ -470,6 +473,101 @@ function isCruzadosEligibleDeal(deal, startDate, endDate) {
     !excludedTypes.includes(deal.deal_type)
   );
 }
+
+function getOperationalBaseDate(deal) {
+  if (deal.status === "CONTRATADO") return deal.contract_date || deal.entry_date || deal.created_at;
+  return deal.entry_date || deal.created_at;
+}
+
+function getOperationalAlertLimit(status) {
+  const limits = {
+    "AGUARDA DOCS": 7,
+    "ENV BANCO": 10,
+    "AVALIAÇÃO": 15,
+    "APROVADO": 10,
+    "AGUARDA CONTR": 10,
+  };
+
+  return limits[status] || null;
+}
+
+function buildClientWhatsappMessage(deal) {
+  const name = deal.client_name || "";
+  const status = deal.status || "";
+
+  if (status === "AGUARDA DOCS") {
+    return `Olá ${name},
+
+Para podermos avançar com o teu processo de crédito, falta receber a documentação em falta.
+
+Quando conseguires, envia-me por favor para eu dar seguimento.
+
+Obrigado.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+  }
+
+  if (status === "ENV BANCO") {
+    return `Olá ${name},
+
+O teu processo já foi enviado para análise bancária.
+
+Assim que houver novidades do banco, aviso-te.
+
+Obrigado.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+  }
+
+  if (status === "APROVADO") {
+    return `Olá ${name},
+
+Boa notícia: o teu processo já se encontra aprovado.
+
+Vou acompanhar os próximos passos para avançarmos para a contratação.
+
+Obrigado.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+  }
+
+  if (status === "AGUARDA CONTR") {
+    return `Olá ${name},
+
+O processo está em fase de contratação.
+
+Assim que estiver tudo pronto para avançar, aviso-te dos próximos passos.
+
+Obrigado.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+  }
+
+  if (status === "CONTRATADO") {
+    return `Olá ${name},
+
+O processo já se encontra contratado.
+
+Obrigado pela confiança.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+  }
+
+  return `Olá ${name},
+
+Segue ponto de situação do teu processo de crédito: ${status}.
+
+Qualquer dúvida, estou disponível.
+
+Carlos Vieira
+Loja de Seguros de Trajouce`;
+}
+
 
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals }) {
@@ -1261,6 +1359,39 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     contests: contestPaymentsToPay.length,
   };
 
+  const operationalAlerts = useMemo(() => {
+    return deals
+      .map((deal) => {
+        const limit = getOperationalAlertLimit(deal.status);
+        const days = daysSince(getOperationalBaseDate(deal));
+
+        return {
+          ...deal,
+          operationalLimit: limit,
+          operationalDays: days,
+          isOperationalAlert: limit !== null && days !== null && days > limit,
+        };
+      })
+      .filter((deal) => deal.isOperationalAlert)
+      .sort((a, b) => Number(b.operationalDays || 0) - Number(a.operationalDays || 0));
+  }, [deals]);
+
+  const nextActions = useMemo(() => {
+    return deals
+      .filter((deal) => deal.next_action || deal.next_action_date)
+      .map((deal) => ({
+        ...deal,
+        nextActionDays: deal.next_action_date ? daysSince(deal.next_action_date) : null,
+      }))
+      .sort((a, b) => {
+        const dateA = a.next_action_date || "9999-12-31";
+        const dateB = b.next_action_date || "9999-12-31";
+        return dateA.localeCompare(dateB);
+      });
+  }, [deals]);
+
+
+
   const goalAnalysis = useMemo(() => {
     return goals.map((goal) => {
       const startDate = goal.start_date || "";
@@ -1938,6 +2069,9 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       commission_received_at: deal.commission_received_at || "",
       entry_date: deal.entry_date || "",
       contract_date: deal.contract_date || "",
+      next_action: deal.next_action || "",
+      next_action_date: deal.next_action_date || "",
+      next_action_notes: deal.next_action_notes || "",
       partner_payment_type: deal.partner_payment_type || "percentagem",
       partner_payment_rate: deal.partner_payment_rate ? String(deal.partner_payment_rate).replace(".", ",") : "",
       partner_payment_value: deal.partner_payment_value ? String(deal.partner_payment_value).replace(".", ",") : "",
@@ -2005,6 +2139,9 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       commission_received_at: dealForm.commission_received_at || null,
       entry_date: dealForm.entry_date || null,
       contract_date: dealForm.contract_date || null,
+      next_action: dealForm.next_action || null,
+      next_action_date: dealForm.next_action_date || null,
+      next_action_notes: dealForm.next_action_notes || null,
       partner_payment_type: dealForm.partner_payment_type,
       partner_payment_rate: parseDecimal(dealForm.partner_payment_rate),
       partner_payment_value: parseDecimal(dealForm.partner_payment_value),
@@ -2587,6 +2724,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               <Summary title="Parceiros por pagar" value={financeAgendaTotals.partnerPayments} />
               <Summary title="Campanhas por liquidar" value={financeAgendaTotals.campaigns} />
               <Summary title="Concursos por liquidar" value={financeAgendaTotals.contests} />
+              <Summary title="Alertas operacionais" value={operationalAlerts.length} />
+              <Summary title="Próximas ações" value={nextActions.length} />
             </section>
 
             <div style={trafficLegend}>
@@ -2595,6 +2734,63 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               <span>🟠 16 a 30 dias</span>
               <span>🔴 mais de 30 dias</span>
             </div>
+
+            <section style={agendaBlock}>
+              <h3>🚦 Alertas operacionais por estado</h3>
+              <p style={smallMuted}>
+                Regras: AGUARDA DOCS +7 dias · ENV BANCO +10 dias · AVALIAÇÃO +15 dias · APROVADO/AGUARDA CONTR +10 dias.
+              </p>
+
+              {operationalAlerts.length === 0 ? <p style={muted}>Sem processos parados acima do limite definido.</p> : (
+                <div style={agendaList}>
+                  {operationalAlerts.map((deal) => (
+                    <div key={deal.id} style={agendaRow}>
+                      <div>
+                        <strong>{deal.client_name}</strong>
+                        <p style={muted}>{deal.status} · {deal.bank_partner?.name || "Sem banco"}</p>
+                      </div>
+                      <span>{formatEuro(deal.amount)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(deal.operationalDays) }}>
+                        {getAlertLabel(deal.operationalDays)}
+                      </span>
+                      <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={agendaBlock}>
+              <h3>📌 Próximas ações</h3>
+
+              {nextActions.length === 0 ? <p style={muted}>Sem próximas ações marcadas.</p> : (
+                <div style={agendaList}>
+                  {nextActions.map((deal) => {
+                    const isLate = deal.next_action_date && daysSince(deal.next_action_date) > 0;
+                    const daysLabel = deal.next_action_date
+                      ? isLate
+                        ? `🔴 Atrasada ${daysSince(deal.next_action_date)} dias`
+                        : `📅 ${formatDate(deal.next_action_date)}`
+                      : "⚪ Sem data";
+
+                    return (
+                      <div key={deal.id} style={agendaRow}>
+                        <div>
+                          <strong>{deal.next_action || "Próxima ação"}</strong>
+                          <p style={muted}>{deal.client_name} · {deal.status}</p>
+                          {deal.next_action_notes && <p style={smallMuted}>{deal.next_action_notes}</p>}
+                        </div>
+                        <span>{deal.bank_partner?.name || "-"}</span>
+                        <span style={{ ...alertBadge, ...(isLate ? getAlertStyle(31) : getAlertStyle(0)) }}>
+                          {daysLabel}
+                        </span>
+                        <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
             <section style={agendaBlock}>
               <h3>💰 Comissões por receber</h3>
@@ -3307,6 +3503,18 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 <span>{formatDays(daysBetween(dealForm.entry_date, dealForm.contract_date))}</span>
               </div>
 
+              <label style={fieldLabel}>Próxima ação
+                <input style={input} value={dealForm.next_action} onChange={(event) => setDealForm({ ...dealForm, next_action: event.target.value })} placeholder="Ex: ligar ao cliente, pedir docs, confirmar banco..." />
+              </label>
+
+              <label style={fieldLabel}>Data próxima ação
+                <input type="date" style={input} value={dealForm.next_action_date} onChange={(event) => setDealForm({ ...dealForm, next_action_date: event.target.value })} />
+              </label>
+
+              <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas da próxima ação
+                <textarea style={textarea} value={dealForm.next_action_notes} onChange={(event) => setDealForm({ ...dealForm, next_action_notes: event.target.value })} />
+              </label>
+
               <label style={fieldLabel}>Montante financiado
                 <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
               </label>
@@ -3453,6 +3661,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                       <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
                       <Mini title="Comissão parceiro" value={formatEuro(partnerDue)} />
                       <Mini title="Tempo" value={formatDays(contractDays)} />
+                      <Mini title="Próxima ação" value={deal.next_action || "-"} />
                     </div>
 
                     <div style={actionRow}>
@@ -3484,6 +3693,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                           <Mini title="Data contratação" value={formatDate(deal.contract_date)} />
                           <Mini title="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
                           <Mini title="Estado pagamento parceiro" value={deal.partner_payment_status} />
+                          <Mini title="Data próxima ação" value={formatDate(deal.next_action_date)} />
                         </div>
 
                         <div style={infoGrid}>
@@ -3493,6 +3703,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                           <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
                           <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
                         </div>
+
+                        {deal.next_action_notes && (
+                          <div style={notesBox}>
+                            <strong>Notas da próxima ação</strong>
+                            <p>{deal.next_action_notes}</p>
+                          </div>
+                        )}
 
                         {deal.notes && (
                           <div style={notesBox}>
@@ -3505,6 +3722,17 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                           <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>
                             Comissão Real
                           </button>
+
+                          {deal.client_phone && (
+                            <a
+                              href={buildWhatsappUrl(deal.client_phone, buildClientWhatsappMessage(deal))}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={whatsappButton}
+                            >
+                              WhatsApp Cliente
+                            </a>
+                          )}
 
                           {deal.partner_payment_status === "pago" ? (
                             <button style={grayButton} onClick={() => markPartnerPending(deal)}>
