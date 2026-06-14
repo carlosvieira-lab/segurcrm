@@ -65,6 +65,11 @@ export async function getServerSideProps() {
     .select("*")
     .order("start_date", { ascending: false });
 
+  const { data: goals } = await supabase
+    .from("financial_goals")
+    .select("*")
+    .order("start_date", { ascending: false });
+
   return {
     props: {
       deals: deals || [],
@@ -72,6 +77,7 @@ export async function getServerSideProps() {
       clients: clients || [],
       contests: contests || [],
       campaigns: campaigns || [],
+      goals: goals || [],
     },
   };
 }
@@ -401,6 +407,37 @@ function buildCampaignForm(campaign) {
   };
 }
 
+function buildInitialGoalForm() {
+  const year = new Date().getFullYear();
+
+  return {
+    entity_type: "bank",
+    entity_id: "",
+    name: "",
+    start_date: `${year}-01-01`,
+    end_date: `${year}-12-31`,
+    objective_amount: "",
+    notes: "",
+    is_active: true,
+  };
+}
+
+function buildGoalForm(goal) {
+  if (!goal) return buildInitialGoalForm();
+
+  return {
+    entity_type: goal.entity_type || "bank",
+    entity_id: goal.entity_id || "",
+    name: goal.name || "",
+    start_date: goal.start_date || "",
+    end_date: goal.end_date || "",
+    objective_amount: goal.objective_amount ? String(goal.objective_amount).replace(".", ",") : "",
+    notes: goal.notes || "",
+    is_active: goal.is_active !== false,
+  };
+}
+
+
 function getPartnerClassification(totalAmount) {
   const amount = Number(totalAmount || 0);
 
@@ -435,7 +472,7 @@ function isCruzadosEligibleDeal(deal, startDate, endDate) {
 }
 
 
-export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns }) {
+export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals }) {
   const [showDealForm, setShowDealForm] = useState(false);
   const [editingDealId, setEditingDealId] = useState(null);
   const [openDealId, setOpenDealId] = useState(null);
@@ -453,6 +490,9 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   const [showCampaignsPanel, setShowCampaignsPanel] = useState(false);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const [showFinanceAgenda, setShowFinanceAgenda] = useState(false);
+  const [showGoalsPanel, setShowGoalsPanel] = useState(false);
+  const [goalForm, setGoalForm] = useState(buildInitialGoalForm);
+  const [editingGoalId, setEditingGoalId] = useState(null);
   const [showCampaignEditor, setShowCampaignEditor] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns?.[0]?.id || "");
   const [campaignForm, setCampaignForm] = useState(() =>
@@ -1137,6 +1177,48 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     contests: contestPaymentsToPay.length,
   };
 
+  const goalAnalysis = useMemo(() => {
+    return goals.map((goal) => {
+      const startDate = goal.start_date || "";
+      const endDate = goal.end_date || "";
+      const target = Number(goal.objective_amount || 0);
+
+      const relatedDeals = deals.filter((deal) => {
+        const date = getDealDate(deal);
+        const entityMatch =
+          goal.entity_type === "bank"
+            ? deal.bank_partner_id === goal.entity_id
+            : deal.source_partner_id === goal.entity_id;
+
+        return (
+          entityMatch &&
+          deal.status === "CONTRATADO" &&
+          (!startDate || date >= startDate) &&
+          (!endDate || date <= endDate)
+        );
+      });
+
+      const totalAmount = relatedDeals.reduce((sum, deal) => sum + Number(deal.amount || 0), 0);
+      const processCount = relatedDeals.length;
+      const progress = target > 0 ? (totalAmount / target) * 100 : 0;
+      const missing = Math.max(target - totalAmount, 0);
+      const entity =
+        goal.entity_type === "bank"
+          ? partners.find((partner) => partner.id === goal.entity_id)
+          : partners.find((partner) => partner.id === goal.entity_id);
+
+      return {
+        ...goal,
+        entityName: entity?.name || goal.name || "Sem nome",
+        totalAmount,
+        processCount,
+        progress,
+        missing,
+        achieved: target > 0 && totalAmount >= target,
+      };
+    });
+  }, [goals, deals, partners]);
+
   function selectContest(contestId) {
     const contest = contests.find((item) => item.id === contestId) || null;
 
@@ -1473,6 +1555,78 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     reportWindow.document.open();
     reportWindow.document.write(html);
     reportWindow.document.close();
+  }
+
+  function openNewGoal(entityType = "bank", entityId = "") {
+    setEditingGoalId(null);
+    setGoalForm({
+      ...buildInitialGoalForm(),
+      entity_type: entityType,
+      entity_id: entityId,
+    });
+    setShowGoalsPanel(true);
+  }
+
+  function openEditGoal(goal) {
+    setEditingGoalId(goal.id);
+    setGoalForm(buildGoalForm(goal));
+    setShowGoalsPanel(true);
+  }
+
+  async function saveGoal(event) {
+    event.preventDefault();
+
+    if (!goalForm.entity_id) {
+      alert("Escolhe o banco ou parceiro.");
+      return;
+    }
+
+    if (!goalForm.objective_amount) {
+      alert("Preenche o objetivo.");
+      return;
+    }
+
+    const entity = partners.find((partner) => partner.id === goalForm.entity_id);
+
+    const payload = {
+      entity_type: goalForm.entity_type,
+      entity_id: goalForm.entity_id,
+      name: goalForm.name || entity?.name || null,
+      start_date: goalForm.start_date || null,
+      end_date: goalForm.end_date || null,
+      objective_amount: parseDecimal(goalForm.objective_amount),
+      notes: goalForm.notes || null,
+      is_active: goalForm.is_active !== false,
+    };
+
+    setSaving(true);
+
+    const { error } = editingGoalId
+      ? await supabase.from("financial_goals").update(payload).eq("id", editingGoalId)
+      : await supabase.from("financial_goals").insert(payload);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function toggleGoalActive(goal) {
+    const { error } = await supabase
+      .from("financial_goals")
+      .update({ is_active: goal.is_active === false })
+      .eq("id", goal.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
   }
 
   function selectClient(clientId) {
@@ -1870,6 +2024,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
             <button
               style={secondaryButton}
+              onClick={() => setShowGoalsPanel(!showGoalsPanel)}
+            >
+              🎯 Objetivos
+            </button>
+
+            <button
+              style={secondaryButton}
               onClick={() => {
                 resetPartnerForm();
                 setShowPartnerForm(!showPartnerForm);
@@ -2193,6 +2354,137 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           </section>
         )}
 
+        {showGoalsPanel && (
+          <section style={goalsPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>🎯 Objetivos por Banco e Parceiro</h2>
+                <p style={muted}>
+                  Define objetivos por período e acompanha produção, falta e percentagem atingida.
+                </p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowGoalsPanel(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <form style={goalsFormGrid} onSubmit={saveGoal}>
+              <label style={fieldLabel}>Tipo
+                <select
+                  style={input}
+                  value={goalForm.entity_type}
+                  onChange={(event) =>
+                    setGoalForm({
+                      ...goalForm,
+                      entity_type: event.target.value,
+                      entity_id: "",
+                    })
+                  }
+                >
+                  <option value="bank">Banco</option>
+                  <option value="partner">Parceiro</option>
+                </select>
+              </label>
+
+              <label style={fieldLabel}>{goalForm.entity_type === "bank" ? "Banco" : "Parceiro"}
+                <select
+                  style={input}
+                  value={goalForm.entity_id}
+                  onChange={(event) => setGoalForm({ ...goalForm, entity_id: event.target.value })}
+                >
+                  <option value="">Escolher</option>
+                  {(goalForm.entity_type === "bank" ? bancos : parceiros).map((partner) => (
+                    <option key={partner.id} value={partner.id}>
+                      {partner.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={fieldLabel}>Início
+                <input type="date" style={input} value={goalForm.start_date} onChange={(event) => setGoalForm({ ...goalForm, start_date: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Fim
+                <input type="date" style={input} value={goalForm.end_date} onChange={(event) => setGoalForm({ ...goalForm, end_date: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Objetivo
+                <input style={input} inputMode="decimal" value={goalForm.objective_amount} onChange={(event) => setGoalForm({ ...goalForm, objective_amount: event.target.value })} placeholder="Ex: 1000000" />
+              </label>
+
+              <label style={fieldLabel}>Notas
+                <input style={input} value={goalForm.notes} onChange={(event) => setGoalForm({ ...goalForm, notes: event.target.value })} />
+              </label>
+
+              <div style={formActions}>
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : editingGoalId ? "Guardar objetivo" : "Criar objetivo"}
+                </button>
+
+                {editingGoalId && (
+                  <button
+                    type="button"
+                    style={grayButton}
+                    onClick={() => {
+                      setEditingGoalId(null);
+                      setGoalForm(buildInitialGoalForm());
+                    }}
+                  >
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {goalAnalysis.length === 0 ? (
+              <p style={muted}>Ainda não existem objetivos criados.</p>
+            ) : (
+              <div style={goalsGrid}>
+                {goalAnalysis.map((goal) => (
+                  <article key={goal.id} style={goalCard}>
+                    <div style={compactPanelHeader}>
+                      <div>
+                        <h3 style={dealTitle}>{goal.entityName}</h3>
+                        <p style={muted}>
+                          {goal.entity_type === "bank" ? "Banco" : "Parceiro"} · {formatDate(goal.start_date)} a {formatDate(goal.end_date)}
+                        </p>
+                      </div>
+
+                      <span style={goal.achieved ? eligibleBadge : notEligibleBadge}>
+                        {goal.achieved ? "Atingido" : "Em curso"}
+                      </span>
+                    </div>
+
+                    <div style={goalProgressOuter}>
+                      <div style={{ ...goalProgressInner, width: `${Math.min(goal.progress, 100)}%` }} />
+                    </div>
+
+                    <div style={miniGrid}>
+                      <Mini title="Objetivo" value={formatEuro(goal.objective_amount)} />
+                      <Mini title="Produção" value={formatEuro(goal.totalAmount)} />
+                      <Mini title="Falta" value={formatEuro(goal.missing)} />
+                      <Mini title="% Atingida" value={`${goal.progress.toFixed(1)}%`} />
+                      <Mini title="Processos" value={goal.processCount} />
+                    </div>
+
+                    <div style={actionRow}>
+                      <button type="button" style={smallButton} onClick={() => openEditGoal(goal)}>
+                        Editar
+                      </button>
+
+                      <button type="button" style={goal.is_active === false ? smallPaidButton : smallGrayButton} onClick={() => toggleGoalActive(goal)}>
+                        {goal.is_active === false ? "Reativar" : "Anular"}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {showFinanceAgenda && (
           <section style={agendaPanel}>
             <div style={compactPanelHeader}>
@@ -2366,6 +2658,11 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <button type="button" style={paidButton} onClick={() => generateBankReport(bank)}>
                           📄 Relatório Banco
                         </button>
+                        {bank.key !== "sem-banco" && (
+                          <button type="button" style={smallButton} onClick={() => openNewGoal("bank", bank.key)}>
+                            🎯 Objetivo
+                          </button>
+                        )}
                       </div>
 
                       <div style={statusMiniGrid}>
@@ -2419,6 +2716,14 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                         <Mini title="Resultado líquido" value={formatEuro(partner.netResult)} />
                         <Mini title="Tempo médio" value={formatDays(partner.contractDaysCount ? Math.round(partner.totalContractDays / partner.contractDaysCount) : null)} />
                       </div>
+
+                      {partner.partnerId !== "sem-parceiro" && (
+                        <div style={actionRow}>
+                          <button type="button" style={smallButton} onClick={() => openNewGoal("partner", partner.partnerId)}>
+                            🎯 Objetivo
+                          </button>
+                        </div>
+                      )}
                     </article>
                   ))}
                 </div>
@@ -3187,3 +3492,9 @@ const agendaList = { display: "grid", gap: 8 };
 const agendaRow = { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 12px", display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 10, alignItems: "center" };
 const alertBadge = { borderRadius: 999, padding: "7px 10px", fontWeight: "bold", textAlign: "center", fontSize: 12 };
 const trafficLegend = { background: "white", border: "1px solid #fed7aa", borderRadius: 12, padding: 12, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", marginBottom: 14 };
+const goalsPanel = { background: "#eef2ff", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(67,56,202,0.16)", border: "1px solid #c7d2fe" };
+const goalsFormGrid = { background: "white", border: "1px solid #c7d2fe", borderRadius: 14, padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginBottom: 14 };
+const goalsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 };
+const goalCard = { background: "white", border: "1px solid #c7d2fe", borderRadius: 14, padding: 14 };
+const goalProgressOuter = { background: "#e5e7eb", borderRadius: 999, overflow: "hidden", height: 14, marginBottom: 12 };
+const goalProgressInner = { background: "#4f46e5", height: "100%", borderRadius: 999 };
