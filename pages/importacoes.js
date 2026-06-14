@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -203,50 +202,6 @@ function buildClientEnrichmentPayload(existingClient, importedClient) {
   };
 }
 
-function encodeOpportunityText(item) {
-  const parts = [
-    "Novo cliente importado Generali.",
-    item?.branch ? `Ramo atual: ${item.branch}.` : "",
-    item?.policyNumber ? `Apólice: ${item.policyNumber}.` : "",
-    "Validar potencial de cross-selling e completar dados em falta.",
-  ].filter(Boolean);
-
-  return encodeURIComponent(parts.join("\n"));
-}
-
-function buildNewClientOpportunityHref(item) {
-  if (!item) return "/oportunidades";
-
-  if (item.existingClient?.id) {
-    return `/oportunidades?cliente=${item.existingClient.id}`;
-  }
-
-  const params = new URLSearchParams();
-
-  if (item.clientName) params.set("nome", item.clientName);
-  if (item.nif) params.set("nif", item.nif);
-  if (item.phone) params.set("telefone", item.phone);
-
-  params.set("descricao", decodeURIComponent(encodeOpportunityText(item)));
-
-  return `/oportunidades?${params.toString()}`;
-}
-
-function crossSellingSuggestion(branch) {
-  const value = String(branch || "")
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  if (value.includes("CASA")) return "Sugerir Saúde ou Vida";
-  if (value.includes("AUTOMOVEL")) return "Sugerir Casa + Saúde";
-  if (value.includes("SAUDE")) return "Sugerir Vida";
-  if (value.includes("VIDA")) return "Sugerir Saúde";
-  if (value.includes("MULTIRRISCO")) return "Sugerir Saúde ou Vida";
-
-  return "Validar oportunidade de cross-selling";
-}
-
 
 function normalizePaymentFrequency(value) {
   const text = cleanText(value);
@@ -366,9 +321,6 @@ export default function Importacoes({ clients, policies, insurers }) {
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState([]);
   const [previewSearch, setPreviewSearch] = useState("");
-  const [onlyNewClients, setOnlyNewClients] = useState(false);
-  const [onlyMissingPhone, setOnlyMissingPhone] = useState(false);
-  const [onlyMissingEmail, setOnlyMissingEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -1251,54 +1203,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                 </div>
               )}
 
-              {analyzedRows.length > 0 && (
-            <section style={newClientsWorkPanel}>
-              <div>
-                <h3 style={workPanelTitle}>Trabalhar clientes novos Generali</h3>
-                <p style={workPanelText}>
-                  Usa este painel para focar apenas os clientes novos, completar dados em falta e abrir oportunidades comerciais.
-                </p>
-              </div>
-
-              <div style={newClientsStatsGrid}>
-                <Summary title="Novos" value={newClientWorkSummary.total} />
-                <Summary title="Sem telefone" value={newClientWorkSummary.missingPhone} />
-                <Summary title="Sem email" value={newClientWorkSummary.missingEmail} />
-                <Summary title="Com telefone" value={newClientWorkSummary.withPhone} />
-              </div>
-
-              <div style={workFilters}>
-                <label style={checkLabel}>
-                  <input
-                    type="checkbox"
-                    checked={onlyNewClients}
-                    onChange={(event) => setOnlyNewClients(event.target.checked)}
-                  />
-                  Apenas clientes novos
-                </label>
-
-                <label style={checkLabel}>
-                  <input
-                    type="checkbox"
-                    checked={onlyMissingPhone}
-                    onChange={(event) => setOnlyMissingPhone(event.target.checked)}
-                  />
-                  Sem telefone
-                </label>
-
-                <label style={checkLabel}>
-                  <input
-                    type="checkbox"
-                    checked={onlyMissingEmail}
-                    onChange={(event) => setOnlyMissingEmail(event.target.checked)}
-                  />
-                  Sem email
-                </label>
-              </div>
-            </section>
-          )}
-
-          <div style={previewSearchBox}>
+              <div style={previewSearchBox}>
                 <label style={previewSearchLabel}>
                   Pesquisar na pré-visualização
                 </label>
@@ -1745,75 +1650,4 @@ const badgeNew = {
 
 const muted = {
   color: "#6b7280",
-};
-
-
-const newClientsWorkPanel = {
-  background: "linear-gradient(135deg, #ecfdf5, #eff6ff)",
-  border: "1px solid #bbf7d0",
-  borderRadius: 16,
-  padding: 16,
-  marginBottom: 18,
-  display: "grid",
-  gap: 12,
-};
-
-const workPanelTitle = {
-  margin: 0,
-  color: "#166534",
-};
-
-const workPanelText = {
-  margin: "6px 0 0",
-  color: "#475569",
-};
-
-const newClientsStatsGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: 10,
-};
-
-const workFilters = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 10,
-};
-
-const checkLabel = {
-  background: "white",
-  border: "1px solid #d1fae5",
-  borderRadius: 999,
-  padding: "8px 12px",
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  fontWeight: "bold",
-  color: "#166534",
-};
-
-const rowActions = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const miniActionButton = {
-  background: "#111827",
-  color: "white",
-  padding: "7px 10px",
-  borderRadius: 8,
-  textDecoration: "none",
-  fontWeight: "bold",
-  display: "inline-block",
-};
-
-const miniOpportunityButton = {
-  background: "#0f766e",
-  color: "white",
-  padding: "7px 10px",
-  borderRadius: 8,
-  textDecoration: "none",
-  fontWeight: "bold",
-  display: "inline-block",
 };
