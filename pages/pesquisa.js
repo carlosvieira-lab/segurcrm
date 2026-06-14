@@ -81,7 +81,24 @@ function formatDate(date) {
   return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
-function textMatches(textValues, term, numbersTerm) {
+function getNameSearchTokens(value) {
+  return clean(value)
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function matchesFlexibleName(fullName, searchValue) {
+  const nameTokens = getNameSearchTokens(fullName);
+  const searchTokens = getNameSearchTokens(searchValue);
+
+  if (searchTokens.length === 0) return true;
+
+  return searchTokens.every((token) =>
+    nameTokens.some((nameToken) => nameToken.includes(token))
+  );
+}
+
+function textMatches(textValues, term, numbersTerm, nameValues = []) {
   const text = textValues.map(clean).join(" ");
 
   const numbers = textValues
@@ -89,8 +106,13 @@ function textMatches(textValues, term, numbersTerm) {
     .filter(Boolean)
     .join(" ");
 
+  const nameMatch = nameValues.some((name) =>
+    matchesFlexibleName(name, term)
+  );
+
   return (
     text.includes(term) ||
+    nameMatch ||
     (numbersTerm && numbers.includes(numbersTerm))
   );
 }
@@ -124,7 +146,8 @@ export default function Pesquisa({
           client.interactions,
         ],
         term,
-        numbersTerm
+        numbersTerm,
+        [client.name]
       )
     );
   }, [clients, term, numbersTerm]);
@@ -147,7 +170,8 @@ export default function Pesquisa({
           policy.insurers?.name,
         ],
         term,
-        numbersTerm
+        numbersTerm,
+        [policy.clients?.name]
       )
     );
   }, [policies, term, numbersTerm]);
@@ -172,7 +196,8 @@ export default function Pesquisa({
           task.policies?.license_plate,
         ],
         term,
-        numbersTerm
+        numbersTerm,
+        [task.clients?.name]
       )
     );
   }, [tasks, term, numbersTerm]);
@@ -196,7 +221,8 @@ export default function Pesquisa({
           opportunity.clients?.phone,
         ],
         term,
-        numbersTerm
+        numbersTerm,
+        [opportunity.name, opportunity.clients?.name]
       )
     );
   }, [opportunities, term, numbersTerm]);
@@ -218,7 +244,8 @@ export default function Pesquisa({
           claim.clients?.nif,
         ],
         term,
-        numbersTerm
+        numbersTerm,
+        [claim.client_name, claim.clients?.name]
       )
     );
   }, [claims, term, numbersTerm]);
