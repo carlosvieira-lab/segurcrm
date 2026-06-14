@@ -105,6 +105,22 @@ function formatDays(value) {
   return `${value} dias`;
 }
 
+function daysSince(date) {
+  if (!date) return null;
+  const start = new Date(date);
+  const now = new Date();
+  const diff = now.getTime() - start.getTime();
+  if (Number.isNaN(diff)) return null;
+  return Math.max(Math.round(diff / (1000 * 60 * 60 * 24)), 0);
+}
+
+function getAlertStyle(days) {
+  if (days === null || days === undefined) return { background: "#f3f4f6", color: "#374151" };
+  if (days > 30) return { background: "#fee2e2", color: "#991b1b" };
+  if (days > 15) return { background: "#ffedd5", color: "#9a3412" };
+  return { background: "#dcfce7", color: "#166534" };
+}
+
 function parseDecimal(value) {
   if (value === "" || value === null || value === undefined) return 0;
   if (typeof value === "number") return value;
@@ -429,6 +445,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   );
   const [showCampaignsPanel, setShowCampaignsPanel] = useState(false);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
+  const [showFinanceAgenda, setShowFinanceAgenda] = useState(false);
   const [showCampaignEditor, setShowCampaignEditor] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState(campaigns?.[0]?.id || "");
   const [campaignForm, setCampaignForm] = useState(() =>
@@ -970,6 +987,148 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       netResult: totalReceived - totalPartnerPayments - totalCampaignCosts - totalContestCosts,
     };
   }, [deals, partnerAnalysis]);
+
+  const commissionsToReceive = useMemo(() => {
+    return deals
+      .filter((deal) => deal.status === "CONTRATADO" && Number(deal.received_commission || 0) <= 0)
+      .map((deal) => ({
+        ...deal,
+        pendingDays: daysSince(deal.contract_date || deal.entry_date || deal.created_at),
+      }))
+      .sort((a, b) => Number(b.pendingDays || 0) - Number(a.pendingDays || 0));
+  }, [deals]);
+
+  const partnerPaymentsToPay = useMemo(() => {
+    return deals
+      .map((deal) => {
+        const partnerDue = calculatePartnerPayment(
+          deal.amount,
+          deal.partner_payment_type,
+          deal.partner_payment_rate,
+          deal.partner_payment_value
+        );
+
+        return {
+          ...deal,
+          partnerDue,
+          pendingDays: daysSince(deal.commission_received_at || deal.contract_date || deal.entry_date || deal.created_at),
+        };
+      })
+      .filter((deal) => deal.partnerDue > 0 && deal.partner_payment_status !== "pago")
+      .sort((a, b) => Number(b.pendingDays || 0) - Number(a.pendingDays || 0));
+  }, [deals]);
+
+  const campaignPaymentsToPay = useMemo(() => {
+    const items = [];
+
+    campaigns.forEach((campaign) => {
+      const objective = Number(campaign.objective_amount || 0);
+      const cost = Number(campaign.cost_per_winner || 0);
+      if (objective <= 0 || cost <= 0) return;
+
+      const startDate = campaign.start_date || "";
+      const endDate = campaign.contract_deadline || campaign.end_date || "";
+      const eligibleTypes = Array.isArray(campaign.eligible_deal_types) ? campaign.eligible_deal_types : [];
+      const map = new Map();
+
+      deals
+        .filter((deal) => {
+          const date = getDealDate(deal);
+          return (
+            deal.status === "CONTRATADO" &&
+            deal.source_partner_id &&
+            dealMatchesTypes(deal, eligibleTypes) &&
+            (!startDate || date >= startDate) &&
+            (!endDate || date <= endDate)
+          );
+        })
+        .forEach((deal) => {
+          const partnerId = deal.source_partner_id;
+          const partnerName = deal.source_partner?.name || "Sem parceiro";
+          if (!map.has(partnerId)) map.set(partnerId, { partnerId, partnerName, totalAmount: 0 });
+          map.get(partnerId).totalAmount += Number(deal.amount || 0);
+        });
+
+      [...map.values()]
+        .filter((item) => item.totalAmount >= objective)
+        .forEach((item) => {
+          items.push({
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            partnerId: item.partnerId,
+            partnerName: item.partnerName,
+            totalAmount: item.totalAmount,
+            cost,
+            pendingDays: daysSince(campaign.contract_deadline || campaign.end_date),
+          });
+        });
+    });
+
+    return items.sort((a, b) => Number(b.pendingDays || 0) - Number(a.pendingDays || 0));
+  }, [campaigns, deals]);
+
+  const contestPaymentsToPay = useMemo(() => {
+    const items = [];
+
+    contests.forEach((contest) => {
+      const prizeAmounts = [
+        Number(contest.prize_1_amount || 0),
+        Number(contest.prize_2_amount || 0),
+        Number(contest.prize_3_amount || 0),
+      ];
+      const minimumAmount = Number(contest.minimum_amount || 0);
+      const startDate = contest.start_date || "";
+      const endDate = contest.end_date || "";
+      const map = new Map();
+
+      deals
+        .filter((deal) => isCruzadosEligibleDeal(deal, startDate, endDate))
+        .forEach((deal) => {
+          const partnerId = deal.source_partner_id;
+          const partnerName = deal.source_partner?.name || "Sem parceiro";
+          const amount = Number(deal.amount || 0);
+
+          if (!map.has(partnerId)) {
+            map.set(partnerId, { partnerId, partnerName, totalAmount: 0, biggestDeal: 0 });
+          }
+
+          const item = map.get(partnerId);
+          item.totalAmount += amount;
+          item.biggestDeal = Math.max(item.biggestDeal, amount);
+        });
+
+      [...map.values()]
+        .filter((item) => minimumAmount <= 0 || item.totalAmount >= minimumAmount)
+        .sort((a, b) => {
+          if (b.totalAmount !== a.totalAmount) return b.totalAmount - a.totalAmount;
+          return b.biggestDeal - a.biggestDeal;
+        })
+        .slice(0, 3)
+        .forEach((item, index) => {
+          const prizeAmount = prizeAmounts[index] || 0;
+          if (prizeAmount <= 0) return;
+          items.push({
+            contestId: contest.id,
+            contestName: contest.name,
+            position: index + 1,
+            partnerId: item.partnerId,
+            partnerName: item.partnerName,
+            totalAmount: item.totalAmount,
+            prizeAmount,
+            pendingDays: daysSince(contest.end_date),
+          });
+        });
+    });
+
+    return items.sort((a, b) => Number(b.pendingDays || 0) - Number(a.pendingDays || 0));
+  }, [contests, deals]);
+
+  const financeAgendaTotals = {
+    commissions: commissionsToReceive.length,
+    partnerPayments: partnerPaymentsToPay.length,
+    campaigns: campaignPaymentsToPay.length,
+    contests: contestPaymentsToPay.length,
+  };
 
   function selectContest(contestId) {
     const contest = contests.find((item) => item.id === contestId) || null;
@@ -1697,6 +1856,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
             <button
               style={secondaryButton}
+              onClick={() => setShowFinanceAgenda(!showFinanceAgenda)}
+            >
+              🔔 Agenda
+            </button>
+
+            <button
+              style={secondaryButton}
               onClick={() => {
                 resetPartnerForm();
                 setShowPartnerForm(!showPartnerForm);
@@ -2017,6 +2183,104 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {showFinanceAgenda && (
+          <section style={agendaPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>🔔 Agenda Financeira</h2>
+                <p style={muted}>Pendências de comissões, pagamentos a parceiros, campanhas e concursos.</p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowFinanceAgenda(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <section style={agendaSummaryGrid}>
+              <Summary title="Comissões por receber" value={financeAgendaTotals.commissions} />
+              <Summary title="Parceiros por pagar" value={financeAgendaTotals.partnerPayments} />
+              <Summary title="Campanhas por liquidar" value={financeAgendaTotals.campaigns} />
+              <Summary title="Concursos por liquidar" value={financeAgendaTotals.contests} />
+            </section>
+
+            <section style={agendaBlock}>
+              <h3>💰 Comissões por receber</h3>
+              {commissionsToReceive.length === 0 ? <p style={muted}>Sem comissões pendentes.</p> : (
+                <div style={agendaList}>
+                  {commissionsToReceive.map((deal) => (
+                    <div key={deal.id} style={agendaRow}>
+                      <div>
+                        <strong>{deal.client_name}</strong>
+                        <p style={muted}>{deal.bank_partner?.name || "Sem banco"} · {deal.deal_type}</p>
+                      </div>
+                      <span>{formatEuro(deal.expected_commission)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{formatDays(deal.pendingDays)}</span>
+                      <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={agendaBlock}>
+              <h3>🤝 Parceiros por pagar</h3>
+              {partnerPaymentsToPay.length === 0 ? <p style={muted}>Sem pagamentos pendentes a parceiros.</p> : (
+                <div style={agendaList}>
+                  {partnerPaymentsToPay.map((deal) => (
+                    <div key={deal.id} style={agendaRow}>
+                      <div>
+                        <strong>{deal.source_partner?.name || "Sem parceiro"}</strong>
+                        <p style={muted}>{deal.client_name} · {deal.deal_type}</p>
+                      </div>
+                      <span>{formatEuro(deal.partnerDue)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(deal.pendingDays) }}>{formatDays(deal.pendingDays)}</span>
+                      <button type="button" style={smallButton} onClick={() => openEditDeal(deal)}>Abrir</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={agendaBlock}>
+              <h3>🎯 Campanhas por liquidar</h3>
+              {campaignPaymentsToPay.length === 0 ? <p style={muted}>Sem prémios de campanhas por liquidar.</p> : (
+                <div style={agendaList}>
+                  {campaignPaymentsToPay.map((item) => (
+                    <div key={`${item.campaignId}-${item.partnerId}`} style={agendaRow}>
+                      <div>
+                        <strong>{item.partnerName}</strong>
+                        <p style={muted}>{item.campaignName}</p>
+                      </div>
+                      <span>{formatEuro(item.cost)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{formatDays(item.pendingDays)}</span>
+                      <span style={muted}>{formatEuro(item.totalAmount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section style={agendaBlock}>
+              <h3>🏆 Concursos por liquidar</h3>
+              {contestPaymentsToPay.length === 0 ? <p style={muted}>Sem prémios de concursos por liquidar.</p> : (
+                <div style={agendaList}>
+                  {contestPaymentsToPay.map((item) => (
+                    <div key={`${item.contestId}-${item.partnerId}-${item.position}`} style={agendaRow}>
+                      <div>
+                        <strong>{item.position}º lugar · {item.partnerName}</strong>
+                        <p style={muted}>{item.contestName}</p>
+                      </div>
+                      <span>{formatEuro(item.prizeAmount)}</span>
+                      <span style={{ ...alertBadge, ...getAlertStyle(item.pendingDays) }}>{formatDays(item.pendingDays)}</span>
+                      <span style={muted}>{formatEuro(item.totalAmount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </section>
         )}
 
@@ -2902,3 +3166,9 @@ const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-
 const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
 const ruleBox = { background: "#ecfeff", border: "1px solid #67e8f9", borderRadius: 12, padding: 12, color: "#155e75", fontWeight: "bold", lineHeight: 1.5 };
 const bankReportControls = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", marginBottom: 14 };
+const agendaPanel = { background: "#fff7ed", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(154,52,18,0.16)", border: "1px solid #fed7aa" };
+const agendaSummaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 18 };
+const agendaBlock = { background: "white", border: "1px solid #fed7aa", borderRadius: 16, padding: 16, marginBottom: 14 };
+const agendaList = { display: "grid", gap: 8 };
+const agendaRow = { background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 12px", display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 10, alignItems: "center" };
+const alertBadge = { borderRadius: 999, padding: "7px 10px", fontWeight: "bold", textAlign: "center", fontSize: 12 };
