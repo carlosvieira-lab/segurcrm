@@ -2475,7 +2475,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
             </div>
 
             <textarea
-              style={{ ...textarea, minHeight: 220 }}
+              style={{
+                ...textarea,
+                width: "100%",
+                boxSizing: "border-box",
+                minHeight: 320,
+                resize: "vertical",
+              }}
               value={pageNotes}
               onChange={(event) => setPageNotes(event.target.value)}
               placeholder="Escreve aqui notas livres sobre negócios financeiros, bancos, parceiros, pendências, ideias ou lembretes..."
