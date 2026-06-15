@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+mport { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
@@ -30,18 +30,81 @@ function formatEuro(value) {
   return new Intl.NumberFormat("pt-PT", {
     style: "currency",
     currency: "EUR",
-  }).format(Number(value || 0));
+  }).format(parseNumber(value));
+}
+
+function parseNumber(value) {
+  if (value === null || value === undefined || value === "") return 0;
+
+  if (typeof value === "number") return value;
+
+  let text = String(value)
+    .replace(/\s/g, "")
+    .replace(/€/g, "")
+    .trim();
+
+  if (!text) return 0;
+
+  const isNegative =
+    text.startsWith("-") ||
+    /^\(.*\)$/.test(text);
+
+  text = text.replace(/[()]/g, "").replace(/^-/, "");
+
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+
+  if (hasComma && hasDot) {
+    const lastComma = text.lastIndexOf(",");
+    const lastDot = text.lastIndexOf(".");
+
+    if (lastComma > lastDot) {
+      text = text.replace(/\./g, "").replace(",", ".");
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    text = text.replace(/\./g, "").replace(",", ".");
+  }
+
+  const number = Number(text) || 0;
+
+  return isNegative ? -number : number;
+}
+
+function normalizeStatus(status) {
+  return String(status || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function isCancelledPolicy(policy) {
+  return normalizeStatus(policy.status) === "anulada";
+}
+
+function normalizeFrequency(frequency) {
+  return String(frequency || "anual")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
 function annualCommission(policy) {
-  const commission = Number(policy.commission_per_payment || 0);
-  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
+  const commission = parseNumber(policy.commission_per_payment);
+  const frequency = normalizeFrequency(policy.payment_frequency);
 
   if (frequency === "mensal") return commission * 12;
   if (frequency === "trimestral") return commission * 4;
   if (frequency === "semestral") return commission * 2;
 
   return commission;
+}
+
+function policyAnnualPremium(policy) {
+  return parseNumber(policy.annual_premium);
 }
 
 function normalizeBranchName(branch) {
@@ -95,46 +158,35 @@ function getLast12Months() {
 }
 
 export default function FinanceiroCompacto({ policies }) {
-  const activePolicies = policies.filter((p) => p.status !== "anulada");
-  const cancelledPolicies = policies.filter((p) => p.status === "anulada");
+  const activePolicies = policies.filter((p) => !isCancelledPolicy(p));
+  const cancelledPolicies = policies.filter((p) => isCancelledPolicy(p));
 
   const activePremium = activePolicies.reduce(
-    (sum, p) => sum + Number(p.annual_premium || 0),
+    (sum, p) => sum + policyAnnualPremium(p),
     0
   );
 
   const vidaBranches = [
-    "vida",
-    "aps",
-    "viagem",
+    "VIDA",
+    "APS",
+    "VIAGEM",
   ];
 
   const vidaPolicies =
     activePolicies.filter((p) =>
-      vidaBranches.includes(
-        String(p.branch || "")
-          .toLowerCase()
-          .trim()
-      )
+      vidaBranches.includes(normalizeBranchName(p.branch))
     );
 
   const naoVidaPolicies =
     activePolicies.filter(
-      (p) =>
-        !vidaBranches.includes(
-          String(p.branch || "")
-            .toLowerCase()
-            .trim()
-        )
+      (p) => !vidaBranches.includes(normalizeBranchName(p.branch))
     );
 
   const vidaPremium =
     vidaPolicies.reduce(
       (sum, p) =>
         sum +
-        Number(
-          p.annual_premium || 0
-        ),
+        policyAnnualPremium(p),
       0
     );
 
@@ -142,9 +194,7 @@ export default function FinanceiroCompacto({ policies }) {
     naoVidaPolicies.reduce(
       (sum, p) =>
         sum +
-        Number(
-          p.annual_premium || 0
-        ),
+        policyAnnualPremium(p),
       0
     );
 
@@ -185,7 +235,7 @@ export default function FinanceiroCompacto({ policies }) {
       : "0.0";
 
   const cancelledPremium = cancelledPolicies.reduce(
-    (sum, p) => sum + Number(p.annual_premium || 0),
+    (sum, p) => sum + policyAnnualPremium(p),
     0
   );
 
@@ -200,6 +250,10 @@ export default function FinanceiroCompacto({ policies }) {
   );
 
   const monthlyCommissionEstimate = activeCommission / 12;
+
+  const policiesWithoutPremium = activePolicies.filter((p) => !policyAnnualPremium(p));
+  const policiesWithoutCommission = activePolicies.filter((p) => !annualCommission(p));
+  const policiesWithoutFrequency = activePolicies.filter((p) => !p.payment_frequency);
 
   const insurerStats = {};
   const branchStats = {};
@@ -221,7 +275,7 @@ export default function FinanceiroCompacto({ policies }) {
     const branch = policy.branch || "Sem ramo";
     const frequency = policy.payment_frequency || "anual";
     const commission = annualCommission(policy);
-    const premium = Number(policy.annual_premium || 0);
+    const premium = policyAnnualPremium(policy);
 
     if (!insurerStats[insurer]) {
       insurerStats[insurer] = {
@@ -519,6 +573,24 @@ export default function FinanceiroCompacto({ policies }) {
               title="Comissão perdida"
               value={formatEuro(lostCommission)}
               text={`${lostCommissionPercentage}% da comissão analisada`}
+            />
+
+            <AlertCard
+              title="Apólices sem prémio"
+              value={policiesWithoutPremium.length}
+              text="Apólices ativas com prémio anual a zero ou inválido"
+            />
+
+            <AlertCard
+              title="Apólices sem comissão"
+              value={policiesWithoutCommission.length}
+              text="Apólices ativas com comissão anual a zero ou inválida"
+            />
+
+            <AlertCard
+              title="Sem fracionamento"
+              value={policiesWithoutFrequency.length}
+              text="Assumidas como anuais no cálculo"
             />
           </div>
         </section>
