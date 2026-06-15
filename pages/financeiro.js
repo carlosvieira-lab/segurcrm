@@ -1045,3 +1045,4 @@ const tableRow = {
 
 const muted = {
   color: "#64748b",
+};
