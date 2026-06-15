@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -39,6 +40,15 @@ export async function getServerSideProps() {
     await supabase
       .from("opportunities")
       .select("*");
+
+  const { data: dashboardAlerts } =
+    await supabase
+      .from("dashboard_alerts")
+      .select("*")
+      .neq("status", "concluido")
+      .lte("alert_date", today)
+      .order("alert_date", { ascending: true })
+      .order("alert_time", { ascending: true });
 
   const overdueTasks =
     (tasks || []).filter(
@@ -160,6 +170,8 @@ export async function getServerSideProps() {
         opportunitiesAlert.length,
       birthdaysToday:
         birthdaysToday || [],
+      dashboardAlerts:
+        dashboardAlerts || [],
     },
   };
 }
@@ -190,6 +202,63 @@ function calculateAge(date) {
   return age;
 }
 
+function formatDate(date) {
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat("pt-PT").format(
+    new Date(`${date}T00:00:00`)
+  );
+}
+
+function escapeCalendarText(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
+function buildCalendarUrl(alert) {
+  const title = alert?.title || "Alerta CRM";
+  const date = alert?.alert_date || new Date().toISOString().split("T")[0];
+  const time = alert?.alert_time || "09:00";
+  const cleanTime = time.length === 5 ? `${time}:00` : time;
+  const startDate = new Date(`${date}T${cleanTime}`);
+  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+
+  const formatCalendarDate = (value) => {
+    const pad = (number) => String(number).padStart(2, "0");
+
+    return `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}T${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}`;
+  };
+
+  const calendar = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//SegurCRM//Dashboard Alert//PT",
+    "BEGIN:VEVENT",
+    `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@segurcrm`,
+    `DTSTAMP:${formatCalendarDate(new Date())}`,
+    `DTSTART:${formatCalendarDate(startDate)}`,
+    `DTEND:${formatCalendarDate(endDate)}`,
+    `SUMMARY:${escapeCalendarText(title)}`,
+    `DESCRIPTION:${escapeCalendarText(alert?.notes || "Criado no SegurCRM")}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`;
+}
+
+function buildInitialAlertForm() {
+  return {
+    title: "",
+    alert_date: new Date().toISOString().split("T")[0],
+    alert_time: "09:00",
+    notes: "",
+  };
+}
+
 export default function Dashboard({
   totalClients,
   totalPolicies,
@@ -202,7 +271,81 @@ export default function Dashboard({
   renewal30,
   opportunitiesAlert,
   birthdaysToday,
+  dashboardAlerts,
 }) {
+  const [showAlertForm, setShowAlertForm] = useState(false);
+  const [savingAlert, setSavingAlert] = useState(false);
+  const [personalAlerts, setPersonalAlerts] = useState(dashboardAlerts || []);
+  const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
+
+  async function saveDashboardAlert(event) {
+    event.preventDefault();
+
+    if (!alertForm.title.trim()) {
+      alert("Preenche o título do alerta.");
+      return;
+    }
+
+    if (!alertForm.alert_date) {
+      alert("Escolhe a data do alerta.");
+      return;
+    }
+
+    setSavingAlert(true);
+
+    const payload = {
+      title: alertForm.title.trim(),
+      alert_date: alertForm.alert_date,
+      alert_time: alertForm.alert_time || "09:00",
+      notes: alertForm.notes || null,
+      status: "pendente",
+    };
+
+    const { data, error } = await supabase
+      .from("dashboard_alerts")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    setSavingAlert(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+
+    if (data && data.alert_date <= today) {
+      setPersonalAlerts((current) => [...current, data]);
+    }
+
+    setAlertForm(buildInitialAlertForm());
+    setShowAlertForm(false);
+  }
+
+  async function completeDashboardAlert(item) {
+    const ok = window.confirm(`Marcar como concluído: ${item.title}?`);
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("dashboard_alerts")
+      .update({
+        status: "concluido",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", item.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setPersonalAlerts((current) =>
+      current.filter((alertItem) => alertItem.id !== item.id)
+    );
+  }
+
   return (
     <div style={page}>
       <Sidebar active="dashboard" />
@@ -219,7 +362,122 @@ export default function Dashboard({
               SegurCRM.
             </p>
           </div>
+
+          <button
+            type="button"
+            style={newAlertButton}
+            onClick={() => setShowAlertForm(true)}
+          >
+            + Criar alerta
+          </button>
         </div>
+
+        {showAlertForm && (
+          <div style={modalOverlay}>
+            <div style={alertModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={personalAlertTitle}>
+                    🟣 Novo alerta pessoal
+                  </h2>
+                  <p style={modalSubtitle}>
+                    Cria um lembrete para aparecer no Dashboard quando chegar o dia.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={modalCloseButton}
+                  onClick={() => setShowAlertForm(false)}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <form style={alertFormGrid} onSubmit={saveDashboardAlert}>
+                <label style={fieldLabel}>
+                  Título do alerta
+                  <input
+                    style={input}
+                    value={alertForm.title}
+                    onChange={(event) =>
+                      setAlertForm({
+                        ...alertForm,
+                        title: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: Pagar PC Zurich"
+                    required
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Data
+                  <input
+                    type="date"
+                    style={input}
+                    value={alertForm.alert_date}
+                    onChange={(event) =>
+                      setAlertForm({
+                        ...alertForm,
+                        alert_date: event.target.value,
+                      })
+                    }
+                    required
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Hora
+                  <input
+                    type="time"
+                    style={input}
+                    value={alertForm.alert_time}
+                    onChange={(event) =>
+                      setAlertForm({
+                        ...alertForm,
+                        alert_time: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Notas
+                  <textarea
+                    style={textarea}
+                    value={alertForm.notes}
+                    onChange={(event) =>
+                      setAlertForm({
+                        ...alertForm,
+                        notes: event.target.value,
+                      })
+                    }
+                    placeholder="Notas opcionais sobre este alerta..."
+                  />
+                </label>
+
+                <div style={modalActions}>
+                  <button
+                    type="submit"
+                    style={saveAlertButton}
+                    disabled={savingAlert}
+                  >
+                    {savingAlert ? "A guardar..." : "Guardar alerta"}
+                  </button>
+
+                  <a
+                    href={buildCalendarUrl(alertForm)}
+                    download="alerta-segurcrm.ics"
+                    style={calendarButton}
+                  >
+                    📅 Adicionar à agenda
+                  </a>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {opportunitiesAlert >
           0 && (
@@ -265,6 +523,57 @@ export default function Dashboard({
               Abrir Agenda
             </div>
           </Link>
+        )}
+
+        {personalAlerts.length > 0 && (
+          <div style={personalAlertCard}>
+            <div style={personalAlertHeader}>
+              <div>
+                <h2 style={personalAlertTitle}>
+                  🟣 Alertas pessoais
+                </h2>
+
+                <p style={personalAlertText}>
+                  Tens {personalAlerts.length} alerta(s) pendente(s). Só desaparecem quando marcares como concluído.
+                </p>
+              </div>
+            </div>
+
+            <div style={personalAlertList}>
+              {personalAlerts.map((item) => (
+                <div key={item.id} style={personalAlertItem}>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <p style={personalAlertMeta}>
+                      {formatDate(item.alert_date)} · {item.alert_time || "09:00"}
+                    </p>
+
+                    {item.notes && (
+                      <p style={personalAlertNotes}>{item.notes}</p>
+                    )}
+                  </div>
+
+                  <div style={personalAlertActions}>
+                    <a
+                      href={buildCalendarUrl(item)}
+                      download="alerta-segurcrm.ics"
+                      style={smallCalendarButton}
+                    >
+                      📅 Agenda
+                    </a>
+
+                    <button
+                      type="button"
+                      style={completeButton}
+                      onClick={() => completeDashboardAlert(item)}
+                    >
+                      ✓ Concluído
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {birthdaysToday.length >
@@ -365,6 +674,14 @@ export default function Dashboard({
               opportunitiesAlert
             }
             color="#111827"
+          />
+
+          <Card
+            title="Alertas pessoais"
+            value={
+              personalAlerts.length
+            }
+            color="#7c3aed"
           />
         </section>
 
@@ -487,6 +804,10 @@ const main = {
 
 const header = {
   marginBottom: 30,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
 };
 
 const title = {
@@ -497,6 +818,17 @@ const title = {
 const subtitle = {
   color: "#6b7280",
   marginTop: 10,
+};
+
+const newAlertButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  borderRadius: 12,
+  padding: "14px 18px",
+  fontWeight: "bold",
+  cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(124,58,237,0.25)",
 };
 
 const alertCard = {
@@ -533,6 +865,87 @@ const alertButton = {
   fontWeight: "bold",
 };
 
+const personalAlertCard = {
+  background:
+    "linear-gradient(135deg,#ddd6fe,#c4b5fd)",
+  border: "2px solid #7c3aed",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  color: "#111827",
+};
+
+const personalAlertHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
+};
+
+const personalAlertTitle = {
+  margin: 0,
+  color: "#4c1d95",
+};
+
+const personalAlertText = {
+  marginTop: 10,
+  color: "#4c1d95",
+};
+
+const personalAlertList = {
+  display: "grid",
+  gap: 12,
+  marginTop: 18,
+};
+
+const personalAlertItem = {
+  background: "rgba(255,255,255,0.72)",
+  border: "1px solid rgba(124,58,237,0.35)",
+  borderRadius: 14,
+  padding: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
+};
+
+const personalAlertMeta = {
+  margin: "6px 0 0",
+  color: "#5b21b6",
+  fontWeight: "bold",
+};
+
+const personalAlertNotes = {
+  margin: "8px 0 0",
+  color: "#374151",
+};
+
+const personalAlertActions = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const completeButton = {
+  background: "#166534",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const smallCalendarButton = {
+  background: "#4c1d95",
+  color: "white",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: "bold",
+  textDecoration: "none",
+};
+
 const birthdayCard = {
   background:
     "linear-gradient(135deg,#fef3c7,#fde68a)",
@@ -562,6 +975,108 @@ const birthdayItem = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.64)",
+  zIndex: 50,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+};
+
+const alertModal = {
+  width: "min(820px, 96vw)",
+  background: "linear-gradient(135deg,#f5f3ff,#ede9fe)",
+  border: "2px solid #7c3aed",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 24px 70px rgba(17,24,39,0.32)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
+  marginBottom: 20,
+};
+
+const modalSubtitle = {
+  color: "#5b21b6",
+  marginTop: 8,
+};
+
+const modalCloseButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "11px 14px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const alertFormGrid = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr",
+  gap: 14,
+};
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  fontWeight: "bold",
+  color: "#374151",
+};
+
+const input = {
+  border: "1px solid #c4b5fd",
+  borderRadius: 10,
+  padding: "12px 13px",
+  fontSize: 15,
+  background: "white",
+};
+
+const textarea = {
+  border: "1px solid #c4b5fd",
+  borderRadius: 10,
+  padding: "12px 13px",
+  fontSize: 15,
+  background: "white",
+  minHeight: 120,
+  resize: "vertical",
+};
+
+const modalActions = {
+  gridColumn: "1 / -1",
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 4,
+};
+
+const saveAlertButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const calendarButton = {
+  background: "#111827",
+  color: "white",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontWeight: "bold",
+  textDecoration: "none",
 };
 
 const grid = {
@@ -610,5 +1125,3 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
-
