@@ -75,6 +75,12 @@ export async function getServerSideProps() {
     .select("*")
     .order("changed_at", { ascending: false });
 
+  const { data: financeNotes } = await supabase
+    .from("financial_page_notes")
+    .select("*")
+    .eq("id", "negocios-financeiros")
+    .single();
+
   return {
     props: {
       deals: deals || [],
@@ -84,6 +90,7 @@ export async function getServerSideProps() {
       campaigns: campaigns || [],
       goals: goals || [],
       dealHistory: dealHistory || [],
+      financeNotes: financeNotes || null,
     },
   };
 }
@@ -637,7 +644,7 @@ Loja de Seguros de Trajouce`;
 
 
 
-export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals, dealHistory }) {
+export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals, dealHistory, financeNotes }) {
   const [showDealForm, setShowDealForm] = useState(false);
   const [editingDealId, setEditingDealId] = useState(null);
   const [openDealId, setOpenDealId] = useState(null);
@@ -656,6 +663,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
   const [showFinanceAgenda, setShowFinanceAgenda] = useState(false);
   const [showGoalsPanel, setShowGoalsPanel] = useState(false);
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [pageNotes, setPageNotes] = useState(financeNotes?.content || "");
   const [goalForm, setGoalForm] = useState(buildInitialGoalForm);
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [showCampaignEditor, setShowCampaignEditor] = useState(false);
@@ -2350,6 +2359,27 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     });
   }
 
+  async function savePageNotes() {
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("financial_page_notes")
+      .upsert({
+        id: "negocios-financeiros",
+        content: pageNotes,
+        updated_at: new Date().toISOString(),
+      });
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    alert("Notas guardadas.");
+  }
+
   return (
     <div style={page}>
       <Sidebar active="negocios-financeiros" />
@@ -2402,6 +2432,13 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
             <button
               style={secondaryButton}
+              onClick={() => setShowNotesPanel(!showNotesPanel)}
+            >
+              📝 Bloco de notas
+            </button>
+
+            <button
+              style={secondaryButton}
               onClick={() => {
                 resetPartnerForm();
                 setShowPartnerForm(!showPartnerForm);
@@ -2421,6 +2458,44 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           <Summary title="Comissões parceiros pagas" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
         </section>
+
+        {showNotesPanel && (
+          <section style={formCard}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>📝 Bloco de notas</h2>
+                <p style={muted}>
+                  Notas livres desta página. Podes escrever, alterar e guardar sempre que quiseres.
+                </p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowNotesPanel(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <textarea
+              style={{ ...textarea, minHeight: 220 }}
+              value={pageNotes}
+              onChange={(event) => setPageNotes(event.target.value)}
+              placeholder="Escreve aqui notas livres sobre negócios financeiros, bancos, parceiros, pendências, ideias ou lembretes..."
+            />
+
+            <div style={{ ...formActions, marginTop: 14 }}>
+              <button type="button" style={button} onClick={savePageNotes} disabled={saving}>
+                {saving ? "A guardar..." : "Guardar notas"}
+              </button>
+
+              <button
+                type="button"
+                style={grayButton}
+                onClick={() => setPageNotes(financeNotes?.content || "")}
+              >
+                Repor último guardado
+              </button>
+            </div>
+          </section>
+        )}
 
         {showPartnerForm && (
           <section style={formCard}>
