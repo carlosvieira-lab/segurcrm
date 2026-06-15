@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+mport { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
@@ -12,17 +12,36 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
-  const { data: policies } = await supabase
-    .from("policies")
-    .select(`
-      *,
-      insurers(name)
-    `)
-    .range(0, 4999);
+  async function fetchPoliciesRange(from, to) {
+    const { data, error } = await supabase
+      .from("policies")
+      .select(`
+        *,
+        insurers(name)
+      `)
+      .range(from, to);
+
+    if (error) {
+      console.log("Erro ao carregar apólices:", error.message);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  const firstBatch = await fetchPoliciesRange(0, 999);
+  const secondBatch = await fetchPoliciesRange(1000, 1999);
+  const thirdBatch = await fetchPoliciesRange(2000, 2999);
+
+  const policies = [
+    ...firstBatch,
+    ...secondBatch,
+    ...thirdBatch,
+  ];
 
   return {
     props: {
-      policies: policies || [],
+      policies,
     },
   };
 }
@@ -328,7 +347,7 @@ export default function FinanceiroCompacto({ policies }) {
           <div>
             <h1 style={title}>💰 Financeiro</h1>
             <p style={subtitle}>
-              Painel financeiro de prémios comerciais e comissões.
+              Painel financeiro de prémios comerciais e comissões. Paginação ativa.
             </p>
           </div>
 
@@ -1026,4 +1045,3 @@ const tableRow = {
 
 const muted = {
   color: "#64748b",
-};
