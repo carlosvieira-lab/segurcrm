@@ -2377,7 +2377,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       return;
     }
 
-    alert("Notas guardadas.");
+    setShowNotesPanel(false);
   }
 
   return (
@@ -2460,47 +2460,74 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
         </section>
 
         {showNotesPanel && (
-          <section style={formCard}>
-            <div style={compactPanelHeader}>
-              <div>
-                <h2 style={sectionTitle}>📝 Bloco de notas</h2>
-                <p style={muted}>
-                  Notas livres desta página. Podes escrever, alterar e guardar sempre que quiseres.
-                </p>
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              background: "rgba(15, 23, 42, 0.55)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <section
+              style={{
+                width: "min(980px, 96vw)",
+                maxHeight: "90vh",
+                overflow: "auto",
+                background: "#fffbeb",
+                borderRadius: 18,
+                padding: 22,
+                boxShadow: "0 24px 80px rgba(15, 23, 42, 0.35)",
+                border: "1px solid #f59e0b",
+              }}
+            >
+              <div style={compactPanelHeader}>
+                <div>
+                  <h2 style={sectionTitle}>📝 Bloco de notas</h2>
+                  <p style={muted}>
+                    Notas livres desta página. Podes escrever, alterar e guardar sempre que quiseres.
+                  </p>
+                </div>
+
+                <button type="button" style={grayButton} onClick={() => setShowNotesPanel(false)}>
+                  Fechar
+                </button>
               </div>
 
-              <button type="button" style={grayButton} onClick={() => setShowNotesPanel(false)}>
-                Fechar
-              </button>
-            </div>
+              <textarea
+                style={{
+                  ...textarea,
+                  width: "100%",
+                  boxSizing: "border-box",
+                  minHeight: 420,
+                  resize: "vertical",
+                  background: "#ffffff",
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                }}
+                value={pageNotes}
+                onChange={(event) => setPageNotes(event.target.value)}
+                placeholder="Escreve aqui notas livres sobre negócios financeiros, bancos, parceiros, pendências, ideias ou lembretes..."
+              />
 
-            <textarea
-              style={{
-                ...textarea,
-                width: "100%",
-                boxSizing: "border-box",
-                minHeight: 320,
-                resize: "vertical",
-              }}
-              value={pageNotes}
-              onChange={(event) => setPageNotes(event.target.value)}
-              placeholder="Escreve aqui notas livres sobre negócios financeiros, bancos, parceiros, pendências, ideias ou lembretes..."
-            />
+              <div style={{ ...formActions, marginTop: 14 }}>
+                <button type="button" style={button} onClick={savePageNotes} disabled={saving}>
+                  {saving ? "A guardar..." : "Guardar notas"}
+                </button>
 
-            <div style={{ ...formActions, marginTop: 14 }}>
-              <button type="button" style={button} onClick={savePageNotes} disabled={saving}>
-                {saving ? "A guardar..." : "Guardar notas"}
-              </button>
-
-              <button
-                type="button"
-                style={grayButton}
-                onClick={() => setPageNotes(financeNotes?.content || "")}
-              >
-                Repor último guardado
-              </button>
-            </div>
-          </section>
+                <button
+                  type="button"
+                  style={grayButton}
+                  onClick={() => setPageNotes(financeNotes?.content || "")}
+                >
+                  Repor último guardado
+                </button>
+              </div>
+            </section>
+          </div>
         )}
 
         {showPartnerForm && (
