@@ -1028,6 +1028,7 @@ setTimeout(() => {
       branch: policyForm.branch,
       license_plate: policyForm.license_plate,
       insurer_id: insurerId,
+      status: "ativa",
       annual_premium: calculateAnnualPremiumFromPayment(policyForm.annual_premium, policyForm.payment_frequency),
       commission_per_payment: cleanNumber(policyForm.commission_per_payment),
       payment_frequency: policyForm.payment_frequency,
