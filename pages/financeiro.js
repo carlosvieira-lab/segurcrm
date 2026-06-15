@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+mport { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
 const supabaseUrl =
@@ -333,7 +333,7 @@ export default function FinanceiroCompacto({ policies }) {
           </div>
 
           <div style={headerPill}>
-            {activePolicies.length} apólices em vigor
+            {activePolicies.length} apólices em vigor · {policies.length} carregadas
           </div>
         </header>
 
@@ -502,6 +502,11 @@ export default function FinanceiroCompacto({ policies }) {
 
         <section style={alertsPanel}>
           <h2 style={alertsTitle}>⚠️ Alertas financeiros</h2>
+
+          <p style={chartNote}>
+            Controlo técnico: esta página carregou {policies.length} apólices do Supabase.
+            Se aparecer 1000, o limite ainda está ativo. Se aparecer 1005, está correto.
+          </p>
 
           <div style={alertsGrid}>
             <AlertCard
