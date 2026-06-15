@@ -17,7 +17,8 @@ export async function getServerSideProps() {
     .select(`
       *,
       insurers(name)
-    `);
+    `)
+    .range(0, 4999);
 
   return {
     props: {
@@ -30,81 +31,18 @@ function formatEuro(value) {
   return new Intl.NumberFormat("pt-PT", {
     style: "currency",
     currency: "EUR",
-  }).format(parseNumber(value));
-}
-
-function parseNumber(value) {
-  if (value === null || value === undefined || value === "") return 0;
-
-  if (typeof value === "number") return value;
-
-  let text = String(value)
-    .replace(/\s/g, "")
-    .replace(/€/g, "")
-    .trim();
-
-  if (!text) return 0;
-
-  const isNegative =
-    text.startsWith("-") ||
-    /^\(.*\)$/.test(text);
-
-  text = text.replace(/[()]/g, "").replace(/^-/, "");
-
-  const hasComma = text.includes(",");
-  const hasDot = text.includes(".");
-
-  if (hasComma && hasDot) {
-    const lastComma = text.lastIndexOf(",");
-    const lastDot = text.lastIndexOf(".");
-
-    if (lastComma > lastDot) {
-      text = text.replace(/\./g, "").replace(",", ".");
-    } else {
-      text = text.replace(/,/g, "");
-    }
-  } else if (hasComma) {
-    text = text.replace(/\./g, "").replace(",", ".");
-  }
-
-  const number = Number(text) || 0;
-
-  return isNegative ? -number : number;
-}
-
-function normalizeStatus(status) {
-  return String(status || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-}
-
-function isCancelledPolicy(policy) {
-  return normalizeStatus(policy.status) === "anulada";
-}
-
-function normalizeFrequency(frequency) {
-  return String(frequency || "anual")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
+  }).format(Number(value || 0));
 }
 
 function annualCommission(policy) {
-  const commission = parseNumber(policy.commission_per_payment);
-  const frequency = normalizeFrequency(policy.payment_frequency);
+  const commission = Number(policy.commission_per_payment || 0);
+  const frequency = String(policy.payment_frequency || "anual").toLowerCase();
 
   if (frequency === "mensal") return commission * 12;
   if (frequency === "trimestral") return commission * 4;
   if (frequency === "semestral") return commission * 2;
 
   return commission;
-}
-
-function policyAnnualPremium(policy) {
-  return parseNumber(policy.annual_premium);
 }
 
 function normalizeBranchName(branch) {
@@ -158,35 +96,46 @@ function getLast12Months() {
 }
 
 export default function FinanceiroCompacto({ policies }) {
-  const activePolicies = policies.filter((p) => !isCancelledPolicy(p));
-  const cancelledPolicies = policies.filter((p) => isCancelledPolicy(p));
+  const activePolicies = policies.filter((p) => p.status !== "anulada");
+  const cancelledPolicies = policies.filter((p) => p.status === "anulada");
 
   const activePremium = activePolicies.reduce(
-    (sum, p) => sum + policyAnnualPremium(p),
+    (sum, p) => sum + Number(p.annual_premium || 0),
     0
   );
 
   const vidaBranches = [
-    "VIDA",
-    "APS",
-    "VIAGEM",
+    "vida",
+    "aps",
+    "viagem",
   ];
 
   const vidaPolicies =
     activePolicies.filter((p) =>
-      vidaBranches.includes(normalizeBranchName(p.branch))
+      vidaBranches.includes(
+        String(p.branch || "")
+          .toLowerCase()
+          .trim()
+      )
     );
 
   const naoVidaPolicies =
     activePolicies.filter(
-      (p) => !vidaBranches.includes(normalizeBranchName(p.branch))
+      (p) =>
+        !vidaBranches.includes(
+          String(p.branch || "")
+            .toLowerCase()
+            .trim()
+        )
     );
 
   const vidaPremium =
     vidaPolicies.reduce(
       (sum, p) =>
         sum +
-        policyAnnualPremium(p),
+        Number(
+          p.annual_premium || 0
+        ),
       0
     );
 
@@ -194,7 +143,9 @@ export default function FinanceiroCompacto({ policies }) {
     naoVidaPolicies.reduce(
       (sum, p) =>
         sum +
-        policyAnnualPremium(p),
+        Number(
+          p.annual_premium || 0
+        ),
       0
     );
 
@@ -235,7 +186,7 @@ export default function FinanceiroCompacto({ policies }) {
       : "0.0";
 
   const cancelledPremium = cancelledPolicies.reduce(
-    (sum, p) => sum + policyAnnualPremium(p),
+    (sum, p) => sum + Number(p.annual_premium || 0),
     0
   );
 
@@ -250,10 +201,6 @@ export default function FinanceiroCompacto({ policies }) {
   );
 
   const monthlyCommissionEstimate = activeCommission / 12;
-
-  const policiesWithoutPremium = activePolicies.filter((p) => !policyAnnualPremium(p));
-  const policiesWithoutCommission = activePolicies.filter((p) => !annualCommission(p));
-  const policiesWithoutFrequency = activePolicies.filter((p) => !p.payment_frequency);
 
   const insurerStats = {};
   const branchStats = {};
@@ -275,7 +222,7 @@ export default function FinanceiroCompacto({ policies }) {
     const branch = policy.branch || "Sem ramo";
     const frequency = policy.payment_frequency || "anual";
     const commission = annualCommission(policy);
-    const premium = policyAnnualPremium(policy);
+    const premium = Number(policy.annual_premium || 0);
 
     if (!insurerStats[insurer]) {
       insurerStats[insurer] = {
@@ -573,24 +520,6 @@ export default function FinanceiroCompacto({ policies }) {
               title="Comissão perdida"
               value={formatEuro(lostCommission)}
               text={`${lostCommissionPercentage}% da comissão analisada`}
-            />
-
-            <AlertCard
-              title="Apólices sem prémio"
-              value={policiesWithoutPremium.length}
-              text="Apólices ativas com prémio anual a zero ou inválido"
-            />
-
-            <AlertCard
-              title="Apólices sem comissão"
-              value={policiesWithoutCommission.length}
-              text="Apólices ativas com comissão anual a zero ou inválida"
-            />
-
-            <AlertCard
-              title="Sem fracionamento"
-              value={policiesWithoutFrequency.length}
-              text="Assumidas como anuais no cálculo"
             />
           </div>
         </section>
