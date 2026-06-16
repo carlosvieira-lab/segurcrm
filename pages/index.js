@@ -21,6 +21,16 @@ export async function getServerSideProps() {
     .toISOString()
     .split("T")[0];
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const monthStart = new Date(currentYear, currentMonth, 1)
+    .toISOString()
+    .split("T")[0];
+  const monthEnd = new Date(currentYear, currentMonth + 1, 0)
+    .toISOString()
+    .split("T")[0];
+
   const { data: clients } =
     await supabase
       .from("clients")
@@ -149,6 +159,57 @@ export async function getServerSideProps() {
         ).toFixed(2)
       : "0.00";
 
+  const portfolioAnnualPremium =
+    activePolicies.reduce(
+      (sum, policy) =>
+        sum +
+        getPolicyPremium(policy),
+      0
+    );
+
+  const portfolioAnnualCommission =
+    activePolicies.reduce(
+      (sum, policy) =>
+        sum +
+        getPolicyCommission(policy),
+      0
+    );
+
+  const monthlyPolicies =
+    activePolicies.filter((policy) => {
+      const date =
+        policy.created_at ||
+        policy.start_date ||
+        policy.issue_date ||
+        policy.effective_date ||
+        policy.contract_date;
+
+      if (!date) return false;
+
+      const cleanDate = String(date).slice(0, 10);
+
+      return (
+        cleanDate >= monthStart &&
+        cleanDate <= monthEnd
+      );
+    });
+
+  const monthlyPremium =
+    monthlyPolicies.reduce(
+      (sum, policy) =>
+        sum +
+        getPolicyPremium(policy),
+      0
+    );
+
+  const monthlyCommission =
+    monthlyPolicies.reduce(
+      (sum, policy) =>
+        sum +
+        getPolicyCommission(policy),
+      0
+    );
+
   return {
     props: {
       totalClients:
@@ -172,8 +233,44 @@ export async function getServerSideProps() {
         birthdaysToday || [],
       dashboardAlerts:
         dashboardAlerts || [],
+      portfolioAnnualPremium,
+      portfolioAnnualCommission,
+      monthlyPolicies:
+        monthlyPolicies.length,
+      monthlyPremium,
+      monthlyCommission,
+      currentMonthLabel:
+        new Intl.DateTimeFormat("pt-PT", {
+          month: "long",
+          year: "numeric",
+        }).format(now),
     },
   };
+}
+
+function getPolicyPremium(policy) {
+  return Number(
+    policy.annual_premium ??
+      policy.total_premium ??
+      policy.premium ??
+      policy.prize ??
+      policy.valor_premio ??
+      policy.premio_anual ??
+      policy.premio ??
+      0
+  ) || 0;
+}
+
+function getPolicyCommission(policy) {
+  return Number(
+    policy.annual_commission ??
+      policy.commission ??
+      policy.commission_value ??
+      policy.valor_comissao ??
+      policy.comissao_anual ??
+      policy.comissao ??
+      0
+  ) || 0;
 }
 
 function calculateAge(date) {
@@ -200,6 +297,13 @@ function calculateAge(date) {
   }
 
   return age;
+}
+
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
 }
 
 function formatDate(date) {
@@ -248,6 +352,12 @@ export default function Dashboard({
   opportunitiesAlert,
   birthdaysToday,
   dashboardAlerts,
+  portfolioAnnualPremium,
+  portfolioAnnualCommission,
+  monthlyPolicies,
+  monthlyPremium,
+  monthlyCommission,
+  currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
@@ -588,6 +698,49 @@ export default function Dashboard({
           </div>
         )}
 
+        <section style={portfolioPanel}>
+          <div>
+            <h2 style={panelTitle}>
+              📊 Indicador Global da Carteira
+            </h2>
+
+            <p style={panelSubtitle}>
+              Visão rápida da dimensão atual da carteira ativa.
+            </p>
+          </div>
+
+          <div style={portfolioGrid}>
+            <PortfolioMetric title="Clientes ativos" value={activeClients} />
+            <PortfolioMetric title="Apólices ativas" value={activePolicies} />
+            <PortfolioMetric title="Prémio anual" value={formatEuro(portfolioAnnualPremium)} />
+            <PortfolioMetric title="Comissão anual" value={formatEuro(portfolioAnnualCommission)} />
+          </div>
+        </section>
+
+        <section style={productionPanel}>
+          <div>
+            <h2 style={panelTitle}>
+              📈 Produção do Mês
+            </h2>
+
+            <p style={panelSubtitle}>
+              Produção registada em {currentMonthLabel}.
+            </p>
+          </div>
+
+          <div style={productionGrid}>
+            <ProductionMetric title="Novas apólices" value={monthlyPolicies} />
+            <ProductionMetric title="Prémio produzido" value={formatEuro(monthlyPremium)} />
+            <ProductionMetric title="Comissão prevista" value={formatEuro(monthlyCommission)} />
+          </div>
+
+          <div style={productionFooter}>
+            <Link href="/apolices" style={productionButton}>
+              Ver Produção
+            </Link>
+          </div>
+        </section>
+
         <section style={grid}>
           <Card
             title="Clientes em vigor"
@@ -694,6 +847,24 @@ export default function Dashboard({
           />
         </section>
       </main>
+    </div>
+  );
+}
+
+function PortfolioMetric({ title, value }) {
+  return (
+    <div style={portfolioMetric}>
+      <span style={portfolioMetricLabel}>{title}</span>
+      <strong style={portfolioMetricValue}>{value}</strong>
+    </div>
+  );
+}
+
+function ProductionMetric({ title, value }) {
+  return (
+    <div style={productionMetric}>
+      <span style={productionMetricLabel}>{title}</span>
+      <strong style={productionMetricValue}>{value}</strong>
     </div>
   );
 }
@@ -1035,6 +1206,96 @@ const birthdayItem = {
   alignItems: "center",
 };
 
+const portfolioPanel = {
+  background: "linear-gradient(135deg,#ecfeff,#cffafe)",
+  border: "2px solid #0891b2",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+};
+
+const productionPanel = {
+  background: "linear-gradient(135deg,#ecfdf5,#bbf7d0)",
+  border: "2px solid #16a34a",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+};
+
+const panelTitle = {
+  margin: 0,
+  color: "#0f172a",
+};
+
+const panelSubtitle = {
+  marginTop: 8,
+  color: "#475569",
+};
+
+const portfolioGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 14,
+  marginTop: 18,
+};
+
+const portfolioMetric = {
+  background: "rgba(255,255,255,0.78)",
+  borderRadius: 14,
+  padding: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const portfolioMetricLabel = {
+  display: "block",
+  color: "#475569",
+  marginBottom: 10,
+};
+
+const portfolioMetricValue = {
+  fontSize: 28,
+  color: "#0e7490",
+};
+
+const productionGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+  marginTop: 18,
+};
+
+const productionMetric = {
+  background: "rgba(255,255,255,0.8)",
+  borderRadius: 14,
+  padding: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const productionMetricLabel = {
+  display: "block",
+  color: "#475569",
+  marginBottom: 10,
+};
+
+const productionMetricValue = {
+  fontSize: 28,
+  color: "#15803d",
+};
+
+const productionFooter = {
+  marginTop: 18,
+};
+
+const productionButton = {
+  display: "inline-block",
+  background: "#15803d",
+  color: "white",
+  textDecoration: "none",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontWeight: "bold",
+};
+
 const grid = {
   display: "grid",
   gridTemplateColumns:
@@ -1081,4 +1342,3 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
