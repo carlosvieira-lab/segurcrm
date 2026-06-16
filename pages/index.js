@@ -45,7 +45,7 @@ export async function getServerSideProps() {
     await supabase
       .from("dashboard_alerts")
       .select("*")
-      .neq("status", "concluido")
+      .eq("status", "pendente")
       .lte("alert_date", today)
       .order("alert_date", { ascending: true })
       .order("alert_time", { ascending: true });
@@ -204,59 +204,35 @@ function calculateAge(date) {
 
 function formatDate(date) {
   if (!date) return "-";
-
-  return new Intl.DateTimeFormat("pt-PT").format(
-    new Date(`${date}T00:00:00`)
-  );
-}
-
-function escapeCalendarText(value) {
-  return String(value || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/\n/g, "\\n")
-    .replace(/,/g, "\\,")
-    .replace(/;/g, "\\;");
-}
-
-function buildCalendarUrl(alert) {
-  const title = alert?.title || "Alerta CRM";
-  const date = alert?.alert_date || new Date().toISOString().split("T")[0];
-  const time = alert?.alert_time || "09:00";
-  const cleanTime = time.length === 5 ? `${time}:00` : time;
-  const startDate = new Date(`${date}T${cleanTime}`);
-  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
-
-  const formatCalendarDate = (value) => {
-    const pad = (number) => String(number).padStart(2, "0");
-
-    return `${value.getFullYear()}${pad(value.getMonth() + 1)}${pad(value.getDate())}T${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}`;
-  };
-
-  const calendar = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//SegurCRM//Dashboard Alert//PT",
-    "BEGIN:VEVENT",
-    `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@segurcrm`,
-    `DTSTAMP:${formatCalendarDate(new Date())}`,
-    `DTSTART:${formatCalendarDate(startDate)}`,
-    `DTEND:${formatCalendarDate(endDate)}`,
-    `SUMMARY:${escapeCalendarText(title)}`,
-    `DESCRIPTION:${escapeCalendarText(alert?.notes || "Criado no SegurCRM")}`,
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ].join("\r\n");
-
-  return `data:text/calendar;charset=utf-8,${encodeURIComponent(calendar)}`;
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
 }
 
 function buildInitialAlertForm() {
+  const now = new Date();
+
   return {
     title: "",
-    alert_date: new Date().toISOString().split("T")[0],
+    alert_date: now.toISOString().split("T")[0],
     alert_time: "09:00",
     notes: "",
   };
+}
+
+function buildGoogleCalendarUrl(alert) {
+  const date = String(alert.alert_date || "").replace(/-/g, "");
+  const time = String(alert.alert_time || "09:00").slice(0, 5).replace(":", "");
+  const start = `${date}T${time}00`;
+  const endHour = String(Number(time.slice(0, 2)) + 1).padStart(2, "0");
+  const end = `${date}T${endHour}${time.slice(2)}00`;
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: alert.title || "Alerta CRM",
+    details: alert.notes || "Alerta criado no SegurCRM.",
+    dates: `${start}/${end}`,
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 export default function Dashboard({
@@ -273,14 +249,11 @@ export default function Dashboard({
   birthdaysToday,
   dashboardAlerts,
 }) {
-  const [showAlertForm, setShowAlertForm] = useState(false);
-  const [savingAlert, setSavingAlert] = useState(false);
-  const [personalAlerts, setPersonalAlerts] = useState(dashboardAlerts || []);
+  const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
+  const [saving, setSaving] = useState(false);
 
-  async function saveDashboardAlert(event) {
-    event.preventDefault();
-
+  async function saveDashboardAlert(openCalendar = false) {
     if (!alertForm.title.trim()) {
       alert("Preenche o título do alerta.");
       return;
@@ -291,41 +264,40 @@ export default function Dashboard({
       return;
     }
 
-    setSavingAlert(true);
+    setSaving(true);
 
     const payload = {
       title: alertForm.title.trim(),
       alert_date: alertForm.alert_date,
-      alert_time: alertForm.alert_time || "09:00",
+      alert_time: alertForm.alert_time || null,
       notes: alertForm.notes || null,
       status: "pendente",
+      updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("dashboard_alerts")
-      .insert(payload)
-      .select("*")
-      .single();
+      .insert(payload);
 
-    setSavingAlert(false);
+    setSaving(false);
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    const today = new Date().toISOString().split("T")[0];
-
-    if (data && data.alert_date <= today) {
-      setPersonalAlerts((current) => [...current, data]);
+    if (openCalendar) {
+      window.open(buildGoogleCalendarUrl(payload), "_blank", "noopener,noreferrer");
     }
 
+    setShowAlertModal(false);
     setAlertForm(buildInitialAlertForm());
-    setShowAlertForm(false);
+
+    window.location.reload();
   }
 
-  async function completeDashboardAlert(item) {
-    const ok = window.confirm(`Marcar como concluído: ${item.title}?`);
+  async function completeDashboardAlert(alertItem) {
+    const ok = window.confirm(`Marcar como concluído: ${alertItem.title}?`);
     if (!ok) return;
 
     const { error } = await supabase
@@ -333,17 +305,16 @@ export default function Dashboard({
       .update({
         status: "concluido",
         completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", item.id);
+      .eq("id", alertItem.id);
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    setPersonalAlerts((current) =>
-      current.filter((alertItem) => alertItem.id !== item.id)
-    );
+    window.location.reload();
   }
 
   return (
@@ -366,13 +337,13 @@ export default function Dashboard({
           <button
             type="button"
             style={newAlertButton}
-            onClick={() => setShowAlertForm(true)}
+            onClick={() => setShowAlertModal(true)}
           >
             + Criar alerta
           </button>
         </div>
 
-        {showAlertForm && (
+        {showAlertModal && (
           <div style={modalOverlay}>
             <div style={alertModal}>
               <div style={modalHeader}>
@@ -380,21 +351,22 @@ export default function Dashboard({
                   <h2 style={personalAlertTitle}>
                     🟣 Novo alerta pessoal
                   </h2>
-                  <p style={modalSubtitle}>
-                    Cria um lembrete para aparecer no Dashboard quando chegar o dia.
+
+                  <p style={subtitle}>
+                    Cria um lembrete para aparecer no Dashboard e, se quiseres, adiciona ao Google Calendar para sincronizar com o S22.
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  style={modalCloseButton}
-                  onClick={() => setShowAlertForm(false)}
+                  style={grayButton}
+                  onClick={() => setShowAlertModal(false)}
                 >
                   Fechar
                 </button>
               </div>
 
-              <form style={alertFormGrid} onSubmit={saveDashboardAlert}>
+              <div style={alertFormGrid}>
                 <label style={fieldLabel}>
                   Título do alerta
                   <input
@@ -407,7 +379,6 @@ export default function Dashboard({
                       })
                     }
                     placeholder="Ex: Pagar PC Zurich"
-                    required
                   />
                 </label>
 
@@ -423,7 +394,6 @@ export default function Dashboard({
                         alert_date: event.target.value,
                       })
                     }
-                    required
                   />
                 </label>
 
@@ -456,27 +426,87 @@ export default function Dashboard({
                     placeholder="Notas opcionais sobre este alerta..."
                   />
                 </label>
+              </div>
 
-                <div style={modalActions}>
-                  <button
-                    type="submit"
-                    style={saveAlertButton}
-                    disabled={savingAlert}
-                  >
-                    {savingAlert ? "A guardar..." : "Guardar alerta"}
-                  </button>
+              <div style={modalActions}>
+                <button
+                  type="button"
+                  style={purpleButton}
+                  disabled={saving}
+                  onClick={() => saveDashboardAlert(false)}
+                >
+                  {saving ? "A guardar..." : "Guardar"}
+                </button>
 
-                  <a
-                    href={buildCalendarUrl(alertForm)}
-                    download="alerta-segurcrm.ics"
-                    style={calendarButton}
-                  >
-                    📅 Adicionar à agenda
-                  </a>
-                </div>
-              </form>
+                <button
+                  type="button"
+                  style={darkButton}
+                  disabled={saving}
+                  onClick={() => saveDashboardAlert(true)}
+                >
+                  📅 Guardar + Google Calendar
+                </button>
+              </div>
             </div>
           </div>
+        )}
+
+        {dashboardAlerts.length > 0 && (
+          <section style={personalAlertCard}>
+            <div>
+              <h2 style={personalAlertTitle}>
+                🟣 Alertas pessoais
+              </h2>
+
+              <p style={personalAlertText}>
+                Tens{" "}
+                <strong>
+                  {dashboardAlerts.length}
+                </strong>{" "}
+                alerta(s) pessoal(is) pendente(s).
+              </p>
+            </div>
+
+            <div style={personalAlertList}>
+              {dashboardAlerts.map((item) => (
+                <div key={item.id} style={personalAlertItem}>
+                  <div>
+                    <strong>{item.title}</strong>
+
+                    <p style={personalAlertMeta}>
+                      {formatDate(item.alert_date)}
+                      {item.alert_time ? ` · ${String(item.alert_time).slice(0, 5)}` : ""}
+                    </p>
+
+                    {item.notes && (
+                      <p style={personalAlertNotes}>
+                        {item.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div style={personalAlertActions}>
+                    <button
+                      type="button"
+                      style={smallPurpleButton}
+                      onClick={() => completeDashboardAlert(item)}
+                    >
+                      ✓ Concluído
+                    </button>
+
+                    <a
+                      href={buildGoogleCalendarUrl(item)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={smallDarkLink}
+                    >
+                      📅 Google Calendar
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {opportunitiesAlert >
@@ -523,57 +553,6 @@ export default function Dashboard({
               Abrir Agenda
             </div>
           </Link>
-        )}
-
-        {personalAlerts.length > 0 && (
-          <div style={personalAlertCard}>
-            <div style={personalAlertHeader}>
-              <div>
-                <h2 style={personalAlertTitle}>
-                  🟣 Alertas pessoais
-                </h2>
-
-                <p style={personalAlertText}>
-                  Tens {personalAlerts.length} alerta(s) pendente(s). Só desaparecem quando marcares como concluído.
-                </p>
-              </div>
-            </div>
-
-            <div style={personalAlertList}>
-              {personalAlerts.map((item) => (
-                <div key={item.id} style={personalAlertItem}>
-                  <div>
-                    <strong>{item.title}</strong>
-                    <p style={personalAlertMeta}>
-                      {formatDate(item.alert_date)} · {item.alert_time || "09:00"}
-                    </p>
-
-                    {item.notes && (
-                      <p style={personalAlertNotes}>{item.notes}</p>
-                    )}
-                  </div>
-
-                  <div style={personalAlertActions}>
-                    <a
-                      href={buildCalendarUrl(item)}
-                      download="alerta-segurcrm.ics"
-                      style={smallCalendarButton}
-                    >
-                      📅 Agenda
-                    </a>
-
-                    <button
-                      type="button"
-                      style={completeButton}
-                      onClick={() => completeDashboardAlert(item)}
-                    >
-                      ✓ Concluído
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         )}
 
         {birthdaysToday.length >
@@ -674,14 +653,6 @@ export default function Dashboard({
               opportunitiesAlert
             }
             color="#111827"
-          />
-
-          <Card
-            title="Alertas pessoais"
-            value={
-              personalAlerts.length
-            }
-            color="#7c3aed"
           />
         </section>
 
@@ -807,7 +778,7 @@ const header = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 18,
+  gap: 20,
 };
 
 const title = {
@@ -821,14 +792,182 @@ const subtitle = {
 };
 
 const newAlertButton = {
-  background: "#7c3aed",
+  background: "#4c1d95",
   color: "white",
   border: "none",
   borderRadius: 12,
-  padding: "14px 18px",
+  padding: "14px 20px",
   fontWeight: "bold",
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(124,58,237,0.25)",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.65)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const alertModal = {
+  width: "min(900px, 96vw)",
+  background: "linear-gradient(135deg,#f5f3ff,#ede9fe)",
+  border: "2px solid #7c3aed",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 20,
+};
+
+const grayButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "12px 16px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const alertFormGrid = {
+  display: "grid",
+  gridTemplateColumns: "2fr 1fr 1fr",
+  gap: 14,
+};
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  fontWeight: "bold",
+  color: "#374151",
+};
+
+const input = {
+  border: "1px solid #c4b5fd",
+  borderRadius: 10,
+  padding: "12px 14px",
+  fontSize: 15,
+  background: "white",
+};
+
+const textarea = {
+  border: "1px solid #c4b5fd",
+  borderRadius: 10,
+  padding: 14,
+  fontSize: 15,
+  minHeight: 130,
+  resize: "vertical",
+  background: "white",
+};
+
+const modalActions = {
+  display: "flex",
+  gap: 12,
+  marginTop: 18,
+  flexWrap: "wrap",
+};
+
+const purpleButton = {
+  background: "#6d28d9",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "13px 18px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const darkButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "13px 18px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const personalAlertCard = {
+  background: "linear-gradient(135deg,#ddd6fe,#c4b5fd)",
+  border: "2px solid #7c3aed",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  color: "#111827",
+};
+
+const personalAlertTitle = {
+  margin: 0,
+  color: "#4c1d95",
+};
+
+const personalAlertText = {
+  marginTop: 10,
+};
+
+const personalAlertList = {
+  display: "grid",
+  gap: 12,
+  marginTop: 18,
+};
+
+const personalAlertItem = {
+  background: "rgba(255,255,255,0.75)",
+  borderRadius: 14,
+  padding: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+};
+
+const personalAlertMeta = {
+  margin: "6px 0 0",
+  color: "#5b21b6",
+  fontWeight: "bold",
+};
+
+const personalAlertNotes = {
+  margin: "8px 0 0",
+  color: "#374151",
+};
+
+const personalAlertActions = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const smallPurpleButton = {
+  background: "#6d28d9",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const smallDarkLink = {
+  background: "#111827",
+  color: "white",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontWeight: "bold",
+  textDecoration: "none",
 };
 
 const alertCard = {
@@ -865,87 +1004,6 @@ const alertButton = {
   fontWeight: "bold",
 };
 
-const personalAlertCard = {
-  background:
-    "linear-gradient(135deg,#ddd6fe,#c4b5fd)",
-  border: "2px solid #7c3aed",
-  borderRadius: 18,
-  padding: 24,
-  marginBottom: 30,
-  color: "#111827",
-};
-
-const personalAlertHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 18,
-};
-
-const personalAlertTitle = {
-  margin: 0,
-  color: "#4c1d95",
-};
-
-const personalAlertText = {
-  marginTop: 10,
-  color: "#4c1d95",
-};
-
-const personalAlertList = {
-  display: "grid",
-  gap: 12,
-  marginTop: 18,
-};
-
-const personalAlertItem = {
-  background: "rgba(255,255,255,0.72)",
-  border: "1px solid rgba(124,58,237,0.35)",
-  borderRadius: 14,
-  padding: 16,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 18,
-};
-
-const personalAlertMeta = {
-  margin: "6px 0 0",
-  color: "#5b21b6",
-  fontWeight: "bold",
-};
-
-const personalAlertNotes = {
-  margin: "8px 0 0",
-  color: "#374151",
-};
-
-const personalAlertActions = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
-const completeButton = {
-  background: "#166534",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const smallCalendarButton = {
-  background: "#4c1d95",
-  color: "white",
-  borderRadius: 10,
-  padding: "10px 14px",
-  fontWeight: "bold",
-  textDecoration: "none",
-};
-
 const birthdayCard = {
   background:
     "linear-gradient(135deg,#fef3c7,#fde68a)",
@@ -975,108 +1033,6 @@ const birthdayItem = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-};
-
-const modalOverlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(17,24,39,0.64)",
-  zIndex: 50,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 20,
-};
-
-const alertModal = {
-  width: "min(820px, 96vw)",
-  background: "linear-gradient(135deg,#f5f3ff,#ede9fe)",
-  border: "2px solid #7c3aed",
-  borderRadius: 20,
-  padding: 24,
-  boxShadow: "0 24px 70px rgba(17,24,39,0.32)",
-};
-
-const modalHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 18,
-  marginBottom: 20,
-};
-
-const modalSubtitle = {
-  color: "#5b21b6",
-  marginTop: 8,
-};
-
-const modalCloseButton = {
-  background: "#6b7280",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
-  padding: "11px 14px",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const alertFormGrid = {
-  display: "grid",
-  gridTemplateColumns: "2fr 1fr 1fr",
-  gap: 14,
-};
-
-const fieldLabel = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  fontWeight: "bold",
-  color: "#374151",
-};
-
-const input = {
-  border: "1px solid #c4b5fd",
-  borderRadius: 10,
-  padding: "12px 13px",
-  fontSize: 15,
-  background: "white",
-};
-
-const textarea = {
-  border: "1px solid #c4b5fd",
-  borderRadius: 10,
-  padding: "12px 13px",
-  fontSize: 15,
-  background: "white",
-  minHeight: 120,
-  resize: "vertical",
-};
-
-const modalActions = {
-  gridColumn: "1 / -1",
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  marginTop: 4,
-};
-
-const saveAlertButton = {
-  background: "#7c3aed",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
-  padding: "12px 16px",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const calendarButton = {
-  background: "#111827",
-  color: "white",
-  borderRadius: 10,
-  padding: "12px 16px",
-  fontWeight: "bold",
-  textDecoration: "none",
 };
 
 const grid = {
@@ -1125,3 +1081,4 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
