@@ -51,7 +51,7 @@ export async function getServerSideProps() {
       .from("opportunities")
       .select("*");
 
-  const { data: dashboardAlerts } =
+  const { data: dueDashboardAlerts } =
     await supabase
       .from("dashboard_alerts")
       .select("*")
@@ -59,6 +59,24 @@ export async function getServerSideProps() {
       .lte("alert_date", today)
       .order("alert_date", { ascending: true })
       .order("alert_time", { ascending: true });
+
+  const { data: upcomingDashboardAlerts } =
+    await supabase
+      .from("dashboard_alerts")
+      .select("*")
+      .eq("status", "pendente")
+      .gt("alert_date", today)
+      .order("alert_date", { ascending: true })
+      .order("alert_time", { ascending: true })
+      .limit(10);
+
+  const { data: completedDashboardAlerts } =
+    await supabase
+      .from("dashboard_alerts")
+      .select("*")
+      .eq("status", "concluido")
+      .order("completed_at", { ascending: false })
+      .limit(8);
 
   const overdueTasks =
     (tasks || []).filter(
@@ -231,8 +249,12 @@ export async function getServerSideProps() {
         opportunitiesAlert.length,
       birthdaysToday:
         birthdaysToday || [],
-      dashboardAlerts:
-        dashboardAlerts || [],
+      dueDashboardAlerts:
+        dueDashboardAlerts || [],
+      upcomingDashboardAlerts:
+        upcomingDashboardAlerts || [],
+      completedDashboardAlerts:
+        completedDashboardAlerts || [],
       portfolioAnnualPremium,
       portfolioAnnualCommission,
       monthlyPolicies:
@@ -351,7 +373,9 @@ export default function Dashboard({
   renewal30,
   opportunitiesAlert,
   birthdaysToday,
-  dashboardAlerts,
+  dueDashboardAlerts,
+  upcomingDashboardAlerts,
+  completedDashboardAlerts,
   portfolioAnnualPremium,
   portfolioAnnualCommission,
   monthlyPolicies,
@@ -360,6 +384,8 @@ export default function Dashboard({
   currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
+  const [showUpcomingAlerts, setShowUpcomingAlerts] = useState(true);
+  const [showCompletedAlerts, setShowCompletedAlerts] = useState(false);
   const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
   const [saving, setSaving] = useState(false);
 
@@ -382,6 +408,8 @@ export default function Dashboard({
       alert_time: alertForm.alert_time || null,
       notes: alertForm.notes || null,
       status: "pendente",
+      google_calendar_created: openCalendar,
+      google_calendar_opened_at: openCalendar ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     };
 
@@ -403,6 +431,25 @@ export default function Dashboard({
     setShowAlertModal(false);
     setAlertForm(buildInitialAlertForm());
 
+    window.location.reload();
+  }
+
+  async function markGoogleCalendarCreated(alertItem) {
+    const { error } = await supabase
+      .from("dashboard_alerts")
+      .update({
+        google_calendar_created: true,
+        google_calendar_opened_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", alertItem.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.open(buildGoogleCalendarUrl(alertItem), "_blank", "noopener,noreferrer");
     window.location.reload();
   }
 
@@ -545,7 +592,7 @@ export default function Dashboard({
                   disabled={saving}
                   onClick={() => saveDashboardAlert(false)}
                 >
-                  {saving ? "A guardar..." : "Guardar"}
+                  {saving ? "A guardar..." : "Guardar só no CRM"}
                 </button>
 
                 <button
@@ -561,61 +608,137 @@ export default function Dashboard({
           </div>
         )}
 
-        {dashboardAlerts.length > 0 && (
+        <section style={alertsControlPanel}>
+          <div>
+            <h2 style={alertsControlTitle}>🟣 Gestão de alertas pessoais</h2>
+            <p style={alertsControlText}>
+              Confirma aqui se os alertas ficaram guardados no CRM e se já foram enviados para o Google Calendar.
+            </p>
+          </div>
+
+          <div style={alertsControlButtons}>
+            <button
+              type="button"
+              style={showUpcomingAlerts ? activeToggleButton : toggleButton}
+              onClick={() => setShowUpcomingAlerts(!showUpcomingAlerts)}
+            >
+              Próximos: {upcomingDashboardAlerts.length}
+            </button>
+
+            <button
+              type="button"
+              style={showCompletedAlerts ? activeToggleButton : toggleButton}
+              onClick={() => setShowCompletedAlerts(!showCompletedAlerts)}
+            >
+              Concluídos: {completedDashboardAlerts.length}
+            </button>
+          </div>
+        </section>
+
+        {dueDashboardAlerts.length > 0 && (
           <section style={personalAlertCard}>
             <div>
               <h2 style={personalAlertTitle}>
-                🟣 Alertas pessoais
+                🟣 Alertas de hoje / atrasados
               </h2>
 
               <p style={personalAlertText}>
                 Tens{" "}
                 <strong>
-                  {dashboardAlerts.length}
+                  {dueDashboardAlerts.length}
                 </strong>{" "}
-                alerta(s) pessoal(is) pendente(s).
+                alerta(s) pessoal(is) para tratar.
               </p>
             </div>
 
             <div style={personalAlertList}>
-              {dashboardAlerts.map((item) => (
-                <div key={item.id} style={personalAlertItem}>
-                  <div>
-                    <strong>{item.title}</strong>
-
-                    <p style={personalAlertMeta}>
-                      {formatDate(item.alert_date)}
-                      {item.alert_time ? ` · ${String(item.alert_time).slice(0, 5)}` : ""}
-                    </p>
-
-                    {item.notes && (
-                      <p style={personalAlertNotes}>
-                        {item.notes}
-                      </p>
-                    )}
-                  </div>
-
-                  <div style={personalAlertActions}>
-                    <button
-                      type="button"
-                      style={smallPurpleButton}
-                      onClick={() => completeDashboardAlert(item)}
-                    >
-                      ✓ Concluído
-                    </button>
-
-                    <a
-                      href={buildGoogleCalendarUrl(item)}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={smallDarkLink}
-                    >
-                      📅 Google Calendar
-                    </a>
-                  </div>
-                </div>
+              {dueDashboardAlerts.map((item) => (
+                <AlertRow
+                  key={item.id}
+                  item={item}
+                  onComplete={completeDashboardAlert}
+                  onCalendar={markGoogleCalendarCreated}
+                  important
+                />
               ))}
             </div>
+          </section>
+        )}
+
+        {showUpcomingAlerts && (
+          <section style={upcomingAlertCard}>
+            <div>
+              <h2 style={upcomingAlertTitle}>
+                🔵 Próximos alertas
+              </h2>
+
+              <p style={upcomingAlertText}>
+                Alertas já criados no CRM para datas futuras.
+              </p>
+            </div>
+
+            {upcomingDashboardAlerts.length === 0 ? (
+              <p style={mutedText}>
+                Não existem alertas futuros criados.
+              </p>
+            ) : (
+              <div style={personalAlertList}>
+                {upcomingDashboardAlerts.map((item) => (
+                  <AlertRow
+                    key={item.id}
+                    item={item}
+                    onComplete={completeDashboardAlert}
+                    onCalendar={markGoogleCalendarCreated}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {showCompletedAlerts && (
+          <section style={completedAlertCard}>
+            <div>
+              <h2 style={completedAlertTitle}>
+                ⚫ Últimos alertas concluídos
+              </h2>
+
+              <p style={completedAlertText}>
+                Histórico recente de alertas fechados no CRM.
+              </p>
+            </div>
+
+            {completedDashboardAlerts.length === 0 ? (
+              <p style={mutedText}>
+                Ainda não existem alertas concluídos.
+              </p>
+            ) : (
+              <div style={personalAlertList}>
+                {completedDashboardAlerts.map((item) => (
+                  <div key={item.id} style={completedAlertItem}>
+                    <div>
+                      <strong>{item.title}</strong>
+
+                      <p style={completedAlertMeta}>
+                        Alerta: {formatDate(item.alert_date)}
+                        {item.alert_time ? ` · ${String(item.alert_time).slice(0, 5)}` : ""}
+                      </p>
+
+                      <p style={completedAlertMeta}>
+                        Concluído: {formatDate(item.completed_at)}
+                      </p>
+                    </div>
+
+                    <div style={statusBadgeRow}>
+                      <span style={statusDoneBadge}>CRM: Concluído</span>
+                      <span style={item.google_calendar_created ? calendarYesBadge : calendarNoBadge}>
+                        Google Calendar: {item.google_calendar_created ? "Sim" : "Não"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -847,6 +970,52 @@ export default function Dashboard({
           />
         </section>
       </main>
+    </div>
+  );
+}
+
+function AlertRow({ item, onComplete, onCalendar, important = false }) {
+  return (
+    <div style={important ? personalAlertItemImportant : personalAlertItem}>
+      <div>
+        <strong>{item.title}</strong>
+
+        <p style={personalAlertMeta}>
+          {formatDate(item.alert_date)}
+          {item.alert_time ? ` · ${String(item.alert_time).slice(0, 5)}` : ""}
+        </p>
+
+        {item.notes && (
+          <p style={personalAlertNotes}>
+            {item.notes}
+          </p>
+        )}
+
+        <div style={statusBadgeRow}>
+          <span style={statusPendingBadge}>CRM: Pendente</span>
+          <span style={item.google_calendar_created ? calendarYesBadge : calendarNoBadge}>
+            Google Calendar: {item.google_calendar_created ? "Sim" : "Não"}
+          </span>
+        </div>
+      </div>
+
+      <div style={personalAlertActions}>
+        <button
+          type="button"
+          style={smallPurpleButton}
+          onClick={() => onComplete(item)}
+        >
+          ✓ Concluído
+        </button>
+
+        <button
+          type="button"
+          style={smallDarkButton}
+          onClick={() => onCalendar(item)}
+        >
+          📅 Google Calendar
+        </button>
+      </div>
     </div>
   );
 }
@@ -1139,6 +1308,179 @@ const smallDarkLink = {
   padding: "10px 12px",
   fontWeight: "bold",
   textDecoration: "none",
+};
+
+const alertsControlPanel = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 20,
+  marginBottom: 24,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const alertsControlTitle = {
+  margin: 0,
+  color: "#4c1d95",
+};
+
+const alertsControlText = {
+  margin: "8px 0 0",
+  color: "#6b7280",
+};
+
+const alertsControlButtons = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const toggleButton = {
+  background: "#f3f4f6",
+  color: "#374151",
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const activeToggleButton = {
+  background: "#4c1d95",
+  color: "white",
+  border: "1px solid #4c1d95",
+  borderRadius: 10,
+  padding: "10px 14px",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const upcomingAlertCard = {
+  background: "linear-gradient(135deg,#dbeafe,#bfdbfe)",
+  border: "2px solid #2563eb",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  color: "#111827",
+};
+
+const completedAlertCard = {
+  background: "linear-gradient(135deg,#e5e7eb,#d1d5db)",
+  border: "2px solid #374151",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  color: "#111827",
+};
+
+const upcomingAlertTitle = {
+  margin: 0,
+  color: "#1d4ed8",
+};
+
+const completedAlertTitle = {
+  margin: 0,
+  color: "#111827",
+};
+
+const upcomingAlertText = {
+  marginTop: 10,
+};
+
+const completedAlertText = {
+  marginTop: 10,
+};
+
+const mutedText = {
+  color: "#6b7280",
+};
+
+const personalAlertItemImportant = {
+  background: "rgba(255,255,255,0.86)",
+  border: "2px solid rgba(76,29,149,0.25)",
+  borderRadius: 14,
+  padding: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+};
+
+const completedAlertItem = {
+  background: "rgba(255,255,255,0.72)",
+  borderRadius: 14,
+  padding: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+};
+
+const completedAlertMeta = {
+  margin: "6px 0 0",
+  color: "#374151",
+};
+
+const statusBadgeRow = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
+};
+
+const statusPendingBadge = {
+  background: "#ede9fe",
+  color: "#4c1d95",
+  border: "1px solid #c4b5fd",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const statusDoneBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const calendarYesBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const calendarNoBadge = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fca5a5",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const smallDarkButton = {
+  background: "#111827",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 12px",
+  fontWeight: "bold",
+  cursor: "pointer",
 };
 
 const alertCard = {
