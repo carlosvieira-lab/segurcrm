@@ -384,7 +384,7 @@ export default function Dashboard({
   currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
-  const [showUpcomingAlerts, setShowUpcomingAlerts] = useState(true);
+  const [showUpcomingAlertsModal, setShowUpcomingAlertsModal] = useState(false);
   const [showCompletedAlerts, setShowCompletedAlerts] = useState(false);
   const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
   const [saving, setSaving] = useState(false);
@@ -608,6 +608,49 @@ export default function Dashboard({
           </div>
         )}
 
+        {showUpcomingAlertsModal && (
+          <div style={modalOverlay}>
+            <div style={upcomingAlertsModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={upcomingAlertTitle}>
+                    🔵 Próximos alertas
+                  </h2>
+
+                  <p style={subtitle}>
+                    Alertas futuros já guardados no CRM. Aqui confirmas o que está criado sem ocupar espaço no Dashboard.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={grayButton}
+                  onClick={() => setShowUpcomingAlertsModal(false)}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              {upcomingDashboardAlerts.length === 0 ? (
+                <p style={mutedText}>
+                  Não existem alertas futuros criados.
+                </p>
+              ) : (
+                <div style={modalAlertList}>
+                  {upcomingDashboardAlerts.map((item) => (
+                    <AlertRow
+                      key={item.id}
+                      item={item}
+                      onComplete={completeDashboardAlert}
+                      onCalendar={markGoogleCalendarCreated}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <section style={alertsControlPanel}>
           <div>
             <h2 style={alertsControlTitle}>🟣 Gestão de alertas pessoais</h2>
@@ -619,10 +662,10 @@ export default function Dashboard({
           <div style={alertsControlButtons}>
             <button
               type="button"
-              style={showUpcomingAlerts ? activeToggleButton : toggleButton}
-              onClick={() => setShowUpcomingAlerts(!showUpcomingAlerts)}
+              style={toggleButton}
+              onClick={() => setShowUpcomingAlertsModal(true)}
             >
-              Próximos: {upcomingDashboardAlerts.length}
+              Ver próximos: {upcomingDashboardAlerts.length}
             </button>
 
             <button
@@ -662,37 +705,6 @@ export default function Dashboard({
                 />
               ))}
             </div>
-          </section>
-        )}
-
-        {showUpcomingAlerts && (
-          <section style={upcomingAlertCard}>
-            <div>
-              <h2 style={upcomingAlertTitle}>
-                🔵 Próximos alertas
-              </h2>
-
-              <p style={upcomingAlertText}>
-                Alertas já criados no CRM para datas futuras.
-              </p>
-            </div>
-
-            {upcomingDashboardAlerts.length === 0 ? (
-              <p style={mutedText}>
-                Não existem alertas futuros criados.
-              </p>
-            ) : (
-              <div style={personalAlertList}>
-                {upcomingDashboardAlerts.map((item) => (
-                  <AlertRow
-                    key={item.id}
-                    item={item}
-                    onComplete={completeDashboardAlert}
-                    onCalendar={markGoogleCalendarCreated}
-                  />
-                ))}
-              </div>
-            )}
           </section>
         )}
 
@@ -1159,6 +1171,23 @@ const alertModal = {
   borderRadius: 20,
   padding: 24,
   boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const upcomingAlertsModal = {
+  width: "min(980px, 96vw)",
+  maxHeight: "86vh",
+  overflowY: "auto",
+  background: "linear-gradient(135deg,#eff6ff,#dbeafe)",
+  border: "2px solid #2563eb",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalAlertList = {
+  display: "grid",
+  gap: 12,
+  marginTop: 18,
 };
 
 const modalHeader = {
