@@ -48,7 +48,7 @@ const annualObjectives = {
     premium: 150,
     commission: 20,
   },
-  DIVERSOS: {
+  OUTROS: {
     premium: 100,
     commission: 10,
   },
@@ -142,7 +142,6 @@ function formatNumber(value) {
 function getPolicyIssueDate(policy) {
   return (
     policy.policy_issue_date ||
-    policy.issue_date ||
     policy.created_at ||
     null
   );
@@ -152,7 +151,7 @@ export async function getServerSideProps() {
   const { data: policies, error } = await supabase
     .from("policies")
     .select(
-      "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, issue_date, created_at, insurers(name), clients(name)"
+      "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, created_at, insurers(name), clients(name)"
     )
     .order("policy_issue_date", { ascending: true });
 
@@ -204,8 +203,13 @@ export default function OrcamentoSeguros({ policies, loadError }) {
         0
       );
 
-      const premiumObjective = annualObjectives[group].premium;
-      const commissionObjective = annualObjectives[group].commission;
+      const objective = annualObjectives[group] || {
+        premium: 0,
+        commission: 0,
+      };
+
+      const premiumObjective = objective.premium;
+      const commissionObjective = objective.commission;
 
       return {
         group,
