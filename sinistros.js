@@ -30,6 +30,36 @@ function formatNow() {
   );
 }
 
+function buildInitialClaimForm() {
+  return {
+    claim_date: "",
+    submitted_date: "",
+    insurer_name: "",
+    claim_number: "",
+    claim_branch: "automóvel",
+    client_name: "",
+    client_nif: "",
+    status: "ABERTO",
+    procedure_notes: "",
+  };
+}
+
+function buildClaimForm(claim) {
+  if (!claim) return buildInitialClaimForm();
+
+  return {
+    claim_date: claim.claim_date || "",
+    submitted_date: claim.submitted_date || "",
+    insurer_name: claim.insurer_name || "",
+    claim_number: claim.claim_number || "",
+    claim_branch: claim.claim_branch || "automóvel",
+    client_name: claim.client_name || "",
+    client_nif: claim.client_nif || "",
+    status: claim.status || "ABERTO",
+    procedure_notes: claim.procedure_notes || "",
+  };
+}
+
 export async function getServerSideProps() {
   const { data: claims } = await supabase
     .from("claims")
@@ -53,6 +83,12 @@ export default function Sinistros({ claims }) {
   const [clientNif, setClientNif] = useState("");
   const [procedureNotes, setProcedureNotes] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [editingClaim, setEditingClaim] = useState(null);
+  const [editForm, setEditForm] = useState(buildInitialClaimForm);
+
+  const [procedureClaim, setProcedureClaim] = useState(null);
+  const [newProcedureNote, setNewProcedureNote] = useState("");
 
   const abertos = claims.filter((c) => c.status === "ABERTO");
   const pendentes = claims.filter((c) => c.status === "PENDENTE");
@@ -111,21 +147,106 @@ export default function Sinistros({ claims }) {
       updateData.closed_at = new Date().toISOString();
     }
 
-    await supabase.from("claims").update(updateData).eq("id", claim.id);
+    if (status !== "ENCERRADO") {
+      updateData.closed_at = null;
+    }
+
+    const { error } = await supabase.from("claims").update(updateData).eq("id", claim.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
     window.location.reload();
   }
 
-  async function addProcedure(claim) {
-    const note = prompt("Novo procedimento");
+  function openEditClaim(claim) {
+    setEditingClaim(claim);
+    setEditForm(buildClaimForm(claim));
+  }
 
-    if (!note) return;
+  function closeEditClaim() {
+    setEditingClaim(null);
+    setEditForm(buildInitialClaimForm());
+  }
 
-    const previous = claim.procedure_notes || "";
+  async function saveEditedClaim(e) {
+    e.preventDefault();
+
+    if (!editingClaim) return;
+
+    if (!editForm.client_name.trim()) {
+      alert("Preenche o nome do cliente.");
+      return;
+    }
+
+    setSaving(true);
+
+    const updateData = {
+      claim_date: editForm.claim_date || null,
+      submitted_date: editForm.submitted_date || null,
+      insurer_name: editForm.insurer_name || null,
+      claim_number: editForm.claim_number || null,
+      claim_branch: editForm.claim_branch || null,
+      client_name: editForm.client_name || null,
+      client_nif: editForm.client_nif || null,
+      status: editForm.status || "ABERTO",
+      procedure_notes: editForm.procedure_notes || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (editForm.status === "ENCERRADO" && !editingClaim.closed_at) {
+      updateData.closed_at = new Date().toISOString();
+    }
+
+    if (editForm.status !== "ENCERRADO") {
+      updateData.closed_at = null;
+    }
+
+    const { error } = await supabase
+      .from("claims")
+      .update(updateData)
+      .eq("id", editingClaim.id);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closeEditClaim();
+    window.location.reload();
+  }
+
+  function openProcedureModal(claim) {
+    setProcedureClaim(claim);
+    setNewProcedureNote("");
+  }
+
+  function closeProcedureModal() {
+    setProcedureClaim(null);
+    setNewProcedureNote("");
+  }
+
+  async function saveProcedure(e) {
+    e.preventDefault();
+
+    if (!procedureClaim) return;
+
+    if (!newProcedureNote.trim()) {
+      alert("Escreve o procedimento.");
+      return;
+    }
+
+    setSaving(true);
+
+    const previous = procedureClaim.procedure_notes || "";
 
     const updatedNotes = previous
-      ? `${previous}\n\n${formatNow()} - ${note}`
-      : `${formatNow()} - ${note}`;
+      ? `${previous}\n\n${formatNow()} - ${newProcedureNote.trim()}`
+      : `${formatNow()} - ${newProcedureNote.trim()}`;
 
     const { error } = await supabase
       .from("claims")
@@ -133,13 +254,16 @@ export default function Sinistros({ claims }) {
         procedure_notes: updatedNotes,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", claim.id);
+      .eq("id", procedureClaim.id);
+
+    setSaving(false);
 
     if (error) {
       alert(error.message);
       return;
     }
 
+    closeProcedureModal();
     window.location.reload();
   }
 
@@ -161,6 +285,176 @@ export default function Sinistros({ claims }) {
       </aside>
 
       <main style={main}>
+        {editingClaim && (
+          <div style={modalOverlay}>
+            <section style={editModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>Editar sinistro</h2>
+                  <p style={modalSubtitle}>
+                    Atualiza os dados principais, estado e procedimentos do sinistro.
+                  </p>
+                </div>
+
+                <button type="button" style={grayButton} onClick={closeEditClaim}>
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={saveEditedClaim} style={editFormGrid}>
+                <label style={fieldLabel}>
+                  Data do sinistro
+                  <input
+                    type="date"
+                    value={editForm.claim_date}
+                    onChange={(e) => setEditForm({ ...editForm, claim_date: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Data de envio à seguradora
+                  <input
+                    type="date"
+                    value={editForm.submitted_date}
+                    onChange={(e) => setEditForm({ ...editForm, submitted_date: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Seguradora
+                  <input
+                    value={editForm.insurer_name}
+                    onChange={(e) => setEditForm({ ...editForm, insurer_name: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Nº do sinistro
+                  <input
+                    value={editForm.claim_number}
+                    onChange={(e) => setEditForm({ ...editForm, claim_number: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Ramo
+                  <select
+                    value={editForm.claim_branch}
+                    onChange={(e) => setEditForm({ ...editForm, claim_branch: e.target.value })}
+                    style={input}
+                  >
+                    <option>automóvel</option>
+                    <option>casa</option>
+                    <option>MREmpresarial</option>
+                    <option>ATCO</option>
+                    <option>ATCP</option>
+                    <option>vida</option>
+                    <option>RC</option>
+                    <option>outros</option>
+                  </select>
+                </label>
+
+                <label style={fieldLabel}>
+                  Estado
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    style={input}
+                  >
+                    <option value="ABERTO">ABERTO</option>
+                    <option value="PENDENTE">PENDENTE</option>
+                    <option value="ENCERRADO">ENCERRADO</option>
+                  </select>
+                </label>
+
+                <label style={fieldLabel}>
+                  Nome do cliente
+                  <input
+                    value={editForm.client_name}
+                    onChange={(e) => setEditForm({ ...editForm, client_name: e.target.value })}
+                    required
+                    style={input}
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  NIF do cliente
+                  <input
+                    value={editForm.client_nif}
+                    onChange={(e) => setEditForm({ ...editForm, client_nif: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Procedimentos
+                  <textarea
+                    value={editForm.procedure_notes}
+                    onChange={(e) => setEditForm({ ...editForm, procedure_notes: e.target.value })}
+                    style={largeTextarea}
+                  />
+                </label>
+
+                <div style={modalActions}>
+                  <button type="submit" style={button} disabled={saving}>
+                    {saving ? "A guardar..." : "Guardar alterações"}
+                  </button>
+
+                  <button type="button" style={grayButton} onClick={closeEditClaim}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {procedureClaim && (
+          <div style={modalOverlay}>
+            <section style={procedureModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>Novo procedimento</h2>
+                  <p style={modalSubtitle}>
+                    {procedureClaim.client_name || "Sem cliente"} · {procedureClaim.claim_number || "Sem nº sinistro"}
+                  </p>
+                </div>
+
+                <button type="button" style={grayButton} onClick={closeProcedureModal}>
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={saveProcedure} style={form}>
+                <label style={fieldLabel}>
+                  Procedimento
+                  <textarea
+                    value={newProcedureNote}
+                    onChange={(e) => setNewProcedureNote(e.target.value)}
+                    placeholder="Ex: Contactei seguradora, enviado orçamento, aguardamos peritagem..."
+                    style={procedureTextarea}
+                    autoFocus
+                  />
+                </label>
+
+                <div style={modalActions}>
+                  <button type="submit" style={purpleButton} disabled={saving}>
+                    {saving ? "A guardar..." : "Guardar procedimento"}
+                  </button>
+
+                  <button type="button" style={grayButton} onClick={closeProcedureModal}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
         <header style={header}>
           <div>
             <h1 style={title}>Sinistros</h1>
@@ -266,7 +560,8 @@ export default function Sinistros({ claims }) {
                     key={claim.id}
                     claim={claim}
                     onStatus={updateStatus}
-                    onProcedure={addProcedure}
+                    onProcedure={openProcedureModal}
+                    onEdit={openEditClaim}
                   />
                 ))}
               </div>
@@ -286,7 +581,8 @@ export default function Sinistros({ claims }) {
                   key={claim.id}
                   claim={claim}
                   onStatus={updateStatus}
-                  onProcedure={addProcedure}
+                  onProcedure={openProcedureModal}
+                  onEdit={openEditClaim}
                   closed
                 />
               ))}
@@ -298,7 +594,7 @@ export default function Sinistros({ claims }) {
   );
 }
 
-function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
+function ClaimCard({ claim, onStatus, onProcedure, onEdit, closed = false }) {
   return (
     <div style={claimCard}>
       <div style={claimTop}>
@@ -350,37 +646,46 @@ function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
         <p style={smallText}>Encerrado em: {formatDate(claim.closed_at)}</p>
       )}
 
-      {!closed && (
-        <div style={buttons}>
-          <button
-            style={{ ...smallButton, background: "#2563eb" }}
-            onClick={() => onStatus(claim, "ABERTO")}
-          >
-            Aberto
-          </button>
+      <div style={buttons}>
+        <button
+          style={{ ...smallButton, background: "#111827" }}
+          onClick={() => onEdit(claim)}
+        >
+          Editar
+        </button>
 
-          <button
-            style={{ ...smallButton, background: "#f59e0b" }}
-            onClick={() => onStatus(claim, "PENDENTE")}
-          >
-            Pendente
-          </button>
+        {!closed && (
+          <>
+            <button
+              style={{ ...smallButton, background: "#2563eb" }}
+              onClick={() => onStatus(claim, "ABERTO")}
+            >
+              Aberto
+            </button>
 
-          <button
-            style={{ ...smallButton, background: "#7c3aed" }}
-            onClick={() => onProcedure(claim)}
-          >
-            Adicionar procedimento
-          </button>
+            <button
+              style={{ ...smallButton, background: "#f59e0b" }}
+              onClick={() => onStatus(claim, "PENDENTE")}
+            >
+              Pendente
+            </button>
 
-          <button
-            style={{ ...smallButton, background: "#16a34a" }}
-            onClick={() => onStatus(claim, "ENCERRADO")}
-          >
-            Encerrar
-          </button>
-        </div>
-      )}
+            <button
+              style={{ ...smallButton, background: "#7c3aed" }}
+              onClick={() => onProcedure(claim)}
+            >
+              Adicionar procedimento
+            </button>
+
+            <button
+              style={{ ...smallButton, background: "#16a34a" }}
+              onClick={() => onStatus(claim, "ENCERRADO")}
+            >
+              Encerrar
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -581,4 +886,111 @@ const smallButton = {
   padding: "10px 12px",
   borderRadius: 8,
   cursor: "pointer",
+};
+
+const fieldLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  fontSize: 13,
+  color: "#374151",
+  fontWeight: "bold",
+};
+
+const largeTextarea = {
+  minHeight: 260,
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  resize: "vertical",
+};
+
+const procedureTextarea = {
+  minHeight: 180,
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #c4b5fd",
+  resize: "vertical",
+};
+
+const purpleButton = {
+  padding: 14,
+  borderRadius: 10,
+  border: "none",
+  background: "#7c3aed",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const grayButton = {
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "#6b7280",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.65)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const editModal = {
+  width: "min(980px, 96vw)",
+  maxHeight: "88vh",
+  overflowY: "auto",
+  background: "white",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const procedureModal = {
+  width: "min(720px, 96vw)",
+  background: "linear-gradient(135deg,#f5f3ff,#ede9fe)",
+  border: "2px solid #7c3aed",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 22,
+};
+
+const modalTitle = {
+  margin: 0,
+  color: "#111827",
+};
+
+const modalSubtitle = {
+  marginTop: 8,
+  color: "#6b7280",
+};
+
+const editFormGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 14,
+};
+
+const modalActions = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 6,
+  gridColumn: "1 / -1",
 };
