@@ -48,6 +48,20 @@ function daysSince(date) {
   return Math.floor((today - target) / (1000 * 60 * 60 * 24));
 }
 
+function buildEditForm(claim) {
+  return {
+    client_name: claim.client_name || claim.clients?.name || "",
+    client_nif: claim.client_nif || claim.clients?.nif || "",
+    claim_date: claim.claim_date || "",
+    submitted_date: claim.submitted_date || "",
+    insurer_name: claim.insurer_name || "",
+    claim_number: claim.claim_number || "",
+    claim_branch: claim.claim_branch || "automóvel",
+    status: claim.status || "ABERTO",
+    procedure_notes: claim.procedure_notes || "",
+  };
+}
+
 export async function getServerSideProps() {
   const { data: claims } = await supabase
     .from("claims")
@@ -81,6 +95,7 @@ export default function Sinistros({ claims, clients }) {
   const [saving, setSaving] = useState(false);
 
   const [editingClaim, setEditingClaim] = useState(null);
+  const [editForm, setEditForm] = useState(null);
   const [procedureClaim, setProcedureClaim] = useState(null);
   const [newProcedure, setNewProcedure] = useState("");
 
@@ -183,18 +198,89 @@ export default function Sinistros({ claims, clients }) {
     window.location.reload();
   }
 
+  function openEditModal(claim) {
+    setEditingClaim(claim);
+    setEditForm(buildEditForm(claim));
+  }
+
+  function closeEditModal() {
+    setEditingClaim(null);
+    setEditForm(null);
+  }
+
+  async function saveEditedClaim(e) {
+    e.preventDefault();
+
+    if (!editingClaim || !editForm) return;
+
+    if (!editForm.client_name.trim()) {
+      alert("Preenche o nome do cliente.");
+      return;
+    }
+
+    setSaving(true);
+
+    const updateData = {
+      client_name: editForm.client_name || null,
+      client_nif: editForm.client_nif || null,
+      claim_date: editForm.claim_date || null,
+      submitted_date: editForm.submitted_date || null,
+      insurer_name: editForm.insurer_name || null,
+      claim_number: editForm.claim_number || null,
+      claim_branch: editForm.claim_branch || null,
+      status: editForm.status || "ABERTO",
+      procedure_notes: editForm.procedure_notes || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (editForm.status === "ENCERRADO" && !editingClaim.closed_at) {
+      updateData.closed_at = new Date().toISOString();
+    }
+
+    if (editForm.status !== "ENCERRADO") {
+      updateData.closed_at = null;
+    }
+
+    const { error } = await supabase
+      .from("claims")
+      .update(updateData)
+      .eq("id", editingClaim.id);
+
+    setSaving(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closeEditModal();
+    window.location.reload();
+  }
+
   function openProcedureModal(claim) {
     setProcedureClaim(claim);
     setNewProcedure("");
   }
 
-  async function saveProcedure() {
+  function closeProcedureModal() {
+    setProcedureClaim(null);
+    setNewProcedure("");
+  }
+
+  async function saveProcedure(e) {
+    e.preventDefault();
+
     const claim = procedureClaim;
-    const note = newProcedure;
+    const note = newProcedure.trim();
 
-    
+    if (!claim) return;
 
-    
+    if (!note) {
+      alert("Escreve o procedimento.");
+      return;
+    }
+
+    setSaving(true);
 
     const previous = claim.procedure_notes || "";
 
@@ -210,11 +296,14 @@ export default function Sinistros({ claims, clients }) {
       })
       .eq("id", claim.id);
 
+    setSaving(false);
+
     if (error) {
       alert(error.message);
       return;
     }
 
+    closeProcedureModal();
     window.location.reload();
   }
 
@@ -223,6 +312,176 @@ export default function Sinistros({ claims, clients }) {
       <Sidebar active="sinistros" />
 
       <main style={main}>
+        {editingClaim && editForm && (
+          <div style={modalOverlay}>
+            <section style={editModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>✏️ Editar sinistro</h2>
+                  <p style={modalSubtitle}>
+                    Atualiza os dados principais do sinistro.
+                  </p>
+                </div>
+
+                <button type="button" style={grayButton} onClick={closeEditModal}>
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={saveEditedClaim} style={editGrid}>
+                <label style={modalLabel}>
+                  Nome do cliente
+                  <input
+                    value={editForm.client_name}
+                    onChange={(e) => setEditForm({ ...editForm, client_name: e.target.value })}
+                    style={input}
+                    required
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  NIF
+                  <input
+                    value={editForm.client_nif}
+                    onChange={(e) => setEditForm({ ...editForm, client_nif: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Data do sinistro
+                  <input
+                    type="date"
+                    value={editForm.claim_date}
+                    onChange={(e) => setEditForm({ ...editForm, claim_date: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Data de envio à seguradora
+                  <input
+                    type="date"
+                    value={editForm.submitted_date}
+                    onChange={(e) => setEditForm({ ...editForm, submitted_date: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Seguradora
+                  <input
+                    value={editForm.insurer_name}
+                    onChange={(e) => setEditForm({ ...editForm, insurer_name: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Nº sinistro
+                  <input
+                    value={editForm.claim_number}
+                    onChange={(e) => setEditForm({ ...editForm, claim_number: e.target.value })}
+                    style={input}
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Ramo
+                  <select
+                    value={editForm.claim_branch}
+                    onChange={(e) => setEditForm({ ...editForm, claim_branch: e.target.value })}
+                    style={input}
+                  >
+                    <option>automóvel</option>
+                    <option>casa</option>
+                    <option>MREmpresarial</option>
+                    <option>ATCO</option>
+                    <option>ATCP</option>
+                    <option>vida</option>
+                    <option>RC</option>
+                    <option>outros</option>
+                  </select>
+                </label>
+
+                <label style={modalLabel}>
+                  Estado
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    style={input}
+                  >
+                    <option value="ABERTO">ABERTO</option>
+                    <option value="PENDENTE">PENDENTE</option>
+                    <option value="ENCERRADO">ENCERRADO</option>
+                  </select>
+                </label>
+
+                <label style={{ ...modalLabel, gridColumn: "1 / -1" }}>
+                  Procedimentos
+                  <textarea
+                    value={editForm.procedure_notes}
+                    onChange={(e) => setEditForm({ ...editForm, procedure_notes: e.target.value })}
+                    style={modalTextareaLarge}
+                  />
+                </label>
+
+                <div style={modalActions}>
+                  <button type="submit" style={button} disabled={saving}>
+                    {saving ? "A guardar..." : "Guardar alterações"}
+                  </button>
+
+                  <button type="button" style={grayButton} onClick={closeEditModal}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {procedureClaim && (
+          <div style={modalOverlay}>
+            <section style={procedureModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>📝 Novo procedimento</h2>
+                  <p style={modalSubtitle}>
+                    {procedureClaim.client_name || procedureClaim.clients?.name || "Sem cliente"} · {procedureClaim.claim_number || "Sem nº sinistro"}
+                  </p>
+                </div>
+
+                <button type="button" style={grayButton} onClick={closeProcedureModal}>
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={saveProcedure} style={form}>
+                <label style={modalLabel}>
+                  Procedimento
+                  <textarea
+                    value={newProcedure}
+                    onChange={(e) => setNewProcedure(e.target.value)}
+                    style={modalTextarea}
+                    placeholder="Ex: Contactei seguradora, enviado orçamento, aguardamos peritagem..."
+                    autoFocus
+                  />
+                </label>
+
+                <div style={modalActions}>
+                  <button type="submit" style={purpleButton} disabled={saving}>
+                    {saving ? "A guardar..." : "Guardar procedimento"}
+                  </button>
+
+                  <button type="button" style={grayButton} onClick={closeProcedureModal}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
         <header style={header}>
           <div>
             <h1 style={title}>Sinistros</h1>
@@ -422,6 +681,7 @@ export default function Sinistros({ claims, clients }) {
                     claim={claim}
                     onStatus={updateStatus}
                     onProcedure={openProcedureModal}
+                    onEdit={openEditModal}
                   />
                 ))}
               </div>
@@ -442,6 +702,7 @@ export default function Sinistros({ claims, clients }) {
                   claim={claim}
                   onStatus={updateStatus}
                   onProcedure={openProcedureModal}
+                  onEdit={openEditModal}
                   closed
                 />
               ))}
@@ -453,7 +714,7 @@ export default function Sinistros({ claims, clients }) {
   );
 }
 
-function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
+function ClaimCard({ claim, onStatus, onProcedure, onEdit, closed = false }) {
   return (
     <div style={claimCard}>
       <div style={claimTop}>
@@ -515,7 +776,14 @@ function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
 
       {!closed && (
         <div style={buttons}>
-          <button style={{ ...smallButton, background: "#111827" }} onClick={() => onEdit && onEdit(claim)}>✏️ Editar sinistro</button><button
+          <button
+            style={{ ...smallButton, background: "#111827" }}
+            onClick={() => onEdit(claim)}
+          >
+            ✏️ Editar sinistro
+          </button>
+
+          <button
             style={{ ...smallButton, background: "#2563eb" }}
             onClick={() => onStatus(claim, "ABERTO")}
           >
@@ -533,7 +801,7 @@ function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
             style={{ ...smallButton, background: "#7c3aed" }}
             onClick={() => onProcedure(claim)}
           >
-            Adicionar procedimento
+            📝 Novo procedimento
           </button>
 
           <button
@@ -834,3 +1102,109 @@ const detailButton = {
 };
 
 
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.65)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const editModal = {
+  width: "min(980px, 96vw)",
+  maxHeight: "88vh",
+  overflowY: "auto",
+  background: "white",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const procedureModal = {
+  width: "min(720px, 96vw)",
+  background: "linear-gradient(135deg,#f5f3ff,#ede9fe)",
+  border: "2px solid #7c3aed",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 22,
+};
+
+const modalTitle = {
+  margin: 0,
+  color: "#111827",
+};
+
+const modalSubtitle = {
+  marginTop: 8,
+  color: "#6b7280",
+};
+
+const editGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 14,
+};
+
+const modalLabel = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  fontSize: 13,
+  color: "#374151",
+  fontWeight: "bold",
+};
+
+const modalTextarea = {
+  minHeight: 190,
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #c4b5fd",
+  resize: "vertical",
+};
+
+const modalTextareaLarge = {
+  minHeight: 260,
+  padding: 13,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  resize: "vertical",
+};
+
+const modalActions = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  marginTop: 6,
+  gridColumn: "1 / -1",
+};
+
+const grayButton = {
+  padding: "12px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "#6b7280",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
+
+const purpleButton = {
+  padding: 14,
+  borderRadius: 10,
+  border: "none",
+  background: "#7c3aed",
+  color: "white",
+  fontWeight: "bold",
+  cursor: "pointer",
+};
