@@ -146,7 +146,7 @@ export async function getServerSideProps() {
   const { data: policies, error } = await supabase
     .from("policies")
     .select(
-      "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, start_date, created_at, insurers(name), clients(name)"
+      "id, client_id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, start_date, created_at, insurers(name), clients(id, name)"
     )
     .order("created_at", { ascending: false });
 
@@ -364,6 +364,8 @@ export default function OrcamentoSeguros({ policies, loadError }) {
                         <th style={detailTh}>Fracionamento</th>
                         <th style={detailTh}>Prémio 1ª fração</th>
                         <th style={detailTh}>Comissão 1ª fração</th>
+                        <th style={detailTh}>Cliente</th>
+                        <th style={detailTh}>Apólice</th>
                       </tr>
                     </thead>
 
@@ -382,11 +384,37 @@ export default function OrcamentoSeguros({ policies, loadError }) {
                           <td style={detailTdRight}>
                             {formatNumber(getFirstFractionCommission(policy))}
                           </td>
+
+                          <td style={detailTd}>
+                            {policy.client_id ? (
+                              <Link
+                                href={`/clientes/${policy.client_id}`}
+                                style={detailLinkButton}
+                              >
+                                👤 Abrir Cliente
+                              </Link>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
+
+                          <td style={detailTd}>
+                            {policy.client_id ? (
+                              <Link
+                                href={`/clientes/${policy.client_id}`}
+                                style={detailPolicyButton}
+                              >
+                                📄 Abrir Apólice
+                              </Link>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                         </tr>
                       ))}
 
                       <tr style={detailTotalRow}>
-                        <td style={detailTd} colSpan={6}>
+                        <td style={detailTd} colSpan={8}>
                           TOTAL
                         </td>
                         <td style={detailTdRight}>
@@ -783,4 +811,29 @@ const detailTdRight = {
 const detailTotalRow = {
   background: "#f8fafc",
   fontWeight: "bold",
+};
+
+
+const detailLinkButton = {
+  background: "#0f766e",
+  color: "white",
+  padding: "8px 10px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  fontSize: 12,
+  fontWeight: "bold",
+  whiteSpace: "nowrap",
+};
+
+const detailPolicyButton = {
+  background: "#2563eb",
+  color: "white",
+  padding: "8px 10px",
+  borderRadius: 8,
+  textDecoration: "none",
+  display: "inline-block",
+  fontSize: 12,
+  fontWeight: "bold",
+  whiteSpace: "nowrap",
 };
