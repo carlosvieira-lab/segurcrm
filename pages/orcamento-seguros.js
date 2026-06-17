@@ -12,7 +12,7 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const monthNames = [
+const months = [
   "JAN",
   "FEV",
   "MAR",
@@ -27,40 +27,43 @@ const monthNames = [
   "DEZ",
 ];
 
-const annualObjectives = {
-  AUTO: {
-    premium: 3800,
-    commission: 342,
+const budgetRows = [
+  {
+    label: "AUTOMÓVEL",
+    crmBranches: ["AUTOMÓVEL"],
+    premiumObjective: 3800,
+    commissionObjective: 342,
   },
-  ATS: {
-    premium: 500,
-    commission: 50,
+  {
+    label: "CASA",
+    crmBranches: ["CASA", "MREMP"],
+    premiumObjective: 700,
+    commissionObjective: 77,
   },
-  MR: {
-    premium: 700,
-    commission: 77,
+  {
+    label: "ATS",
+    crmBranches: ["ATCP", "ATCO"],
+    premiumObjective: 500,
+    commissionObjective: 50,
   },
-  "VIDA APS": {
-    premium: 350,
-    commission: 98,
+  {
+    label: "SAUDE",
+    crmBranches: ["SAUDE"],
+    premiumObjective: 150,
+    commissionObjective: 20,
   },
-  SAUDE: {
-    premium: 150,
-    commission: 20,
+  {
+    label: "VIDA",
+    crmBranches: ["VIDA"],
+    premiumObjective: 350,
+    commissionObjective: 98,
   },
-  OUTROS: {
-    premium: 100,
-    commission: 10,
+  {
+    label: "OUTROS",
+    crmBranches: ["APS", "FINANCEIROS", "VIAGEM", "CAES E GATOS", "OUTROS"],
+    premiumObjective: 100,
+    commissionObjective: 10,
   },
-};
-
-const groups = [
-  "AUTO",
-  "ATS",
-  "MR",
-  "VIDA APS",
-  "SAUDE",
-  "OUTROS",
 ];
 
 function normalizeText(value) {
@@ -71,35 +74,12 @@ function normalizeText(value) {
     .trim();
 }
 
-function mapBranchToGroup(branch) {
-  const value = normalizeText(branch);
+function branchBelongsToRow(policyBranch, row) {
+  const normalizedBranch = normalizeText(policyBranch);
 
-  if (value === "AUTOMOVEL" || value === "AUTO") {
-    return "AUTO";
-  }
-
-  if (value === "ATCO" || value === "ATCP" || value === "ATS") {
-    return "ATS";
-  }
-
-  if (
-    value === "CASA" ||
-    value === "MREMP" ||
-    value === "MULTIRRISCOS" ||
-    value === "MR"
-  ) {
-    return "MR";
-  }
-
-  if (value === "VIDA" || value === "APS" || value === "VIDA APS") {
-    return "VIDA APS";
-  }
-
-  if (value === "SAUDE") {
-    return "SAUDE";
-  }
-
-  return "OUTROS";
+  return row.crmBranches
+    .map((branch) => normalizeText(branch))
+    .includes(normalizedBranch);
 }
 
 function getFrequencyMultiplier(frequency) {
@@ -112,24 +92,19 @@ function getFrequencyMultiplier(frequency) {
   return 1;
 }
 
-function getMonthlyPremium(policy) {
+function getIssuedMonthPremium(policy) {
   const annualPremium = Number(policy.annual_premium || 0);
   const multiplier = getFrequencyMultiplier(policy.payment_frequency);
-
-  if (!multiplier) return 0;
 
   return annualPremium / multiplier;
 }
 
-function getMonthlyCommission(policy) {
+function getIssuedMonthCommission(policy) {
   return Number(policy.commission_per_payment || 0);
 }
 
-function formatEuro(value) {
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(Number(value || 0));
+function getIssueDate(policy) {
+  return policy.policy_issue_date || policy.created_at || null;
 }
 
 function formatNumber(value) {
@@ -139,12 +114,11 @@ function formatNumber(value) {
   }).format(Number(value || 0));
 }
 
-function getPolicyIssueDate(policy) {
-  return (
-    policy.policy_issue_date ||
-    policy.created_at ||
-    null
-  );
+function formatEuro(value) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(Number(value || 0));
 }
 
 export async function getServerSideProps() {
@@ -153,7 +127,7 @@ export async function getServerSideProps() {
     .select(
       "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, created_at, insurers(name), clients(name)"
     )
-    .order("policy_issue_date", { ascending: true });
+    .order("created_at", { ascending: false });
 
   return {
     props: {
@@ -170,56 +144,46 @@ export default function OrcamentoSeguros({ policies, loadError }) {
     (policy) => normalizeText(policy.status) !== "ANULADA"
   );
 
-  const yearPolicies = activePolicies.filter((policy) => {
-    const issueDate = getPolicyIssueDate(policy);
+  const issuedPoliciesThisYear = activePolicies.filter((policy) => {
+    const issueDate = getIssueDate(policy);
 
     if (!issueDate) return false;
 
     return new Date(issueDate).getFullYear() === currentYear;
   });
 
-  const monthlyData = monthNames.map((month, index) => {
-    const rows = groups.map((group) => {
-      const groupPolicies = yearPolicies.filter((policy) => {
-        const issueDate = getPolicyIssueDate(policy);
+  const monthBlocks = months.map((monthName, monthIndex) => {
+    const rows = budgetRows.map((budgetRow) => {
+      const rowPolicies = issuedPoliciesThisYear.filter((policy) => {
+        const issueDate = getIssueDate(policy);
 
         if (!issueDate) return false;
 
-        const date = new Date(issueDate);
+        const issue = new Date(issueDate);
 
         return (
-          date.getMonth() === index &&
-          mapBranchToGroup(policy.branch) === group
+          issue.getMonth() === monthIndex &&
+          branchBelongsToRow(policy.branch, budgetRow)
         );
       });
 
-      const premiumAchieved = groupPolicies.reduce(
-        (sum, policy) => sum + getMonthlyPremium(policy),
+      const premiumAchieved = rowPolicies.reduce(
+        (sum, policy) => sum + getIssuedMonthPremium(policy),
         0
       );
 
-      const commissionAchieved = groupPolicies.reduce(
-        (sum, policy) => sum + getMonthlyCommission(policy),
+      const commissionAchieved = rowPolicies.reduce(
+        (sum, policy) => sum + getIssuedMonthCommission(policy),
         0
       );
-
-      const objective = annualObjectives[group] || {
-        premium: 0,
-        commission: 0,
-      };
-
-      const premiumObjective = objective.premium;
-      const commissionObjective = objective.commission;
 
       return {
-        group,
-        count: groupPolicies.length,
+        ...budgetRow,
+        count: rowPolicies.length,
         premiumAchieved,
         commissionAchieved,
-        premiumObjective,
-        commissionObjective,
-        premiumGap: premiumAchieved - premiumObjective,
-        commissionGap: commissionAchieved - commissionObjective,
+        premiumGap: premiumAchieved - budgetRow.premiumObjective,
+        commissionGap: commissionAchieved - budgetRow.commissionObjective,
       };
     });
 
@@ -246,13 +210,13 @@ export default function OrcamentoSeguros({ policies, loadError }) {
     );
 
     return {
-      month,
+      monthName,
       rows,
       totals,
     };
   });
 
-  const annualTotals = monthlyData.reduce(
+  const annualTotals = monthBlocks.reduce(
     (acc, month) => {
       acc.count += month.totals.count;
       acc.premiumAchieved += month.totals.premiumAchieved;
@@ -283,64 +247,65 @@ export default function OrcamentoSeguros({ policies, loadError }) {
           <div>
             <h1 style={title}>Orçamento Seguros</h1>
             <p style={subtitle}>
-              Objetivos mensais por ramo, com base no prémio fracionado e comissão fracionada no mês de emissão.
+              Controlo mensal por criação/emissão de apólices, prémio fracionado e comissão gerada no mês.
             </p>
           </div>
 
           <Link href="/" style={backButton}>
-            Voltar ao Dashboard
+            Voltar
           </Link>
         </div>
 
         {loadError && (
           <div style={errorBox}>
-            Erro ao carregar dados: {loadError}
+            Erro ao carregar apólices: {loadError}
           </div>
         )}
 
         <section style={summaryGrid}>
           <SummaryCard
-            label="Apólices emitidas no ano"
+            label="Apólices criadas no ano"
             value={annualTotals.count}
             color="#2563eb"
           />
 
           <SummaryCard
-            label="Receita atingida"
+            label="Prémio gerado"
             value={formatEuro(annualTotals.premiumAchieved)}
             color="#16a34a"
           />
 
           <SummaryCard
-            label="Comissões atingidas"
+            label="Comissão gerada"
             value={formatEuro(annualTotals.commissionAchieved)}
             color="#7c3aed"
           />
 
           <SummaryCard
-            label="Falta receita"
+            label="Diferença prémio"
             value={formatEuro(annualTotals.premiumGap)}
             color={annualTotals.premiumGap >= 0 ? "#16a34a" : "#dc2626"}
           />
 
           <SummaryCard
-            label="Falta comissões"
+            label="Diferença comissão"
             value={formatEuro(annualTotals.commissionGap)}
             color={annualTotals.commissionGap >= 0 ? "#16a34a" : "#dc2626"}
           />
         </section>
 
         <section style={infoBox}>
-          <strong>Lógica usada:</strong>{" "}
-          Prémio do mês = prémio anual dividido pelo fracionamento da apólice.
-          Comissão do mês = comissão por pagamento. O mês considerado é o mês da data de emissão.
+          <strong>Grupos finais:</strong> AUTOMÓVEL = AUTOMÓVEL · CASA = CASA + MREMP ·
+          ATS = ATCP + ATCO · SAUDE = SAUDE · VIDA = VIDA · OUTROS = APS + FINANCEIROS + VIAGEM + CAES E GATOS + OUTROS.
+          <br />
+          <strong>Lógica:</strong> a apólice entra no mês da sua data de emissão. O prémio considerado é o prémio fracionado cobrado nesse mês. A comissão considerada é a comissão fracionada gerada nesse mês.
         </section>
 
-        <div style={monthsList}>
-          {monthlyData.map((month) => (
-            <section key={month.month} style={monthCard}>
+        <div style={monthList}>
+          {monthBlocks.map((month) => (
+            <section key={month.monthName} style={monthCard}>
               <div style={monthHeader}>
-                <h2 style={monthTitle}>{month.month}</h2>
+                <h2 style={monthTitle}>{month.monthName}</h2>
               </div>
 
               <div style={tableWrap}>
@@ -348,20 +313,20 @@ export default function OrcamentoSeguros({ policies, loadError }) {
                   <thead>
                     <tr>
                       <th style={th}>Rubricas</th>
-                      <th style={th}>Nº apólices</th>
-                      <th style={th}>Receita atingida</th>
-                      <th style={th}>Comissões atingidas</th>
-                      <th style={th}>Receita objetivo</th>
-                      <th style={th}>Falta concretizar receita</th>
-                      <th style={th}>Comissão objetivo</th>
-                      <th style={th}>Falta concretizar comissões</th>
+                      <th style={th}>Nº Apólices</th>
+                      <th style={th}>Prémio gerado</th>
+                      <th style={th}>Comissão gerada</th>
+                      <th style={th}>Objetivo prémio</th>
+                      <th style={th}>Diferença prémio</th>
+                      <th style={th}>Objetivo comissão</th>
+                      <th style={th}>Diferença comissão</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {month.rows.map((row) => (
-                      <tr key={`${month.month}-${row.group}`}>
-                        <td style={tdStrong}>{row.group}</td>
+                      <tr key={`${month.monthName}-${row.label}`}>
+                        <td style={tdStrong}>{row.label}</td>
                         <td style={tdCenter}>{row.count}</td>
                         <td style={tdRight}>{formatNumber(row.premiumAchieved)}</td>
                         <td style={tdRight}>{formatNumber(row.commissionAchieved)}</td>
@@ -445,8 +410,8 @@ const main = {
 const header = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
   gap: 20,
+  alignItems: "flex-start",
   marginBottom: 30,
 };
 
@@ -458,14 +423,13 @@ const title = {
 const subtitle = {
   color: "#6b7280",
   marginTop: 10,
-  maxWidth: 850,
 };
 
 const backButton = {
   background: "#111827",
   color: "white",
-  borderRadius: 10,
   padding: "12px 16px",
+  borderRadius: 10,
   textDecoration: "none",
   fontWeight: "bold",
 };
@@ -511,9 +475,10 @@ const infoBox = {
   padding: 14,
   borderRadius: 14,
   marginBottom: 24,
+  lineHeight: 1.6,
 };
 
-const monthsList = {
+const monthList = {
   display: "grid",
   gap: 24,
 };
@@ -544,8 +509,8 @@ const tableWrap = {
 
 const table = {
   width: "100%",
+  minWidth: 980,
   borderCollapse: "collapse",
-  minWidth: 950,
 };
 
 const th = {
@@ -559,8 +524,8 @@ const th = {
 const tdStrong = {
   border: "1px solid #111827",
   padding: 8,
-  fontWeight: "bold",
   textAlign: "center",
+  fontWeight: "bold",
 };
 
 const tdCenter = {
@@ -588,6 +553,6 @@ const negativeCell = {
 };
 
 const totalRow = {
-  fontWeight: "bold",
   background: "#f8fafc",
+  fontWeight: "bold",
 };
