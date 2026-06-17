@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -135,6 +136,12 @@ function formatEuro(value) {
   }).format(Number(value || 0));
 }
 
+function formatDate(date) {
+  if (!date) return "-";
+
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
 export async function getServerSideProps() {
   const { data: policies, error } = await supabase
     .from("policies")
@@ -152,6 +159,8 @@ export async function getServerSideProps() {
 }
 
 export default function OrcamentoSeguros({ policies, loadError }) {
+  const [detailModal, setDetailModal] = useState(null);
+
   const currentYear = new Date().getFullYear();
 
   const activePolicies = (policies || []).filter(
@@ -193,6 +202,7 @@ export default function OrcamentoSeguros({ policies, loadError }) {
 
       return {
         ...budgetRow,
+        policies: rowPolicies,
         count: rowPolicies.length,
         premiumAchieved,
         commissionAchieved,
@@ -315,6 +325,95 @@ export default function OrcamentoSeguros({ policies, loadError }) {
           <strong>Lógica:</strong> a apólice entra no mês da sua data de início. Exemplo: início em 24/02/2026 entra em FEV. O prémio considerado é o prémio da primeira fração. A comissão considerada é a comissão da primeira fração.
         </section>
 
+
+        {detailModal && (
+          <div style={modalOverlay}>
+            <section style={detailModalBox}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>
+                    Detalhe {detailModal.monthName} · {detailModal.label}
+                  </h2>
+
+                  <p style={modalSubtitle}>
+                    {detailModal.policies.length} apólice(s) consideradas neste total.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={closeButton}
+                  onClick={() => setDetailModal(null)}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              {detailModal.policies.length === 0 ? (
+                <p>Não existem apólices nesta rubrica/mês.</p>
+              ) : (
+                <div style={detailTableWrap}>
+                  <table style={detailTable}>
+                    <thead>
+                      <tr>
+                        <th style={detailTh}>Cliente</th>
+                        <th style={detailTh}>Nº Apólice</th>
+                        <th style={detailTh}>Ramo CRM</th>
+                        <th style={detailTh}>Seguradora</th>
+                        <th style={detailTh}>Data início</th>
+                        <th style={detailTh}>Fracionamento</th>
+                        <th style={detailTh}>Prémio 1ª fração</th>
+                        <th style={detailTh}>Comissão 1ª fração</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {detailModal.policies.map((policy) => (
+                        <tr key={policy.id}>
+                          <td style={detailTd}>{policy.clients?.name || "-"}</td>
+                          <td style={detailTd}>{policy.policy_number || "-"}</td>
+                          <td style={detailTd}>{policy.branch || "-"}</td>
+                          <td style={detailTd}>{policy.insurers?.name || "-"}</td>
+                          <td style={detailTd}>{formatDate(policy.start_date)}</td>
+                          <td style={detailTd}>{policy.payment_frequency || "-"}</td>
+                          <td style={detailTdRight}>
+                            {formatNumber(getFirstFractionPremium(policy))}
+                          </td>
+                          <td style={detailTdRight}>
+                            {formatNumber(getFirstFractionCommission(policy))}
+                          </td>
+                        </tr>
+                      ))}
+
+                      <tr style={detailTotalRow}>
+                        <td style={detailTd} colSpan={6}>
+                          TOTAL
+                        </td>
+                        <td style={detailTdRight}>
+                          {formatNumber(
+                            detailModal.policies.reduce(
+                              (sum, policy) => sum + getFirstFractionPremium(policy),
+                              0
+                            )
+                          )}
+                        </td>
+                        <td style={detailTdRight}>
+                          {formatNumber(
+                            detailModal.policies.reduce(
+                              (sum, policy) => sum + getFirstFractionCommission(policy),
+                              0
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
         <div style={monthList}>
           {monthBlocks.map((month) => (
             <section key={month.monthName} style={monthCard}>
@@ -340,7 +439,22 @@ export default function OrcamentoSeguros({ policies, loadError }) {
                   <tbody>
                     {month.rows.map((row) => (
                       <tr key={`${month.monthName}-${row.label}`}>
-                        <td style={tdStrong}>{row.label}</td>
+                        <td style={tdStrong}>
+                          <div>{row.label}</div>
+                          <button
+                            type="button"
+                            style={detailButton}
+                            onClick={() =>
+                              setDetailModal({
+                                monthName: month.monthName,
+                                label: row.label,
+                                policies: row.policies,
+                              })
+                            }
+                          >
+                            Ver detalhe
+                          </button>
+                        </td>
                         <td style={tdCenter}>{row.count}</td>
                         <td style={tdRight}>{formatNumber(row.premiumAchieved)}</td>
                         <td style={tdRight}>{formatNumber(row.commissionAchieved)}</td>
@@ -571,3 +685,102 @@ const totalRow = {
   fontWeight: "bold",
 };
 
+
+const detailButton = {
+  marginTop: 6,
+  background: "#111827",
+  color: "white",
+  border: "none",
+  borderRadius: 8,
+  padding: "6px 9px",
+  fontSize: 12,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.65)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const detailModalBox = {
+  width: "min(1150px, 96vw)",
+  maxHeight: "86vh",
+  overflowY: "auto",
+  background: "white",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 20,
+};
+
+const modalTitle = {
+  margin: 0,
+  color: "#111827",
+};
+
+const modalSubtitle = {
+  marginTop: 8,
+  color: "#6b7280",
+};
+
+const closeButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "12px 16px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const detailTableWrap = {
+  overflowX: "auto",
+};
+
+const detailTable = {
+  width: "100%",
+  borderCollapse: "collapse",
+  minWidth: 980,
+};
+
+const detailTh = {
+  textAlign: "left",
+  padding: 10,
+  borderBottom: "2px solid #e5e7eb",
+  background: "#f9fafb",
+  color: "#374151",
+  fontSize: 13,
+};
+
+const detailTd = {
+  padding: 10,
+  borderBottom: "1px solid #e5e7eb",
+  color: "#111827",
+};
+
+const detailTdRight = {
+  padding: 10,
+  borderBottom: "1px solid #e5e7eb",
+  color: "#111827",
+  textAlign: "right",
+  fontWeight: "bold",
+};
+
+const detailTotalRow = {
+  background: "#f8fafc",
+  fontWeight: "bold",
+};
