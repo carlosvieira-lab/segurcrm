@@ -92,19 +92,33 @@ function getFrequencyMultiplier(frequency) {
   return 1;
 }
 
-function getIssuedMonthPremium(policy) {
-  const annualPremium = Number(policy.annual_premium || 0);
+function getFirstFractionPremium(policy) {
+  const annualPremium = Number(
+    policy.annual_premium ||
+      policy.total_premium ||
+      policy.premium ||
+      policy.premio_anual ||
+      policy.premio ||
+      0
+  );
+
   const multiplier = getFrequencyMultiplier(policy.payment_frequency);
 
   return annualPremium / multiplier;
 }
 
-function getIssuedMonthCommission(policy) {
-  return Number(policy.commission_per_payment || 0);
+function getFirstFractionCommission(policy) {
+  return Number(
+    policy.commission_per_payment ||
+      policy.commission ||
+      policy.comissao ||
+      policy.comissao_anual ||
+      0
+  );
 }
 
-function getIssueDate(policy) {
-  return policy.policy_issue_date || policy.created_at || null;
+function getStartDate(policy) {
+  return policy.start_date || null;
 }
 
 function formatNumber(value) {
@@ -125,7 +139,7 @@ export async function getServerSideProps() {
   const { data: policies, error } = await supabase
     .from("policies")
     .select(
-      "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, created_at, insurers(name), clients(name)"
+      "id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, start_date, created_at, insurers(name), clients(name)"
     )
     .order("created_at", { ascending: false });
 
@@ -145,35 +159,35 @@ export default function OrcamentoSeguros({ policies, loadError }) {
   );
 
   const issuedPoliciesThisYear = activePolicies.filter((policy) => {
-    const issueDate = getIssueDate(policy);
+    const startDate = getStartDate(policy);
 
-    if (!issueDate) return false;
+    if (!startDate) return false;
 
-    return new Date(issueDate).getFullYear() === currentYear;
+    return new Date(startDate).getFullYear() === currentYear;
   });
 
   const monthBlocks = months.map((monthName, monthIndex) => {
     const rows = budgetRows.map((budgetRow) => {
       const rowPolicies = issuedPoliciesThisYear.filter((policy) => {
-        const issueDate = getIssueDate(policy);
+        const startDate = getStartDate(policy);
 
-        if (!issueDate) return false;
+        if (!startDate) return false;
 
-        const issue = new Date(issueDate);
+        const start = new Date(startDate);
 
         return (
-          issue.getMonth() === monthIndex &&
+          start.getMonth() === monthIndex &&
           branchBelongsToRow(policy.branch, budgetRow)
         );
       });
 
       const premiumAchieved = rowPolicies.reduce(
-        (sum, policy) => sum + getIssuedMonthPremium(policy),
+        (sum, policy) => sum + getFirstFractionPremium(policy),
         0
       );
 
       const commissionAchieved = rowPolicies.reduce(
-        (sum, policy) => sum + getIssuedMonthCommission(policy),
+        (sum, policy) => sum + getFirstFractionCommission(policy),
         0
       );
 
@@ -247,7 +261,7 @@ export default function OrcamentoSeguros({ policies, loadError }) {
           <div>
             <h1 style={title}>Orçamento Seguros</h1>
             <p style={subtitle}>
-              Controlo mensal por criação/emissão de apólices, prémio fracionado e comissão gerada no mês.
+              Controlo mensal por data de início da apólice, prémio da primeira fração e comissão da primeira fração.
             </p>
           </div>
 
@@ -264,19 +278,19 @@ export default function OrcamentoSeguros({ policies, loadError }) {
 
         <section style={summaryGrid}>
           <SummaryCard
-            label="Apólices criadas no ano"
+            label="Apólices iniciadas no ano"
             value={annualTotals.count}
             color="#2563eb"
           />
 
           <SummaryCard
-            label="Prémio gerado"
+            label="Prémio 1ª fração"
             value={formatEuro(annualTotals.premiumAchieved)}
             color="#16a34a"
           />
 
           <SummaryCard
-            label="Comissão gerada"
+            label="Comissão 1ª fração"
             value={formatEuro(annualTotals.commissionAchieved)}
             color="#7c3aed"
           />
@@ -298,7 +312,7 @@ export default function OrcamentoSeguros({ policies, loadError }) {
           <strong>Grupos finais:</strong> AUTOMÓVEL = AUTOMÓVEL · CASA = CASA + MREMP ·
           ATS = ATCP + ATCO · SAUDE = SAUDE · VIDA = VIDA · OUTROS = APS + FINANCEIROS + VIAGEM + CAES E GATOS + OUTROS.
           <br />
-          <strong>Lógica:</strong> a apólice entra no mês da sua data de emissão. O prémio considerado é o prémio fracionado cobrado nesse mês. A comissão considerada é a comissão fracionada gerada nesse mês.
+          <strong>Lógica:</strong> a apólice entra no mês da sua data de início. Exemplo: início em 24/02/2026 entra em FEV. O prémio considerado é o prémio da primeira fração. A comissão considerada é a comissão da primeira fração.
         </section>
 
         <div style={monthList}>
@@ -314,8 +328,8 @@ export default function OrcamentoSeguros({ policies, loadError }) {
                     <tr>
                       <th style={th}>Rubricas</th>
                       <th style={th}>Nº Apólices</th>
-                      <th style={th}>Prémio gerado</th>
-                      <th style={th}>Comissão gerada</th>
+                      <th style={th}>Prémio 1ª fração</th>
+                      <th style={th}>Comissão 1ª fração</th>
                       <th style={th}>Objetivo prémio</th>
                       <th style={th}>Diferença prémio</th>
                       <th style={th}>Objetivo comissão</th>
@@ -556,3 +570,4 @@ const totalRow = {
   background: "#f8fafc",
   fontWeight: "bold",
 };
+
