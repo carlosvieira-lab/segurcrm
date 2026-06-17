@@ -503,6 +503,7 @@ function timelineStyle(type) {
 
 export default function ClientePage({ client, policies, allPolicies, claims, tasks, opportunities }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
+  const [showPoliciesSummaryModal, setShowPoliciesSummaryModal] = useState(false);
 
   const [policyForm, setPolicyForm] = useState({
     policy_number: "",
@@ -1107,6 +1108,13 @@ const timelineItems = createTimeline(
               Editar cliente
             </button>
 
+            <button
+              style={policiesSummaryButton}
+              onClick={() => setShowPoliciesSummaryModal(true)}
+            >
+              📄 Resumo Apólices
+            </button>
+
             {client.phone && (
               <a
                 href={getPhoneCallHref(client.phone)}
@@ -1142,6 +1150,69 @@ const timelineItems = createTimeline(
             </button>
           </div>
         </div>
+
+        {showPoliciesSummaryModal && (
+          <div style={modalOverlay}>
+            <section style={policiesSummaryModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>📄 Resumo de apólices em vigor</h2>
+                  <p style={modalSubtitle}>
+                    {client.name} · {activePolicies.length} apólice(s) em vigor
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={() => setShowPoliciesSummaryModal(false)}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              {activePolicies.length === 0 ? (
+                <p>Este cliente não tem apólices em vigor.</p>
+              ) : (
+                <div style={summaryTableWrap}>
+                  <table style={summaryTable}>
+                    <thead>
+                      <tr>
+                        <th style={summaryTh}>Nº Apólice</th>
+                        <th style={summaryTh}>Seguradora</th>
+                        <th style={summaryTh}>Ramo</th>
+                        <th style={summaryTh}>Vencimento anual</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {activePolicies.map((policy) => (
+                        <tr key={policy.id}>
+                          <td style={summaryTd}>
+                            {policy.policy_number || "-"}
+                          </td>
+
+                          <td style={summaryTd}>
+                            {policy.insurers?.name || "-"}
+                          </td>
+
+                          <td style={summaryTd}>
+                            {policy.branch || "-"}
+                          </td>
+
+                          <td style={summaryTd}>
+                            {formatDate(policy.renewal_date)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
 {showEditClientForm && (
   <section
     style={{
@@ -3157,4 +3228,79 @@ const cancelButton = {
   borderRadius: 10,
    cursor: "pointer",
   fontWeight: "bold",
+};
+
+
+const policiesSummaryButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const modalOverlay = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(17,24,39,0.65)",
+  zIndex: 9999,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 24,
+};
+
+const policiesSummaryModal = {
+  width: "min(980px, 96vw)",
+  maxHeight: "86vh",
+  overflowY: "auto",
+  background: "white",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 22,
+};
+
+const modalTitle = {
+  margin: 0,
+  color: "#111827",
+};
+
+const modalSubtitle = {
+  marginTop: 8,
+  color: "#6b7280",
+};
+
+const summaryTableWrap = {
+  width: "100%",
+  overflowX: "auto",
+};
+
+const summaryTable = {
+  width: "100%",
+  borderCollapse: "collapse",
+  background: "white",
+};
+
+const summaryTh = {
+  textAlign: "left",
+  padding: "12px 10px",
+  borderBottom: "2px solid #e5e7eb",
+  color: "#374151",
+  fontSize: 13,
+};
+
+const summaryTd = {
+  padding: "12px 10px",
+  borderBottom: "1px solid #e5e7eb",
+  color: "#111827",
 };
