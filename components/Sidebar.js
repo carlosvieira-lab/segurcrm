@@ -38,9 +38,24 @@ export default function Sidebar({ active }) {
 
         <nav style={nav}>
           <MenuItem href="/" label="Dashboard" active={active === "dashboard"} />
-          <MenuItem href="/assistant" label="✨ IA" active={active === "assistant"} />
-          <MenuItem href="/pesquisa" label="Pesquisa" active={active === "pesquisa"} />
-          <MenuItem href="/clientes" label="Clientes" active={active === "clientes"} />
+
+          <MenuItem
+            href="/assistant"
+            label="✨ IA"
+            active={active === "assistant"}
+          />
+
+          <MenuItem
+            href="/pesquisa"
+            label="Pesquisa"
+            active={active === "pesquisa"}
+          />
+
+          <MenuItem
+            href="/clientes"
+            label="Clientes"
+            active={active === "clientes"}
+          />
 
           {showClientCompactButton && clientId && (
             <MenuItem
@@ -50,9 +65,23 @@ export default function Sidebar({ active }) {
             />
           )}
 
-          <MenuItem href="/apolices" label="Apólices" active={active === "apolices"} />
-          <MenuItem href="/renovacoes" label="Renovações" active={active === "renovacoes"} />
-          <MenuItem href="/financeiro" label="Financeiro" active={active === "financeiro"} />
+          <MenuItem
+            href="/apolices"
+            label="Apólices"
+            active={active === "apolices"}
+          />
+
+          <MenuItem
+            href="/renovacoes"
+            label="Renovações"
+            active={active === "renovacoes"}
+          />
+
+          <MenuItem
+            href="/financeiro"
+            label="Financeiro"
+            active={active === "financeiro"}
+          />
 
           <MenuItem
             href="/comissoes/recebimentos"
@@ -72,10 +101,29 @@ export default function Sidebar({ active }) {
             active={active === "negocios-financeiros"}
           />
 
-          <MenuItem href="/relatorios" label="Relatórios" active={active === "relatorios"} />
-          <MenuItem href="/importacoes" label="Importações" active={active === "importacoes"} />
+          <MenuItem
+            href="/orcamento-seguros"
+            label="Orçamento Seguros"
+            active={active === "orcamento-seguros"}
+          />
 
-          <MenuItem href="/tarefas" label="Tarefas" active={active === "tarefas"} />
+          <MenuItem
+            href="/relatorios"
+            label="Relatórios"
+            active={active === "relatorios"}
+          />
+
+          <MenuItem
+            href="/importacoes"
+            label="Importações"
+            active={active === "importacoes"}
+          />
+
+          <MenuItem
+            href="/tarefas"
+            label="Tarefas"
+            active={active === "tarefas"}
+          />
 
           <MenuItem
             href="/tarefas/compacto"
@@ -95,7 +143,11 @@ export default function Sidebar({ active }) {
             active={active === "oportunidades-compacto"}
           />
 
-          <MenuItem href="/sinistros" label="Sinistros" active={active === "sinistros"} />
+          <MenuItem
+            href="/sinistros"
+            label="Sinistros"
+            active={active === "sinistros"}
+          />
         </nav>
       </div>
 
@@ -108,6 +160,7 @@ export default function Sidebar({ active }) {
 
 function MenuItem({ href, label, active }) {
   const isNegociosFinanceiros = href === "/negocios-financeiros";
+  const isOrcamentoSeguros = href === "/orcamento-seguros";
 
   return (
     <Link
@@ -120,6 +173,13 @@ function MenuItem({ href, label, active }) {
           ? {
               background: "#facc15",
               color: "#000000",
+            }
+          : {}),
+
+        ...(isOrcamentoSeguros
+          ? {
+              background: "#22c55e",
+              color: "#ffffff",
             }
           : {}),
       }}
@@ -172,5 +232,3 @@ const logoutButton = {
   cursor: "pointer",
   fontWeight: "bold",
 };
-
-     
