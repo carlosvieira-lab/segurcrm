@@ -80,6 +80,10 @@ export default function Sinistros({ claims, clients }) {
   const [procedureNotes, setProcedureNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [editingClaim, setEditingClaim] = useState(null);
+  const [procedureClaim, setProcedureClaim] = useState(null);
+  const [newProcedure, setNewProcedure] = useState("");
+
   const cleanNif = clientNif.replace(/\s/g, "");
 
   const matchedClient = clients.find(
@@ -179,10 +183,18 @@ export default function Sinistros({ claims, clients }) {
     window.location.reload();
   }
 
-  async function addProcedure(claim) {
-    const note = prompt("Novo procedimento");
+  function openProcedureModal(claim) {
+    setProcedureClaim(claim);
+    setNewProcedure("");
+  }
 
-    if (!note) return;
+  async function saveProcedure() {
+    const claim = procedureClaim;
+    const note = newProcedure;
+
+    
+
+    
 
     const previous = claim.procedure_notes || "";
 
@@ -409,7 +421,7 @@ export default function Sinistros({ claims, clients }) {
                     key={claim.id}
                     claim={claim}
                     onStatus={updateStatus}
-                    onProcedure={addProcedure}
+                    onProcedure={openProcedureModal}
                   />
                 ))}
               </div>
@@ -429,7 +441,7 @@ export default function Sinistros({ claims, clients }) {
                   key={claim.id}
                   claim={claim}
                   onStatus={updateStatus}
-                  onProcedure={addProcedure}
+                  onProcedure={openProcedureModal}
                   closed
                 />
               ))}
@@ -503,7 +515,7 @@ function ClaimCard({ claim, onStatus, onProcedure, closed = false }) {
 
       {!closed && (
         <div style={buttons}>
-          <button
+          <button style={{ ...smallButton, background: "#111827" }} onClick={() => onEdit && onEdit(claim)}>✏️ Editar sinistro</button><button
             style={{ ...smallButton, background: "#2563eb" }}
             onClick={() => onStatus(claim, "ABERTO")}
           >
@@ -821,7 +833,4 @@ const detailButton = {
   marginTop: 10,
 };
 
-
-
-              
 
