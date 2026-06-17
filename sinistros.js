@@ -648,10 +648,10 @@ function ClaimCard({ claim, onStatus, onProcedure, onEdit, closed = false }) {
 
       <div style={buttons}>
         <button
-          style={{ ...smallButton, background: "#111827" }}
+          style={{ ...smallButton, background: "#0f172a" }}
           onClick={() => onEdit(claim)}
         >
-          Editar
+          ✏️ Editar sinistro
         </button>
 
         {!closed && (
@@ -674,7 +674,7 @@ function ClaimCard({ claim, onStatus, onProcedure, onEdit, closed = false }) {
               style={{ ...smallButton, background: "#7c3aed" }}
               onClick={() => onProcedure(claim)}
             >
-              Adicionar procedimento
+              📝 Novo procedimento
             </button>
 
             <button
