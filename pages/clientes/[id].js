@@ -1057,11 +1057,25 @@ setTimeout(() => {
   }
 
   async function updatePolicyStatus(policyId, status) {
+    if (status === "anulada") {
+      const policy = policies.find((item) => item.id === policyId);
+
+      if (!policy) {
+        alert("Não foi possível identificar a apólice.");
+        return;
+      }
+
+      openCancelPolicyModal(policy);
+      return;
+    }
+
     const { error } = await supabase
       .from("policies")
       .update({
         status,
-        cancelled_at: status === "anulada" ? new Date().toISOString() : null,
+        cancelled_at: null,
+        cancellation_reason: null,
+        cancellation_notes: null,
       })
       .eq("id", policyId);
 
