@@ -529,6 +529,103 @@ function buildPortfolioAuditReport(policies) {
 }
 
 
+function buildCancellationsReport(policies) {
+  const cancelledPolicies = policies
+    .filter((policy) => policy.status === "anulada")
+    .map((policy) => {
+      const annualPremium = Number(policy.annual_premium || 0);
+      const annualCommission = calculateAnnualCommission(policy);
+
+      return {
+        id: policy.id,
+        clientId: policy.client_id || null,
+        clientName: policy.clients?.name || "Sem cliente",
+        clientNif: policy.clients?.nif || "-",
+        clientPhone: policy.clients?.phone || "-",
+        clientEmail: policy.clients?.email || "-",
+        insurerName: policy.insurers?.name || "-",
+        branch: policy.branch || "-",
+        policyNumber: policy.policy_number || "-",
+        annualPremium,
+        annualCommission,
+        cancelledAt: policy.cancelled_at || null,
+        cancellationReason: policy.cancellation_reason || "Sem motivo",
+        cancellationNotes: policy.cancellation_notes || "",
+        startDate: policy.start_date || null,
+        renewalDate: policy.renewal_date || null,
+      };
+    })
+    .sort((a, b) => {
+      const dateA = a.cancelledAt ? new Date(a.cancelledAt).getTime() : 0;
+      const dateB = b.cancelledAt ? new Date(b.cancelledAt).getTime() : 0;
+
+      if (dateA !== dateB) return dateB - dateA;
+
+      return a.clientName.localeCompare(b.clientName);
+    });
+
+  function groupByField(fieldName) {
+    const groups = {};
+
+    cancelledPolicies.forEach((policy) => {
+      const key = policy[fieldName] || "-";
+
+      if (!groups[key]) {
+        groups[key] = {
+          label: key,
+          policies: 0,
+          premium: 0,
+          commission: 0,
+        };
+      }
+
+      groups[key].policies += 1;
+      groups[key].premium += policy.annualPremium;
+      groups[key].commission += policy.annualCommission;
+    });
+
+    return Object.values(groups).sort((a, b) => b.premium - a.premium);
+  }
+
+  const currentYear = new Date().getFullYear();
+
+  const currentYearPolicies = cancelledPolicies.filter((policy) => {
+    if (!policy.cancelledAt) return false;
+
+    const date = new Date(policy.cancelledAt);
+
+    return !Number.isNaN(date.getTime()) && date.getFullYear() === currentYear;
+  });
+
+  return {
+    items: cancelledPolicies,
+    byReason: groupByField("cancellationReason"),
+    byInsurer: groupByField("insurerName"),
+    byBranch: groupByField("branch"),
+    totals: {
+      policies: cancelledPolicies.length,
+      premium: cancelledPolicies.reduce(
+        (sum, policy) => sum + policy.annualPremium,
+        0
+      ),
+      commission: cancelledPolicies.reduce(
+        (sum, policy) => sum + policy.annualCommission,
+        0
+      ),
+      currentYearPolicies: currentYearPolicies.length,
+      currentYearPremium: currentYearPolicies.reduce(
+        (sum, policy) => sum + policy.annualPremium,
+        0
+      ),
+      currentYearCommission: currentYearPolicies.reduce(
+        (sum, policy) => sum + policy.annualCommission,
+        0
+      ),
+    },
+  };
+}
+
+
 function onlyNumbers(value) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -807,6 +904,8 @@ export default function Relatorios({ clients, policies, opportunities }) {
     commission: portfolioAudit.reduce((sum, policy) => sum + Number(policy.annualCommission || 0), 0),
     warnings: portfolioAudit.filter((policy) => policy.warning).length,
   };
+
+  const cancellationsReport = buildCancellationsReport(policies);
 
   const oldPolicies = buildOldPoliciesReport(policies);
 
@@ -1099,6 +1198,49 @@ export default function Relatorios({ clients, policies, opportunities }) {
     );
   }
 
+  function exportCancellationsCsv() {
+    const header = [
+      "Data anulação",
+      "Cliente",
+      "NIF",
+      "Telefone",
+      "Email",
+      "Seguradora",
+      "Ramo",
+      "Nº Apólice",
+      "Prémio anual perdido",
+      "Comissão anual perdida",
+      "Motivo",
+      "Observações",
+      "Data início",
+      "Data renovação",
+    ];
+
+    const rows = cancellationsReport.items.map((policy) => [
+      formatDate(policy.cancelledAt),
+      policy.clientName,
+      policy.clientNif,
+      policy.clientPhone,
+      policy.clientEmail,
+      policy.insurerName,
+      policy.branch,
+      policy.policyNumber,
+      policy.annualPremium.toFixed(2),
+      policy.annualCommission.toFixed(2),
+      policy.cancellationReason,
+      policy.cancellationNotes,
+      formatDate(policy.startDate),
+      formatDate(policy.renewalDate),
+    ]);
+
+    exportCsv(
+      "relatorio_anulacoes.csv",
+      header,
+      rows
+    );
+  }
+
+
   function exportOldPoliciesCsv() {
     const header = [
       "Posição",
@@ -1178,6 +1320,11 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
     if (selectedReport === "clientesNascidos21Marco") {
       exportClientsBornOnMarch21Csv();
+      return;
+    }
+
+    if (selectedReport === "anulacoes") {
+      exportCancellationsCsv();
       return;
     }
 
@@ -1842,6 +1989,144 @@ export default function Relatorios({ clients, policies, opportunities }) {
           </section>
         )}
 
+        {selectedReport === "anulacoes" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Relatório de Anulações
+            </h2>
+
+            <p style={muted}>
+              Análise das apólices anuladas por motivo, seguradora, ramo e impacto financeiro.
+            </p>
+
+            <div style={summaryGrid}>
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Anulações totais</span>
+                <strong style={summaryValue}>{cancellationsReport.totals.policies}</strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Prémio perdido</span>
+                <strong style={summaryValue}>
+                  {formatEuro(cancellationsReport.totals.premium)}
+                </strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Comissão perdida</span>
+                <strong style={summaryValue}>
+                  {formatEuro(cancellationsReport.totals.commission)}
+                </strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Anulações ano atual</span>
+                <strong style={summaryValue}>
+                  {cancellationsReport.totals.currentYearPolicies}
+                </strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Prémio perdido ano atual</span>
+                <strong style={summaryValue}>
+                  {formatEuro(cancellationsReport.totals.currentYearPremium)}
+                </strong>
+              </div>
+
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Comissão perdida ano atual</span>
+                <strong style={summaryValue}>
+                  {formatEuro(cancellationsReport.totals.currentYearCommission)}
+                </strong>
+              </div>
+            </div>
+
+            <div style={cancellationColumnsGrid}>
+              <CancellationGroupTable
+                title="Anulações por motivo"
+                items={cancellationsReport.byReason}
+              />
+
+              <CancellationGroupTable
+                title="Anulações por seguradora"
+                items={cancellationsReport.byInsurer}
+              />
+
+              <CancellationGroupTable
+                title="Anulações por ramo"
+                items={cancellationsReport.byBranch}
+              />
+            </div>
+
+            <h3 style={subPanelTitle}>Detalhe das anulações</h3>
+
+            {cancellationsReport.items.length === 0 ? (
+              <p style={muted}>
+                Ainda não existem apólices anuladas com dados para relatório.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderCancellations}>
+                  <span>Data</span>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Seguradora</span>
+                  <span>Ramo</span>
+                  <span>Apólice</span>
+                  <span>Prémio perdido</span>
+                  <span>Comissão perdida</span>
+                  <span>Motivo</span>
+                  <span>Observação</span>
+                  <span>Ficha</span>
+                </div>
+
+                {cancellationsReport.items.map((policy) => (
+                  <div key={policy.id} style={tableRowCancellations}>
+                    <span>{formatDate(policy.cancelledAt)}</span>
+
+                    <strong>{policy.clientName}</strong>
+
+                    <span>{policy.clientNif}</span>
+
+                    <span>{policy.insurerName}</span>
+
+                    <span>{policy.branch}</span>
+
+                    <span>{policy.policyNumber}</span>
+
+                    <strong style={premiumLostValue}>
+                      {formatEuro(policy.annualPremium)}
+                    </strong>
+
+                    <strong style={commissionLostValue}>
+                      {formatEuro(policy.annualCommission)}
+                    </strong>
+
+                    <span style={cancellationReasonBadge}>
+                      {policy.cancellationReason}
+                    </span>
+
+                    <span style={smallMuted}>
+                      {policy.cancellationNotes || "-"}
+                    </span>
+
+                    {policy.clientId ? (
+                      <Link
+                        href={`/clientes/${policy.clientId}`}
+                        style={openClientButton}
+                      >
+                        Abrir ficha
+                      </Link>
+                    ) : (
+                      <span>-</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {selectedReport === "apolicesAntigas" && (
           <section style={panel}>
             <h2 style={panelTitle}>
@@ -1921,6 +2206,36 @@ export default function Relatorios({ clients, policies, opportunities }) {
           </section>
         )}
       </main>
+    </div>
+  );
+}
+
+function CancellationGroupTable({ title, items }) {
+  return (
+    <div style={cancellationGroupBox}>
+      <h3 style={cancellationGroupTitle}>{title}</h3>
+
+      {items.length === 0 ? (
+        <p style={muted}>Sem dados.</p>
+      ) : (
+        <div style={cancellationGroupRows}>
+          <div style={cancellationGroupHeader}>
+            <span>Descrição</span>
+            <span>Nº</span>
+            <span>Prémio</span>
+            <span>Comissão</span>
+          </div>
+
+          {items.map((item) => (
+            <div key={item.label} style={cancellationGroupRow}>
+              <strong>{item.label}</strong>
+              <span>{item.policies}</span>
+              <strong>{formatEuro(item.premium)}</strong>
+              <strong>{formatEuro(item.commission)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2019,6 +2334,11 @@ const reportOptions = [
     value: "clientesNascidos21Marco",
     label: "Clientes nascidos a 21 de Março",
     description: "Clientes com aniversário no dia 21 de Março.",
+  },
+  {
+    value: "anulacoes",
+    label: "Relatório de anulações",
+    description: "Apólices anuladas por motivo, seguradora, ramo e impacto financeiro.",
   },
   {
     value: "apolicesAntigas",
@@ -2506,6 +2826,98 @@ const workedButton = {
   padding: "9px 12px",
   borderRadius: 8,
   cursor: "pointer",
+  fontWeight: "bold",
+  textAlign: "center",
+};
+
+const subPanelTitle = {
+  marginTop: 28,
+  marginBottom: 14,
+};
+
+const cancellationColumnsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 16,
+  marginBottom: 28,
+};
+
+const cancellationGroupBox = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  padding: 16,
+};
+
+const cancellationGroupTitle = {
+  marginTop: 0,
+  marginBottom: 12,
+};
+
+const cancellationGroupRows = {
+  display: "grid",
+  gap: 8,
+};
+
+const cancellationGroupHeader = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.5fr 1fr 1fr",
+  gap: 8,
+  color: "#6b7280",
+  fontWeight: "bold",
+  fontSize: 12,
+  borderBottom: "1px solid #e5e7eb",
+  paddingBottom: 8,
+};
+
+const cancellationGroupRow = {
+  display: "grid",
+  gridTemplateColumns: "1.5fr 0.5fr 1fr 1fr",
+  gap: 8,
+  alignItems: "center",
+  background: "white",
+  borderRadius: 10,
+  padding: 10,
+  fontSize: 13,
+};
+
+const tableHeaderCancellations = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.6fr 0.9fr 1.1fr 0.8fr 1fr 1fr 1fr 1.1fr 1.7fr 1fr",
+  gap: 10,
+  background: "#f3f4f6",
+  padding: "12px 14px",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 13,
+  minWidth: 1600,
+};
+
+const tableRowCancellations = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1.6fr 0.9fr 1.1fr 0.8fr 1fr 1fr 1fr 1.1fr 1.7fr 1fr",
+  gap: 10,
+  padding: "14px",
+  borderBottom: "1px solid #e5e7eb",
+  alignItems: "center",
+  minWidth: 1600,
+  fontSize: 13,
+};
+
+const premiumLostValue = {
+  color: "#dc2626",
+};
+
+const commissionLostValue = {
+  color: "#b91c1c",
+};
+
+const cancellationReasonBadge = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
   fontWeight: "bold",
   textAlign: "center",
 };
