@@ -512,6 +512,22 @@ export default function ClientePage({ client, policies, allPolicies, claims, tas
     generali_cot_processed_at: "",
   });
 
+  const [showPolicyEventModal, setShowPolicyEventModal] = useState(false);
+  const [selectedEventPolicy, setSelectedEventPolicy] = useState(null);
+  const [policyEventForm, setPolicyEventForm] = useState({
+    type: "Desconto",
+    event_date: new Date().toISOString().split("T")[0],
+    description: "",
+  });
+
+  const [showCancelPolicyModal, setShowCancelPolicyModal] = useState(false);
+  const [selectedCancelPolicy, setSelectedCancelPolicy] = useState(null);
+  const [cancelPolicyForm, setCancelPolicyForm] = useState({
+    cancelled_at: new Date().toISOString().split("T")[0],
+    cancellation_reason: "Preço",
+    cancellation_notes: "",
+  });
+
   const [policyForm, setPolicyForm] = useState({
     policy_number: "",
     branch: "",
@@ -893,6 +909,153 @@ setTimeout(() => {
     window.location.reload();
   }
 
+  function getPolicyEvents(policy) {
+    if (Array.isArray(policy.policy_events)) {
+      return policy.policy_events;
+    }
+
+    try {
+      const parsed = JSON.parse(policy.policy_events || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function openPolicyEventModal(policy) {
+    setSelectedEventPolicy(policy);
+    setPolicyEventForm({
+      type: "Desconto",
+      event_date: new Date().toISOString().split("T")[0],
+      description: "",
+    });
+    setShowPolicyEventModal(true);
+  }
+
+  function closePolicyEventModal() {
+    setShowPolicyEventModal(false);
+    setSelectedEventPolicy(null);
+    setPolicyEventForm({
+      type: "Desconto",
+      event_date: new Date().toISOString().split("T")[0],
+      description: "",
+    });
+  }
+
+  async function savePolicyEvent(event) {
+    event.preventDefault();
+
+    if (!selectedEventPolicy) {
+      alert("Não foi possível identificar a apólice.");
+      return;
+    }
+
+    if (!policyEventForm.description.trim()) {
+      alert("Escreve uma descrição para o movimento.");
+      return;
+    }
+
+    const existingEvents = getPolicyEvents(selectedEventPolicy);
+
+    const nextEvent = {
+      id: `${Date.now()}`,
+      type: policyEventForm.type,
+      event_date: policyEventForm.event_date || new Date().toISOString().split("T")[0],
+      description: policyEventForm.description.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        policy_events: [nextEvent, ...existingEvents],
+      })
+      .eq("id", selectedEventPolicy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closePolicyEventModal();
+    window.location.reload();
+  }
+
+  async function deletePolicyEvent(policy, eventId) {
+    const ok = window.confirm("Eliminar este movimento da apólice?");
+    if (!ok) return;
+
+    const nextEvents = getPolicyEvents(policy).filter(
+      (event) => String(event.id) !== String(eventId)
+    );
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        policy_events: nextEvents,
+      })
+      .eq("id", policy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  function openCancelPolicyModal(policy) {
+    setSelectedCancelPolicy(policy);
+    setCancelPolicyForm({
+      cancelled_at: new Date().toISOString().split("T")[0],
+      cancellation_reason: policy.cancellation_reason || "Preço",
+      cancellation_notes: policy.cancellation_notes || "",
+    });
+    setShowCancelPolicyModal(true);
+  }
+
+  function closeCancelPolicyModal() {
+    setShowCancelPolicyModal(false);
+    setSelectedCancelPolicy(null);
+    setCancelPolicyForm({
+      cancelled_at: new Date().toISOString().split("T")[0],
+      cancellation_reason: "Preço",
+      cancellation_notes: "",
+    });
+  }
+
+  async function confirmCancelPolicy(event) {
+    event.preventDefault();
+
+    if (!selectedCancelPolicy) {
+      alert("Não foi possível identificar a apólice.");
+      return;
+    }
+
+    if (!cancelPolicyForm.cancellation_reason) {
+      alert("Escolhe o motivo da anulação.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        status: "anulada",
+        cancelled_at: cancelPolicyForm.cancelled_at || new Date().toISOString().split("T")[0],
+        cancellation_reason: cancelPolicyForm.cancellation_reason,
+        cancellation_notes: cancelPolicyForm.cancellation_notes || null,
+      })
+      .eq("id", selectedCancelPolicy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closeCancelPolicyModal();
+    window.location.reload();
+  }
+
   async function updatePolicyStatus(policyId, status) {
     const { error } = await supabase
       .from("policies")
@@ -1232,6 +1395,194 @@ const timelineItems = createTimeline(
             </button>
           </div>
         </div>
+
+        {showPolicyEventModal && selectedEventPolicy && (
+          <div style={modalOverlay}>
+            <section style={policyEventModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>📝 Movimento da apólice</h2>
+                  <p style={modalSubtitle}>
+                    {selectedEventPolicy.policy_number || "Sem nº"} ·{" "}
+                    {selectedEventPolicy.branch || "Sem ramo"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={closePolicyEventModal}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={savePolicyEvent} style={policyEventFormGrid}>
+                <label style={fieldLabel}>
+                  Tipo de movimento
+                  <select
+                    style={input}
+                    value={policyEventForm.type}
+                    onChange={(event) =>
+                      setPolicyEventForm({
+                        ...policyEventForm,
+                        type: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="Desconto">Desconto</option>
+                    <option value="Alteração de módulo">Alteração de módulo</option>
+                    <option value="Alteração de capital">Alteração de capital</option>
+                    <option value="Alteração de franquia">Alteração de franquia</option>
+                    <option value="Pedido à seguradora">Pedido à seguradora</option>
+                    <option value="Resposta da seguradora">Resposta da seguradora</option>
+                    <option value="Observação">Observação</option>
+                  </select>
+                </label>
+
+                <label style={fieldLabel}>
+                  Data
+                  <input
+                    style={input}
+                    type="date"
+                    value={policyEventForm.event_date}
+                    onChange={(event) =>
+                      setPolicyEventForm({
+                        ...policyEventForm,
+                        event_date: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Descrição
+                  <textarea
+                    style={policyEventTextarea}
+                    value={policyEventForm.description}
+                    onChange={(event) =>
+                      setPolicyEventForm({
+                        ...policyEventForm,
+                        description: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: Desconto de 7,5% concedido em 18/06/2026; alteração para módulo X; pedido enviado à seguradora..."
+                    required
+                  />
+                </label>
+
+                <div style={formButtons}>
+                  <button type="submit" style={policyEventSaveButton}>
+                    Guardar movimento
+                  </button>
+
+                  <button
+                    type="button"
+                    style={cancelButton}
+                    onClick={closePolicyEventModal}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {showCancelPolicyModal && selectedCancelPolicy && (
+          <div style={modalOverlay}>
+            <section style={cancelPolicyModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>🚫 Anular apólice</h2>
+                  <p style={modalSubtitle}>
+                    {selectedCancelPolicy.policy_number || "Sem nº"} ·{" "}
+                    {selectedCancelPolicy.branch || "Sem ramo"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={closeCancelPolicyModal}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={confirmCancelPolicy} style={policyEventFormGrid}>
+                <label style={fieldLabel}>
+                  Data de anulação
+                  <input
+                    style={input}
+                    type="date"
+                    value={cancelPolicyForm.cancelled_at}
+                    onChange={(event) =>
+                      setCancelPolicyForm({
+                        ...cancelPolicyForm,
+                        cancelled_at: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Motivo
+                  <select
+                    style={input}
+                    value={cancelPolicyForm.cancellation_reason}
+                    onChange={(event) =>
+                      setCancelPolicyForm({
+                        ...cancelPolicyForm,
+                        cancellation_reason: event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="Preço">Preço</option>
+                    <option value="Inexistência do objeto seguro">
+                      Inexistência do objeto seguro
+                    </option>
+                    <option value="Troca de companhia">Troca de companhia</option>
+                    <option value="Substituição">Substituição</option>
+                    <option value="Falta de pagamento">Falta de pagamento</option>
+                    <option value="Pedido do cliente">Pedido do cliente</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </label>
+
+                <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>
+                  Observação
+                  <textarea
+                    style={policyEventTextarea}
+                    value={cancelPolicyForm.cancellation_notes}
+                    onChange={(event) =>
+                      setCancelPolicyForm({
+                        ...cancelPolicyForm,
+                        cancellation_notes: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: cliente mudou por preço; veículo vendido; substituída pela apólice X..."
+                  />
+                </label>
+
+                <div style={formButtons}>
+                  <button type="submit" style={confirmCancelPolicyButton}>
+                    Confirmar anulação
+                  </button>
+
+                  <button
+                    type="button"
+                    style={cancelButton}
+                    onClick={closeCancelPolicyModal}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
 
         {showPoliciesSummaryModal && (
           <div style={modalOverlay}>
@@ -2697,6 +3048,59 @@ const timelineItems = createTimeline(
                     {formatDate(policy.next_payment_date)}
                   </p>
 
+                  {policy.status === "anulada" && (
+                    <div style={cancellationInfoBox}>
+                      <strong>Motivo anulação:</strong>{" "}
+                      {policy.cancellation_reason || "-"}
+                      <p style={cancellationNote}>
+                        {policy.cancellation_notes || "Sem observação."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div style={policyHistoryBox}>
+                    <div style={policyHistoryHeader}>
+                      <strong>Histórico da apólice</strong>
+
+                      <button
+                        type="button"
+                        style={policyEventMiniButton}
+                        onClick={() => openPolicyEventModal(policy)}
+                      >
+                        + Movimento
+                      </button>
+                    </div>
+
+                    {getPolicyEvents(policy).length === 0 ? (
+                      <p style={policyHistoryEmpty}>Sem movimentos registados.</p>
+                    ) : (
+                      <div style={policyEventsList}>
+                        {getPolicyEvents(policy).slice(0, 4).map((event) => (
+                          <div key={event.id} style={policyEventItem}>
+                            <div>
+                              <strong>{event.type}</strong>
+                              <span style={policyEventDate}>
+                                {formatDate(event.event_date)}
+                              </span>
+                            </div>
+
+                            <p style={policyEventDescription}>
+                              {event.description}
+                            </p>
+
+                            <button
+                              type="button"
+                              style={policyEventDeleteButton}
+                              onClick={() => deletePolicyEvent(policy, event.id)}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div style={buttonGroup}>
                     <button style={editButton} onClick={() => editPolicy(policy)}>
                       Editar
@@ -2711,7 +3115,7 @@ const timelineItems = createTimeline(
 
                     <button
                       style={{ ...smallButton, background: "#dc2626" }}
-                      onClick={() => updatePolicyStatus(policy.id, "anulada")}
+                      onClick={() => openCancelPolicyModal(policy)}
                     >
                       Anular
                     </button>
@@ -3635,4 +4039,143 @@ const cotEmptyBadge = {
   padding: "5px 9px",
   fontSize: 12,
   fontWeight: "bold",
+};
+
+
+const policyEventModal = {
+  width: "min(780px, 96vw)",
+  background: "linear-gradient(135deg,#eff6ff,#ffffff)",
+  border: "2px solid #2563eb",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const cancelPolicyModal = {
+  width: "min(780px, 96vw)",
+  background: "linear-gradient(135deg,#fff1f2,#ffffff)",
+  border: "2px solid #dc2626",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const policyEventFormGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+};
+
+const policyEventTextarea = {
+  width: "100%",
+  minHeight: 120,
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  fontSize: 14,
+  boxSizing: "border-box",
+  fontFamily: "Arial, sans-serif",
+};
+
+const policyEventSaveButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const confirmCancelPolicyButton = {
+  background: "#dc2626",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const policyHistoryBox = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  marginTop: 12,
+};
+
+const policyHistoryHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 10,
+};
+
+const policyEventMiniButton = {
+  background: "#2563eb",
+  color: "white",
+  border: "none",
+  padding: "7px 10px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: 12,
+};
+
+const policyHistoryEmpty = {
+  color: "#6b7280",
+  margin: 0,
+  fontSize: 13,
+};
+
+const policyEventsList = {
+  display: "grid",
+  gap: 10,
+};
+
+const policyEventItem = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 10,
+};
+
+const policyEventDate = {
+  color: "#6b7280",
+  fontSize: 12,
+  marginLeft: 8,
+};
+
+const policyEventDescription = {
+  margin: "8px 0",
+  color: "#374151",
+  whiteSpace: "pre-wrap",
+};
+
+const policyEventDeleteButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "6px 9px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: 12,
+};
+
+const cancellationInfoBox = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+  borderRadius: 12,
+  padding: 12,
+  marginTop: 12,
+};
+
+const cancellationNote = {
+  margin: "6px 0 0",
+  color: "#7f1d1d",
+  whiteSpace: "pre-wrap",
 };
