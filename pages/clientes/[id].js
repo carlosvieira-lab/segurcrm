@@ -504,6 +504,13 @@ function timelineStyle(type) {
 export default function ClientePage({ client, policies, allPolicies, claims, tasks, opportunities }) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [showPoliciesSummaryModal, setShowPoliciesSummaryModal] = useState(false);
+  const [showCotModal, setShowCotModal] = useState(false);
+  const [selectedCotPolicy, setSelectedCotPolicy] = useState(null);
+  const [cotForm, setCotForm] = useState({
+    generali_cot_reference: "",
+    generali_cot_created_at: "",
+    generali_cot_processed_at: "",
+  });
 
   const [policyForm, setPolicyForm] = useState({
     policy_number: "",
@@ -717,6 +724,81 @@ async function saveClient(e) {
 
   window.location.reload();
 }
+  function openCotModal(policy) {
+    setSelectedCotPolicy(policy);
+    setCotForm({
+      generali_cot_reference: policy.generali_cot_reference || "COT-",
+      generali_cot_created_at:
+        policy.generali_cot_created_at || new Date().toISOString().split("T")[0],
+      generali_cot_processed_at: policy.generali_cot_processed_at || "",
+    });
+    setShowCotModal(true);
+  }
+
+  function closeCotModal() {
+    setShowCotModal(false);
+    setSelectedCotPolicy(null);
+    setCotForm({
+      generali_cot_reference: "",
+      generali_cot_created_at: "",
+      generali_cot_processed_at: "",
+    });
+  }
+
+  async function saveCot(e) {
+    e.preventDefault();
+
+    if (!selectedCotPolicy) {
+      alert("Não foi possível identificar a apólice.");
+      return;
+    }
+
+    const cleanReference = cotForm.generali_cot_reference.trim();
+
+    if (!cleanReference) {
+      alert("Preenche a referência COT.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        generali_cot_reference: cleanReference,
+        generali_cot_created_at: cotForm.generali_cot_created_at || null,
+        generali_cot_processed_at: cotForm.generali_cot_processed_at || null,
+      })
+      .eq("id", selectedCotPolicy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closeCotModal();
+    window.location.reload();
+  }
+
+  async function clearCot(policy) {
+    const ok = window.confirm("Remover a COT desta apólice?");
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("policies")
+      .update({
+        generali_cot_reference: null,
+        generali_cot_created_at: null,
+        generali_cot_processed_at: null,
+      })
+      .eq("id", policy.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
   async function editPolicy(policy) {
     setEditingPolicyId(policy.id);
     setShowEditPolicyForm(true);
@@ -1405,6 +1487,92 @@ const timelineItems = createTimeline(
     </form>
   </section>
 )}
+        {showCotModal && selectedCotPolicy && (
+          <div style={modalOverlay}>
+            <section style={cotModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={modalTitle}>🟠 COT Generali</h2>
+                  <p style={modalSubtitle}>
+                    {selectedCotPolicy.policy_number || "Sem nº apólice"} ·{" "}
+                    {selectedCotPolicy.branch || "Sem ramo"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={cancelButton}
+                  onClick={closeCotModal}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <form onSubmit={saveCot} style={cotFormGrid}>
+                <label style={fieldLabel}>
+                  Referência COT
+                  <input
+                    style={input}
+                    value={cotForm.generali_cot_reference}
+                    onChange={(e) =>
+                      setCotForm({
+                        ...cotForm,
+                        generali_cot_reference: e.target.value,
+                      })
+                    }
+                    placeholder="COT-xxxxxxxx"
+                    required
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Data criação COT
+                  <input
+                    style={input}
+                    type="date"
+                    value={cotForm.generali_cot_created_at}
+                    onChange={(e) =>
+                      setCotForm({
+                        ...cotForm,
+                        generali_cot_created_at: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <label style={fieldLabel}>
+                  Data pedido processamento
+                  <input
+                    style={input}
+                    type="date"
+                    value={cotForm.generali_cot_processed_at}
+                    onChange={(e) =>
+                      setCotForm({
+                        ...cotForm,
+                        generali_cot_processed_at: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                <div style={formButtons}>
+                  <button type="submit" style={cotSaveButton}>
+                    Guardar COT
+                  </button>
+
+                  <button
+                    type="button"
+                    style={cancelButton}
+                    onClick={closeCotModal}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
         {showCommercialCalculator && (
           <section style={calculatorCard}>
             <div style={calculatorHeader}>
@@ -2465,6 +2633,65 @@ const timelineItems = createTimeline(
                     <strong>Renovação anual:</strong> {formatDate(policy.renewal_date)}
                   </p>
 
+                  {String(policy.insurers?.name || "").toUpperCase().includes("GENERALI") && (
+                    <div style={generaliCotBox}>
+                      <div style={generaliCotHeader}>
+                        <strong>COT Generali</strong>
+
+                        <span
+                          style={
+                            policy.generali_cot_reference
+                              ? policy.generali_cot_processed_at
+                                ? cotProcessedBadge
+                                : cotOpenBadge
+                              : cotEmptyBadge
+                          }
+                        >
+                          {policy.generali_cot_reference
+                            ? policy.generali_cot_processed_at
+                              ? "Processada"
+                              : "Aberta"
+                            : "Sem COT"}
+                        </span>
+                      </div>
+
+                      <p style={cotLine}>
+                        <strong>Referência:</strong>{" "}
+                        {policy.generali_cot_reference || "-"}
+                      </p>
+
+                      <p style={cotLine}>
+                        <strong>Data criação:</strong>{" "}
+                        {formatDate(policy.generali_cot_created_at)}
+                      </p>
+
+                      <p style={cotLine}>
+                        <strong>Pedido processamento:</strong>{" "}
+                        {formatDate(policy.generali_cot_processed_at)}
+                      </p>
+
+                      <div style={cotActions}>
+                        <button
+                          type="button"
+                          style={cotButton}
+                          onClick={() => openCotModal(policy)}
+                        >
+                          Editar COT
+                        </button>
+
+                        {policy.generali_cot_reference && (
+                          <button
+                            type="button"
+                            style={cotClearButton}
+                            onClick={() => clearCot(policy)}
+                          >
+                            Remover COT
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <p>
                     <strong>Próximo pagamento:</strong>{" "}
                     {formatDate(policy.next_payment_date)}
@@ -3304,3 +3531,671 @@ const summaryTd = {
   borderBottom: "1px solid #e5e7eb",
   color: "#111827",
 };
+
+const cotModal = {
+  width: "min(760px, 96vw)",
+  background: "linear-gradient(135deg,#fff7ed,#ffedd5)",
+  border: "2px solid #ea580c",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const cotFormGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+};
+
+const generaliCotBox = {
+  background: "#fff7ed",
+  border: "1px solid #fdba74",
+  borderRadius: 14,
+  padding: 14,
+  marginTop: 12,
+  marginBottom: 12,
+};
+
+const generaliCotHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 10,
+};
+
+const cotLine = {
+  margin: "6px 0",
+  color: "#374151",
+};
+
+const cotActions = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 8,
+};
+
+const cotButton = {
+  background: "#ea580c",
+  color: "white",
+  border: "none",
+  padding: "9px 12px",
+  borderRadius: 9,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const cotSaveButton = {
+  background: "#ea580c",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const cotClearButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "9px 12px",
+  borderRadius: 9,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const cotOpenBadge = {
+  background: "#fef3c7",
+  color: "#92400e",
+  border: "1px solid #f59e0b",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const cotProcessedBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const cotEmptyBadge = {
+  background: "#e5e7eb",
+  color: "#374151",
+  border: "1px solid #d1d5db",
+  borderRadius: 999,
+  padding: "5px 9px",
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+
+
+FICHEIRO 2: pages/cots-generali.js
+
+import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
+import Sidebar from "../components/Sidebar";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://accmdxprsetsqsrepflq.supabase.co";
+
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+function formatDate(date) {
+  if (!date) return "-";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(date));
+}
+
+function daysSince(date) {
+  if (!date) return "-";
+
+  const today = new Date();
+  const target = new Date(date);
+
+  today.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+
+  return Math.max(
+    0,
+    Math.floor((today - target) / (1000 * 60 * 60 * 24))
+  );
+}
+
+export async function getServerSideProps() {
+  const { data: policies, error } = await supabase
+    .from("policies")
+    .select(`
+      id,
+      client_id,
+      policy_number,
+      branch,
+      status,
+      generali_cot_reference,
+      generali_cot_created_at,
+      generali_cot_processed_at,
+      clients(id, name, nif),
+      insurers(name)
+    `)
+    .not("generali_cot_reference", "is", null)
+    .order("generali_cot_created_at", { ascending: false });
+
+  return {
+    props: {
+      policies: policies || [],
+      loadError: error?.message || null,
+    },
+  };
+}
+
+export default function CotsGenerali({ policies, loadError }) {
+  const abertas = (policies || []).filter(
+    (policy) =>
+      policy.generali_cot_reference &&
+      !policy.generali_cot_processed_at
+  );
+
+  const processadas = (policies || []).filter(
+    (policy) =>
+      policy.generali_cot_reference &&
+      policy.generali_cot_processed_at
+  );
+
+  return (
+    <div style={page}>
+      <Sidebar active="cots-generali" />
+
+      <main style={main}>
+        <div style={header}>
+          <div>
+            <h1 style={title}>COTs Generali</h1>
+            <p style={subtitle}>
+              Gestão de referências COT abertas e processadas nas apólices Generali.
+            </p>
+          </div>
+
+          <Link href="/" style={backButton}>
+            Voltar
+          </Link>
+        </div>
+
+        {loadError && (
+          <div style={errorBox}>
+            Erro ao carregar COTs: {loadError}
+          </div>
+        )}
+
+        <section style={summaryGrid}>
+          <SummaryCard title="COTs abertas" value={abertas.length} color="#f59e0b" />
+          <SummaryCard title="COTs processadas" value={processadas.length} color="#16a34a" />
+          <SummaryCard title="Total COTs" value={(policies || []).length} color="#2563eb" />
+        </section>
+
+        <CotTable title="🟠 COTs abertas" items={abertas} showDays />
+        <CotTable title="🟢 COTs processadas" items={processadas} />
+      </main>
+    </div>
+  );
+}
+
+function CotTable({ title, items, showDays = false }) {
+  return (
+    <section style={panel}>
+      <h2 style={sectionTitle}>{title}</h2>
+
+      {items.length === 0 ? (
+        <p style={muted}>Sem registos.</p>
+      ) : (
+        <div style={tableWrap}>
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Cliente</th>
+                <th style={th}>NIF</th>
+                <th style={th}>Apólice</th>
+                <th style={th}>Ramo</th>
+                <th style={th}>COT</th>
+                <th style={th}>Data criação</th>
+                <th style={th}>
+                  {showDays ? "Dias aberta" : "Data processamento"}
+                </th>
+                <th style={th}>Ações</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {items.map((policy) => (
+                <tr key={policy.id}>
+                  <td style={td}>{policy.clients?.name || "-"}</td>
+                  <td style={td}>{policy.clients?.nif || "-"}</td>
+                  <td style={td}>{policy.policy_number || "-"}</td>
+                  <td style={td}>{policy.branch || "-"}</td>
+                  <td style={tdStrong}>{policy.generali_cot_reference}</td>
+                  <td style={td}>{formatDate(policy.generali_cot_created_at)}</td>
+                  <td style={tdStrong}>
+                    {showDays
+                      ? daysSince(policy.generali_cot_created_at)
+                      : formatDate(policy.generali_cot_processed_at)}
+                  </td>
+                  <td style={td}>
+                    {policy.client_id ? (
+                      <Link href={`/clientes/${policy.client_id}`} style={clientButton}>
+                        Abrir cliente
+                      </Link>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SummaryCard({ title, value, color }) {
+  return (
+    <div style={summaryCard}>
+      <span style={summaryLabel}>{title}</span>
+      <strong style={{ ...summaryValue, color }}>{value}</strong>
+    </div>
+  );
+}
+
+const page = {
+  display: "flex",
+  minHeight: "100vh",
+  background: "#f3f4f6",
+  fontFamily: "Arial, sans-serif",
+};
+
+const main = {
+  flex: 1,
+  padding: 40,
+};
+
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
+  marginBottom: 30,
+};
+
+const title = {
+  fontSize: 42,
+  margin: 0,
+};
+
+const subtitle = {
+  color: "#6b7280",
+  marginTop: 10,
+};
+
+const backButton = {
+  background: "#111827",
+  color: "white",
+  padding: "12px 16px",
+  borderRadius: 10,
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const errorBox = {
+  background: "#fee2e2",
+  color: "#991b1b",
+  border: "1px solid #fecaca",
+  borderRadius: 14,
+  padding: 14,
+  marginBottom: 20,
+};
+
+const summaryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+  marginBottom: 24,
+};
+
+const summaryCard = {
+  background: "white",
+  borderRadius: 16,
+  padding: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  display: "grid",
+  gap: 8,
+};
+
+const summaryLabel = {
+  color: "#6b7280",
+};
+
+const summaryValue = {
+  fontSize: 30,
+};
+
+const panel = {
+  background: "white",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const sectionTitle = {
+  marginTop: 0,
+};
+
+const muted = {
+  color: "#6b7280",
+};
+
+const tableWrap = {
+  overflowX: "auto",
+};
+
+const table = {
+  width: "100%",
+  borderCollapse: "collapse",
+  minWidth: 950,
+};
+
+const th = {
+  textAlign: "left",
+  padding: 10,
+  borderBottom: "2px solid #e5e7eb",
+  background: "#f9fafb",
+  color: "#374151",
+};
+
+const td = {
+  padding: 10,
+  borderBottom: "1px solid #e5e7eb",
+  color: "#111827",
+};
+
+const tdStrong = {
+  padding: 10,
+  borderBottom: "1px solid #e5e7eb",
+  color: "#111827",
+  fontWeight: "bold",
+};
+
+const clientButton = {
+  background: "#2563eb",
+  color: "white",
+  padding: "8px 10px",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: "bold",
+  display: "inline-block",
+};
+
+
+
+FICHEIRO 3: components/Sidebar.js
+
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://accmdxprsetsqsrepflq.supabase.co";
+
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export default function Sidebar({ active }) {
+  const router = useRouter();
+
+  const clientId =
+    typeof router.query.id === "string"
+      ? router.query.id
+      : Array.isArray(router.query.id)
+      ? router.query.id[0]
+      : null;
+
+  const showClientCompactButton =
+    router.pathname === "/clientes/[id]" ||
+    router.pathname === "/clientes/[id]/compacto";
+
+  async function logout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
+  return (
+    <aside style={sidebar}>
+      <div>
+        <h2 style={logo}>SegurCRM</h2>
+
+        <nav style={nav}>
+          <MenuItem href="/" label="Dashboard" active={active === "dashboard"} />
+
+          <MenuItem
+            href="/assistant"
+            label="✨ IA"
+            active={active === "assistant"}
+          />
+
+          <MenuItem
+            href="/pesquisa"
+            label="Pesquisa"
+            active={active === "pesquisa"}
+          />
+
+          <MenuItem
+            href="/clientes"
+            label="Clientes"
+            active={active === "clientes"}
+          />
+
+          {showClientCompactButton && clientId && (
+            <MenuItem
+              href={`/clientes/${clientId}/compacto`}
+              label="Cliente Compacto"
+              active={active === "cliente-compacto"}
+            />
+          )}
+
+          <MenuItem
+            href="/apolices"
+            label="Apólices"
+            active={active === "apolices"}
+          />
+
+          <MenuItem
+            href="/renovacoes"
+            label="Renovações"
+            active={active === "renovacoes"}
+          />
+
+          <MenuItem
+            href="/financeiro"
+            label="Financeiro"
+            active={active === "financeiro"}
+          />
+
+          <MenuItem
+            href="/comissoes/recebimentos"
+            label="Recebimentos Comissões"
+            active={active === "recebimentos-comissoes"}
+          />
+
+          <MenuItem
+            href="/campanhas"
+            label="Campanhas"
+            active={active === "campanhas"}
+          />
+
+          <MenuItem
+            href="/negocios-financeiros"
+            label="Negócios Financeiros"
+            active={active === "negocios-financeiros"}
+          />
+
+          <MenuItem
+            href="/orcamento-seguros"
+            label="Orçamento Seguros"
+            active={active === "orcamento-seguros"}
+          />
+
+          <MenuItem
+            href="/cots-generali"
+            label="COTs Generali"
+            active={active === "cots-generali"}
+          />
+
+          <MenuItem
+            href="/relatorios"
+            label="Relatórios"
+            active={active === "relatorios"}
+          />
+
+          <MenuItem
+            href="/importacoes"
+            label="Importações"
+            active={active === "importacoes"}
+          />
+
+          <MenuItem
+            href="/tarefas"
+            label="Tarefas"
+            active={active === "tarefas"}
+          />
+
+          <MenuItem
+            href="/tarefas/compacto"
+            label="Tarefas Compacto"
+            active={active === "tarefas-compacto"}
+          />
+
+          <MenuItem
+            href="/oportunidades"
+            label="Oportunidades"
+            active={active === "oportunidades"}
+          />
+
+          <MenuItem
+            href="/oportunidades/compacto"
+            label="Oportunidades Compacto"
+            active={active === "oportunidades-compacto"}
+          />
+
+          <MenuItem
+            href="/sinistros"
+            label="Sinistros"
+            active={active === "sinistros"}
+          />
+        </nav>
+      </div>
+
+      <button style={logoutButton} onClick={logout}>
+        Sair
+      </button>
+    </aside>
+  );
+}
+
+function MenuItem({ href, label, active }) {
+  const isNegociosFinanceiros = href === "/negocios-financeiros";
+  const isOrcamentoSeguros = href === "/orcamento-seguros";
+  const isCotsGenerali = href === "/cots-generali";
+
+  return (
+    <Link
+      href={href}
+      style={{
+        ...menuItem,
+        ...(active ? activeMenuItem : {}),
+
+        ...(isNegociosFinanceiros
+          ? {
+              background: "#facc15",
+              color: "#000000",
+            }
+          : {}),
+
+        ...(isOrcamentoSeguros
+          ? {
+              background: "#22c55e",
+              color: "#ffffff",
+            }
+          : {}),
+
+        ...(isCotsGenerali
+          ? {
+              background: "#ea580c",
+              color: "#ffffff",
+            }
+          : {}),
+      }}
+    >
+      {label}
+    </Link>
+  );
+}
+
+const sidebar = {
+  width: 240,
+  background: "#111827",
+  color: "white",
+  padding: 24,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  minHeight: "100vh",
+};
+
+const logo = {
+  marginBottom: 40,
+  fontSize: 28,
+};
+
+const nav = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const menuItem = {
+  color: "white",
+  textDecoration: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const activeMenuItem = {
+  background: "#2563eb",
+};
+
+const logoutButton = {
+  background: "#dc2626",
+  color: "white",
+  border: "none",
+  padding: "12px 14px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
