@@ -108,6 +108,12 @@ export default function Sidebar({ active }) {
           />
 
           <MenuItem
+            href="/cots-generali"
+            label="COTs Generali"
+            active={active === "cots-generali"}
+          />
+
+          <MenuItem
             href="/relatorios"
             label="Relatórios"
             active={active === "relatorios"}
@@ -161,6 +167,7 @@ export default function Sidebar({ active }) {
 function MenuItem({ href, label, active }) {
   const isNegociosFinanceiros = href === "/negocios-financeiros";
   const isOrcamentoSeguros = href === "/orcamento-seguros";
+  const isCotsGenerali = href === "/cots-generali";
 
   return (
     <Link
@@ -179,6 +186,13 @@ function MenuItem({ href, label, active }) {
         ...(isOrcamentoSeguros
           ? {
               background: "#22c55e",
+              color: "#ffffff",
+            }
+          : {}),
+
+        ...(isCotsGenerali
+          ? {
+              background: "#ea580c",
               color: "#ffffff",
             }
           : {}),
