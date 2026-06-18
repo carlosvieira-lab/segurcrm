@@ -60,8 +60,7 @@ export async function getServerSideProps() {
       annual_premium,
       clients(id, name, nif),
       insurers(name)
-    `)
-    .neq("status", "anulada");
+    `);
 
   return {
     props: {
@@ -110,6 +109,42 @@ function normalizeText(value) {
     .trim();
 }
 
+function normalizeStatus(value) {
+  return normalizeText(value);
+}
+
+function isPolicyActiveForCampaign(policy) {
+  return normalizeStatus(policy.status) !== "ANULADA";
+}
+
+function parseDateOnly(value, endOfDay = false) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+
+  if (!text) return null;
+
+  let date = null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const [year, month, day] = text.slice(0, 10).split("-").map(Number);
+    date = new Date(year, month - 1, day);
+  } else {
+    date = new Date(text);
+  }
+
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  if (endOfDay) {
+    date.setHours(23, 59, 59, 999);
+  } else {
+    date.setHours(0, 0, 0, 0);
+  }
+
+  return date;
+}
+
+
 function getCampaignThresholds(campaign) {
   if (Array.isArray(campaign.thresholds)) return campaign.thresholds;
 
@@ -155,17 +190,21 @@ function getDateBasisLabel(dateBasis) {
 }
 
 function policyCountsForCampaign(policy, campaign) {
-  const rawDate = getPolicyCampaignDate(policy, campaign);
-  const policyDate = rawDate ? new Date(rawDate) : null;
-  const startDate = new Date(campaign.start_date);
-  const endDate = new Date(campaign.end_date);
+  if (!isPolicyActiveForCampaign(policy)) return false;
 
-  if (!policyDate || Number.isNaN(policyDate.getTime())) return false;
+  const rawDate = getPolicyCampaignDate(policy, campaign);
+  const policyDate = parseDateOnly(rawDate);
+  const startDate = parseDateOnly(campaign.start_date);
+  const endDate = parseDateOnly(campaign.end_date, true);
+
+  if (!policyDate || !startDate || !endDate) return false;
 
   const policyInsurer = normalizeText(policy.insurers?.name);
   const campaignInsurer = normalizeText(campaign.insurer_name);
 
-  if (!policyInsurer.includes(campaignInsurer)) return false;
+  if (campaignInsurer && !policyInsurer.includes(campaignInsurer)) {
+    return false;
+  }
 
   const allowedBranches = (campaign.product_branches || []).map(normalizeText);
   const policyBranch = normalizeText(policy.branch);
@@ -1193,7 +1232,7 @@ function CampaignList({
 
                 {result.matchingPolicies.length === 0 ? (
                   <p style={muted}>
-                    Ainda não existem apólices no CRM que contem para esta campanha.
+Ainda não existem apólices no CRM que contem para esta campanha. Confirma se a seguradora, o ramo e a data usada no critério da campanha coincidem com a apólice nova.
                   </p>
                 ) : (
                   <div style={table}>
@@ -1340,4 +1379,3 @@ const printFooter = {
   color: "#64748b",
   fontSize: 13,
 };
-
