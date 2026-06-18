@@ -388,6 +388,8 @@ export default function Dashboard({
   const [showCompletedAlerts, setShowCompletedAlerts] = useState(false);
   const [alertForm, setAlertForm] = useState(buildInitialAlertForm);
   const [saving, setSaving] = useState(false);
+  const [completionModalAlert, setCompletionModalAlert] = useState(null);
+  const [completionNote, setCompletionNote] = useState("");
 
   async function saveDashboardAlert(openCalendar = false) {
     if (!alertForm.title.trim()) {
@@ -453,24 +455,39 @@ export default function Dashboard({
     window.location.reload();
   }
 
-  async function completeDashboardAlert(alertItem) {
-    const ok = window.confirm(`Marcar como concluído: ${alertItem.title}?`);
-    if (!ok) return;
+  function openCompleteAlertModal(alertItem) {
+    setCompletionModalAlert(alertItem);
+    setCompletionNote("");
+  }
+
+  function closeCompleteAlertModal() {
+    setCompletionModalAlert(null);
+    setCompletionNote("");
+  }
+
+  async function completeDashboardAlert() {
+    if (!completionModalAlert) return;
+
+    setSaving(true);
 
     const { error } = await supabase
       .from("dashboard_alerts")
       .update({
         status: "concluido",
+        completion_note: completionNote.trim() || null,
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq("id", alertItem.id);
+      .eq("id", completionModalAlert.id);
+
+    setSaving(false);
 
     if (error) {
       alert(error.message);
       return;
     }
 
+    closeCompleteAlertModal();
     window.location.reload();
   }
 
@@ -608,6 +625,62 @@ export default function Dashboard({
           </div>
         )}
 
+        {completionModalAlert && (
+          <div style={modalOverlay}>
+            <div style={completionAlertModal}>
+              <div style={modalHeader}>
+                <div>
+                  <h2 style={completionAlertTitle}>
+                    ✅ Concluir alerta
+                  </h2>
+
+                  <p style={subtitle}>
+                    {completionModalAlert.title}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  style={grayButton}
+                  onClick={closeCompleteAlertModal}
+                >
+                  Fechar
+                </button>
+              </div>
+
+              <label style={fieldLabel}>
+                Comentário de conclusão
+                <textarea
+                  style={textarea}
+                  value={completionNote}
+                  onChange={(event) => setCompletionNote(event.target.value)}
+                  placeholder="Ex: Paguei no dia 18/06 por MB, confirmei com o cliente, assunto resolvido..."
+                  autoFocus
+                />
+              </label>
+
+              <div style={modalActions}>
+                <button
+                  type="button"
+                  style={purpleButton}
+                  disabled={saving}
+                  onClick={completeDashboardAlert}
+                >
+                  {saving ? "A guardar..." : "Guardar conclusão"}
+                </button>
+
+                <button
+                  type="button"
+                  style={grayButton}
+                  onClick={closeCompleteAlertModal}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showUpcomingAlertsModal && (
           <div style={modalOverlay}>
             <div style={upcomingAlertsModal}>
@@ -641,7 +714,7 @@ export default function Dashboard({
                     <AlertRow
                       key={item.id}
                       item={item}
-                      onComplete={completeDashboardAlert}
+                      onComplete={openCompleteAlertModal}
                       onCalendar={markGoogleCalendarCreated}
                     />
                   ))}
@@ -699,7 +772,7 @@ export default function Dashboard({
                 <AlertRow
                   key={item.id}
                   item={item}
-                  onComplete={completeDashboardAlert}
+                  onComplete={openCompleteAlertModal}
                   onCalendar={markGoogleCalendarCreated}
                   important
                 />
@@ -739,6 +812,13 @@ export default function Dashboard({
                       <p style={completedAlertMeta}>
                         Concluído: {formatDate(item.completed_at)}
                       </p>
+
+                      {item.completion_note && (
+                        <div style={completedNoteBox}>
+                          <strong>Comentário:</strong>
+                          <p style={completedNoteText}>{item.completion_note}</p>
+                        </div>
+                      )}
                     </div>
 
                     <div style={statusBadgeRow}>
@@ -1173,6 +1253,20 @@ const alertModal = {
   boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
 };
 
+const completionAlertModal = {
+  width: "min(760px, 96vw)",
+  background: "linear-gradient(135deg,#ecfdf5,#dcfce7)",
+  border: "2px solid #16a34a",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 25px 80px rgba(0,0,0,0.35)",
+};
+
+const completionAlertTitle = {
+  margin: 0,
+  color: "#166534",
+};
+
 const upcomingAlertsModal = {
   width: "min(980px, 96vw)",
   maxHeight: "86vh",
@@ -1448,6 +1542,20 @@ const completedAlertItem = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 14,
+};
+
+const completedNoteBox = {
+  background: "rgba(255,255,255,0.75)",
+  border: "1px solid #d1d5db",
+  borderRadius: 10,
+  padding: 10,
+  marginTop: 10,
+};
+
+const completedNoteText = {
+  margin: "6px 0 0",
+  color: "#111827",
+  whiteSpace: "pre-wrap",
 };
 
 const completedAlertMeta = {
