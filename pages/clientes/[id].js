@@ -4198,4 +4198,3 @@ const logoutButton = {
   cursor: "pointer",
   fontWeight: "bold",
 };
-
