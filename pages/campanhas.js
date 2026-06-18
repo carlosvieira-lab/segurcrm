@@ -35,6 +35,48 @@ const monthNames = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
+async function fetchAllPoliciesForCampaigns() {
+  const pageSize = 1000;
+  let from = 0;
+  let allPolicies = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("policies")
+      .select(`
+        id,
+        client_id,
+        policy_number,
+        branch,
+        status,
+        start_date,
+        policy_issue_date,
+        created_at,
+        annual_premium,
+        clients(id, name, nif),
+        insurers(name)
+      `)
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      console.error(error);
+      break;
+    }
+
+    const rows = data || [];
+    allPolicies = [...allPolicies, ...rows];
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return allPolicies;
+}
+
 export async function getServerSideProps() {
   const { data: campaigns } = await supabase
     .from("campaigns")
@@ -46,21 +88,7 @@ export async function getServerSideProps() {
     .select("*")
     .order("created_at", { ascending: true });
 
-  const { data: policies } = await supabase
-    .from("policies")
-    .select(`
-      id,
-      client_id,
-      policy_number,
-      branch,
-      status,
-      start_date,
-      policy_issue_date,
-      created_at,
-      annual_premium,
-      clients(id, name, nif),
-      insurers(name)
-    `);
+  const policies = await fetchAllPoliciesForCampaigns();
 
   return {
     props: {
@@ -1232,7 +1260,7 @@ function CampaignList({
 
                 {result.matchingPolicies.length === 0 ? (
                   <p style={muted}>
-Ainda não existem apólices no CRM que contem para esta campanha. Confirma se a seguradora, o ramo e a data usada no critério da campanha coincidem com a apólice nova.
+                    Ainda não existem apólices no CRM que contem para esta campanha.
                   </p>
                 ) : (
                   <div style={table}>
