@@ -165,6 +165,7 @@ export default function Sidebar({ active }) {
 }
 
 function MenuItem({ href, label, active }) {
+  const isClientes = href === "/clientes";
   const isNegociosFinanceiros = href === "/negocios-financeiros";
   const isOrcamentoSeguros = href === "/orcamento-seguros";
   const isCotsGenerali = href === "/cots-generali";
@@ -176,10 +177,23 @@ function MenuItem({ href, label, active }) {
         ...menuItem,
         ...(active ? activeMenuItem : {}),
 
+        ...(isClientes
+          ? {
+              background: "#2563eb",
+              color: "#ffffff",
+              fontWeight: "800",
+              fontSize: "15px",
+              letterSpacing: "0.3px",
+            }
+          : {}),
+
         ...(isNegociosFinanceiros
           ? {
               background: "#facc15",
               color: "#000000",
+              fontWeight: "900",
+              fontSize: "15px",
+              letterSpacing: "0.4px",
             }
           : {}),
 
@@ -187,6 +201,7 @@ function MenuItem({ href, label, active }) {
           ? {
               background: "#22c55e",
               color: "#ffffff",
+              fontWeight: "800",
             }
           : {}),
 
@@ -194,6 +209,7 @@ function MenuItem({ href, label, active }) {
           ? {
               background: "#ea580c",
               color: "#ffffff",
+              fontWeight: "800",
             }
           : {}),
       }}
@@ -228,13 +244,17 @@ const nav = {
 const menuItem = {
   color: "white",
   textDecoration: "none",
-  padding: "12px 14px",
-  borderRadius: 10,
-  fontWeight: "bold",
+  padding: "13px 15px",
+  borderRadius: 12,
+  fontWeight: "600",
+  background: "#1f2937",
+  transition: "all 0.2s ease",
+  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
 };
 
 const activeMenuItem = {
-  background: "#2563eb",
+  transform: "translateX(3px)",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
 };
 
 const logoutButton = {
@@ -242,7 +262,7 @@ const logoutButton = {
   color: "white",
   border: "none",
   padding: "12px 14px",
-  borderRadius: 10,
+  borderRadius: 12,
   cursor: "pointer",
   fontWeight: "bold",
 };
