@@ -71,6 +71,71 @@ function calculateAge(date) {
   return age;
 }
 
+function parseBirthDate(date) {
+  if (!date) return null;
+
+  const text = String(date).trim();
+
+  if (!text) return null;
+
+  let parsedDate = null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const [year, month, day] = text.slice(0, 10).split("-").map(Number);
+    parsedDate = new Date(year, month - 1, day);
+  } else if (/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/.test(text)) {
+    const [dayRaw, monthRaw, yearRaw] = text.split(/[\/\-.]/);
+    const day = Number(dayRaw);
+    const month = Number(monthRaw);
+    let year = Number(yearRaw);
+
+    if (yearRaw.length === 2) {
+      year = year >= 50 ? 1900 + year : 2000 + year;
+    }
+
+    parsedDate = new Date(year, month - 1, day);
+  } else {
+    parsedDate = new Date(text);
+  }
+
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) return null;
+
+  return parsedDate;
+}
+
+function buildClientsBornOnMarch21Report(clients) {
+  return clients
+    .map((client) => {
+      const birthDate = parseBirthDate(client.birth_date);
+
+      return {
+        id: client.id,
+        name: client.name || "Sem nome",
+        nif: client.nif || "-",
+        phone: client.phone || "-",
+        email: client.email || "-",
+        birthDate: client.birth_date || null,
+        parsedBirthDate: birthDate,
+        age: calculateAge(client.birth_date),
+      };
+    })
+    .filter(
+      (client) =>
+        client.parsedBirthDate &&
+        client.parsedBirthDate.getDate() === 21 &&
+        client.parsedBirthDate.getMonth() === 2
+    )
+    .sort((a, b) => {
+      const ageA = a.age ?? 999;
+      const ageB = b.age ?? 999;
+
+      if (ageA !== ageB) return ageB - ageA;
+
+      return a.name.localeCompare(b.name);
+    });
+}
+
+
 function calculateAnnualCommission(policy) {
   const commission = Number(policy.commission_per_payment || 0);
   const frequency = String(policy.payment_frequency || "anual").toLowerCase();
@@ -731,6 +796,7 @@ export default function Relatorios({ clients, policies, opportunities }) {
   }
 
   const clientsUntil40 = buildClientsUntil40Report(clients);
+  const clientsBornOnMarch21 = buildClientsBornOnMarch21Report(clients);
 
   const portfolioAudit = buildPortfolioAuditReport(policies);
 
@@ -966,6 +1032,33 @@ export default function Relatorios({ clients, policies, opportunities }) {
     );
   }
 
+  function exportClientsBornOnMarch21Csv() {
+    const header = [
+      "Cliente",
+      "NIF",
+      "Idade",
+      "Data nascimento",
+      "Telefone",
+      "Email",
+    ];
+
+    const rows = clientsBornOnMarch21.map((client) => [
+      client.name,
+      client.nif,
+      client.age ?? "-",
+      formatDate(client.birthDate),
+      client.phone,
+      client.email,
+    ]);
+
+    exportCsv(
+      "clientes_nascidos_21_marco.csv",
+      header,
+      rows
+    );
+  }
+
+
   function exportPortfolioAuditCsv() {
     const header = [
       "Cliente",
@@ -1080,6 +1173,11 @@ export default function Relatorios({ clients, policies, opportunities }) {
 
     if (selectedReport === "clientesAte40") {
       exportClientsUntil40Csv();
+      return;
+    }
+
+    if (selectedReport === "clientesNascidos21Marco") {
+      exportClientsBornOnMarch21Csv();
       return;
     }
 
@@ -1688,6 +1786,62 @@ export default function Relatorios({ clients, policies, opportunities }) {
           </section>
         )}
 
+        {selectedReport === "clientesNascidos21Marco" && (
+          <section style={panel}>
+            <h2 style={panelTitle}>
+              Clientes nascidos a 21 de Março
+            </h2>
+
+            <p style={muted}>
+              Lista de clientes com data de nascimento registada no dia 21 de Março.
+            </p>
+
+            <div style={summaryGrid}>
+              <div style={summaryBox}>
+                <span style={summaryLabel}>Clientes encontrados</span>
+                <strong style={summaryValue}>{clientsBornOnMarch21.length}</strong>
+              </div>
+            </div>
+
+            {clientsBornOnMarch21.length === 0 ? (
+              <p style={muted}>
+                Sem clientes nascidos a 21 de Março.
+              </p>
+            ) : (
+              <div style={table}>
+                <div style={tableHeaderClientsAge}>
+                  <span>Cliente</span>
+                  <span>NIF</span>
+                  <span>Idade</span>
+                  <span>Data nascimento</span>
+                  <span>Telefone</span>
+                  <span>Ficha</span>
+                </div>
+
+                {clientsBornOnMarch21.map((client) => (
+                  <div
+                    key={client.id}
+                    style={tableRowClientsAge}
+                  >
+                    <strong>{client.name}</strong>
+                    <span>{client.nif}</span>
+                    <strong>{client.age ?? "-"}</strong>
+                    <span>{formatDate(client.birthDate)}</span>
+                    <span>{client.phone}</span>
+
+                    <Link
+                      href={`/clientes/${client.id}`}
+                      style={openClientButton}
+                    >
+                      Abrir ficha
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {selectedReport === "apolicesAntigas" && (
           <section style={panel}>
             <h2 style={panelTitle}>
@@ -1860,6 +2014,11 @@ const reportOptions = [
     value: "clientesAte40",
     label: "Clientes até 40 anos",
     description: "Clientes com idade até 40 anos.",
+  },
+  {
+    value: "clientesNascidos21Marco",
+    label: "Clientes nascidos a 21 de Março",
+    description: "Clientes com aniversário no dia 21 de Março.",
   },
   {
     value: "apolicesAntigas",
@@ -2353,4 +2512,3 @@ const workedButton = {
 
 const muted = {
   color: "#6b7280",
-};
