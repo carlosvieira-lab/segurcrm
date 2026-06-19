@@ -199,17 +199,18 @@ export default function Apolices({ policies }) {
           : "0.0",
     }));
 
+  const vidaBranches = ["VIDA", "APS", "VIAGEM"];
   const lifeInsurerNames = ["GENERALI", "REAL VIDA", "ZURICH"];
 
-  const lifePortfolioStats = lifeInsurerNames.map((insurerName) => {
-    const companyPolicies = activePolicies.filter((policy) => {
-      const policyInsurer = normalizeText(policy.insurers?.name);
-      const policyBranch = normalizeText(policy.branch);
+  function isVidaPolicy(policy) {
+    return vidaBranches.includes(normalizeText(policy.branch));
+  }
 
-      return (
-        policyInsurer === normalizeText(insurerName) &&
-        policyBranch.includes("VIDA")
-      );
+  const lifePolicies = activePolicies.filter(isVidaPolicy);
+
+  const lifePortfolioStats = lifeInsurerNames.map((insurerName) => {
+    const companyPolicies = lifePolicies.filter((policy) => {
+      return normalizeText(policy.insurers?.name) === normalizeText(insurerName);
     });
 
     const premium = companyPolicies.reduce(
@@ -224,15 +225,12 @@ export default function Apolices({ policies }) {
     };
   });
 
-  const totalLifePremium = lifePortfolioStats.reduce(
-    (sum, item) => sum + item.premium,
+  const totalLifePremium = lifePolicies.reduce(
+    (sum, policy) => sum + Number(policy.annual_premium || 0),
     0
   );
 
-  const totalLifePolicies = lifePortfolioStats.reduce(
-    (sum, item) => sum + item.policies,
-    0
-  );
+  const totalLifePolicies = lifePolicies.length;
 
   const lifePortfolioRows = lifePortfolioStats.map((item) => ({
     ...item,
@@ -474,7 +472,7 @@ export default function Apolices({ policies }) {
                 <div>
                   <h3 style={lifePortfolioTitle}>❤️ Carteira Vida por seguradora</h3>
                   <p style={lifePortfolioSubtitle}>
-                    Participação da Generali, Real Vida e Zurich no total da carteira Vida em vigor.
+                    Ramo VIDA, APS e VIAGEM em vigor, separado por Generali, Real Vida e Zurich.
                   </p>
                 </div>
 
@@ -1015,6 +1013,84 @@ const progressInner = {
   background: "linear-gradient(90deg, #2563eb, #16a34a)",
 };
 
+const lifePortfolioBox = {
+  marginTop: 18,
+  paddingTop: 18,
+  borderTop: "1px solid #e5e7eb",
+};
+
+const lifePortfolioHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const lifePortfolioTitle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const lifePortfolioSubtitle = {
+  margin: "8px 0 0",
+  color: "#475569",
+  fontSize: 13,
+};
+
+const lifePortfolioTotal = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: "12px 14px",
+  minWidth: 150,
+  textAlign: "right",
+  display: "grid",
+  gap: 4,
+  color: "#334155",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const lifePortfolioGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
+};
+
+const lifePortfolioCard = {
+  background: "linear-gradient(135deg, #f8fafc, #ffffff)",
+  border: "1px solid #bfdbfe",
+  borderRadius: 16,
+  padding: 14,
+};
+
+const lifePortfolioCompany = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 12,
+  color: "#0f172a",
+};
+
+const lifePortfolioPremium = {
+  display: "block",
+  color: "#16a34a",
+  fontSize: 22,
+  marginBottom: 10,
+};
+
+const lifePortfolioMeta = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  color: "#64748b",
+  fontSize: 12,
+  marginBottom: 8,
+};
+
 const table = {
   display: "grid",
   gap: 8,
@@ -1042,85 +1118,6 @@ const tableRow = {
   alignItems: "center",
   padding: "12px 14px",
   borderBottom: "1px solid #e5e7eb",
-};
-
-
-const lifePortfolioBox = {
-  marginTop: 18,
-  paddingTop: 18,
-  borderTop: "1px solid #e5e7eb",
-};
-
-const lifePortfolioHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 14,
-  marginBottom: 14,
-};
-
-const lifePortfolioTitle = {
-  margin: 0,
-  color: "#0f172a",
-  fontSize: 18,
-  fontWeight: 900,
-};
-
-const lifePortfolioSubtitle = {
-  margin: "6px 0 0",
-  color: "#64748b",
-  fontSize: 13,
-};
-
-const lifePortfolioTotal = {
-  background: "#f8fafc",
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  padding: "10px 12px",
-  minWidth: 150,
-  display: "grid",
-  gap: 4,
-  textAlign: "right",
-  color: "#475569",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
-const lifePortfolioGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 12,
-};
-
-const lifePortfolioCard = {
-  background: "linear-gradient(135deg, #f8fafc, #ffffff)",
-  border: "1px solid #dbeafe",
-  borderRadius: 16,
-  padding: 14,
-};
-
-const lifePortfolioCompany = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  marginBottom: 10,
-  color: "#0f172a",
-};
-
-const lifePortfolioPremium = {
-  display: "block",
-  color: "#16a34a",
-  fontSize: 22,
-  marginBottom: 8,
-};
-
-const lifePortfolioMeta = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 8,
-  color: "#64748b",
-  fontSize: 12,
-  marginBottom: 8,
 };
 
 const greenText = {
