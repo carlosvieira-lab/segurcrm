@@ -18,7 +18,7 @@ const insurersList = [
   "REAL VIDA",
   "ZURICH",
   "AGEAS",
-  "ALLIANZ",
+  "Allianz",
 ];
 
 const branchList = [
