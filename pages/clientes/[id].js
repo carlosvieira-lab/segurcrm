@@ -1357,9 +1357,13 @@ const timelineItems = createTimeline(
 
       <main style={main}>
         <div style={header}>
-          <div>
-            <h1 style={title}>{client.name}</h1>
-            <p style={subtitle}>{client.nif || "Sem NIF"}</p>
+          <div style={clientHeaderIdentity}>
+            <div style={clientAvatar}>👤</div>
+
+            <div style={clientHeaderText}>
+              <h1 style={title}>{client.name}</h1>
+              <p style={subtitle}>NIF: {client.nif || "Sem NIF"}</p>
+            </div>
           </div>
 
           <div style={headerButtons}>
@@ -3189,23 +3193,63 @@ const main = {
 
 const header = {
   display: "flex",
-  justifyContent: "space-between",
+  flexDirection: "column",
+  alignItems: "stretch",
+  gap: 24,
+  marginBottom: 34,
+  paddingBottom: 26,
+  borderBottom: "1px solid #d1d5db",
+};
+
+const clientHeaderIdentity = {
+  display: "flex",
   alignItems: "center",
-  marginBottom: 30,
+  gap: 16,
+  minWidth: 0,
+};
+
+const clientAvatar = {
+  width: 54,
+  height: 54,
+  borderRadius: 999,
+  background: "linear-gradient(135deg, #dbeafe, #bfdbfe)",
+  color: "#2563eb",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 28,
+  boxShadow: "0 8px 20px rgba(37,99,235,0.14)",
+  flexShrink: 0,
+};
+
+const clientHeaderText = {
+  minWidth: 0,
 };
 
 const headerButtons = {
   display: "flex",
   gap: 12,
+  flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const title = {
   fontSize: 42,
+  lineHeight: 1.05,
   margin: 0,
+  color: "#1e3a8a",
+  fontWeight: 900,
+  letterSpacing: "-0.04em",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const subtitle = {
   color: "#6b7280",
+  margin: "8px 0 0",
+  fontSize: 17,
+  fontWeight: 600,
 };
 
 const sectionTitle = {
