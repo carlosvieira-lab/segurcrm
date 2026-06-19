@@ -12,18 +12,40 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
-  const { data: policies } = await supabase
-    .from("policies")
-    .select(`
-      *,
-      clients(name),
-      insurers(name)
-    `)
-    .order("start_date", { ascending: false });
+  async function fetchPoliciesRange(from, to) {
+    const { data, error } = await supabase
+      .from("policies")
+      .select(`
+        *,
+        clients(name),
+        insurers(name)
+      `)
+      .order("start_date", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.log("Erro ao carregar apólices:", error.message);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  const firstBatch = await fetchPoliciesRange(0, 999);
+  const secondBatch = await fetchPoliciesRange(1000, 1999);
+  const thirdBatch = await fetchPoliciesRange(2000, 2999);
+  const fourthBatch = await fetchPoliciesRange(3000, 3999);
+
+  const policies = [
+    ...firstBatch,
+    ...secondBatch,
+    ...thirdBatch,
+    ...fourthBatch,
+  ];
 
   return {
     props: {
-      policies: policies || [],
+      policies,
     },
   };
 }
