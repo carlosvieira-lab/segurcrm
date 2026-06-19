@@ -14,16 +14,55 @@ const supabaseKey =
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function getServerSideProps() {
-  const { data: opportunities } = await supabase
-    .from("opportunities")
-    .select("*, clients(id, name, nif, phone)")
-    .order("contact_date", { ascending: true });
+async function fetchAllRows({ table, select, orderColumn, ascending = true }) {
+  const pageSize = 1000;
+  let from = 0;
+  let allRows = [];
 
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, name, nif, phone")
-    .order("name", { ascending: true });
+  while (true) {
+    let query = supabase
+      .from(table)
+      .select(select)
+      .range(from, from + pageSize - 1);
+
+    if (orderColumn) {
+      query = query.order(orderColumn, { ascending });
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error(error);
+      break;
+    }
+
+    const rows = data || [];
+    allRows = [...allRows, ...rows];
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return allRows;
+}
+
+export async function getServerSideProps() {
+  const opportunities = await fetchAllRows({
+    table: "opportunities",
+    select: "*, clients(id, name, nif, phone)",
+    orderColumn: "contact_date",
+    ascending: true,
+  });
+
+  const clients = await fetchAllRows({
+    table: "clients",
+    select: "id, name, nif, phone",
+    orderColumn: "name",
+    ascending: true,
+  });
 
   return {
     props: {
@@ -230,11 +269,14 @@ export default function Oportunidades({ opportunities, clients }) {
     const local = findClientLocal({ nif, phone, name });
     if (local) return local;
 
-    const { data, error } = await supabase
-      .from("clients")
-      .select("id, name, nif, phone");
+    const data = await fetchAllRows({
+      table: "clients",
+      select: "id, name, nif, phone",
+      orderColumn: "name",
+      ascending: true,
+    });
 
-    if (error || !data) return null;
+    if (!data || data.length === 0) return null;
 
     const nifClean = onlyNumbers(nif);
     const phoneClean = onlyNumbers(phone);
@@ -652,6 +694,7 @@ export default function Oportunidades({ opportunities, clients }) {
         </section>
 
         <section style={statsGrid}>
+          <StatCard title="Total carregadas" value={filtered.length} color="#111827" />
           <StatCard title="A contactar" value={toContact.length} color="#dc2626" />
           <StatCard title="Futuras" value={future.length} color="#2563eb" />
           <StatCard title="Ganhas" value={won.length} color="#16a34a" />
