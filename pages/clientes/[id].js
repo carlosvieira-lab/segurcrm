@@ -1367,7 +1367,7 @@ const timelineItems = createTimeline(
         <div style={header}>
           <div>
             <h1 style={title}>{client.name}</h1>
-            <p style={subtitle}>{client.nif || "Sem NIF"}</p>
+            <p style={subtitle}>NIF: {client.nif || "Sem NIF"}</p>
           </div>
 
           <div style={headerButtons}>
@@ -3196,24 +3196,35 @@ const main = {
 };
 
 const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  display: "grid",
+  gap: 22,
   marginBottom: 30,
+  paddingBottom: 26,
+  borderBottom: "1px solid #cbd5e1",
 };
 
 const headerButtons = {
   display: "flex",
   gap: 12,
+  flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const title = {
   fontSize: 42,
   margin: 0,
+  color: "#1e3a8a",
+  fontWeight: 900,
+  lineHeight: 1.05,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const subtitle = {
   color: "#6b7280",
+  marginTop: 8,
+  fontSize: 17,
 };
 
 const sectionTitle = {
