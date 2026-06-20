@@ -111,6 +111,8 @@ export default function Clientes({ clients, policies }) {
 
       return searchable.includes(term);
     });
+  }, [visibleClients, search]);
+
   const visibleClientIds =
     new Set(visibleClients.map((client) => client.id));
 
@@ -414,13 +416,24 @@ export default function Clientes({ clients, policies }) {
   );
 }
 
-function StatCard({ title, value, background = "white", color = "#111827" }) {
+function StatCard({
+  title,
+  value,
+  background = "white",
+  color = "#111827",
+}) {
+  const labelColor =
+    color === "white" ? "#e5e7eb" : "#6b7280";
+
   return (
     <div style={{ ...statCard, background, color }}>
-      <p style={{ ...cardLabel, color: color === "white" ? "#e5e7eb" : "#6b7280" }}>
+      <p style={{ ...cardLabel, color: labelColor }}>
         {title}
       </p>
-      <h2 style={{ ...cardValue, color }}>{value}</h2>
+
+      <h2 style={{ ...cardValue, color }}>
+        {value}
+      </h2>
     </div>
   );
 }
