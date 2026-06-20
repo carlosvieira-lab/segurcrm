@@ -1,4 +1,4 @@
-import { useState } from "react";
+mport { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -47,6 +47,57 @@ const portfolioBranchIcons = {
   APS: "💼",
   "CAES E GATOS": "🐶",
   OUTROS: "📦",
+};
+
+const portfolioCalloutPositions = {
+  AUTOMÓVEL: {
+    labelLeft: 535,
+    labelTop: 50,
+    textAlign: "left",
+    lineEndX: 510,
+  },
+  SAUDE: {
+    labelLeft: 535,
+    labelTop: 170,
+    textAlign: "left",
+    lineEndX: 510,
+  },
+  OUTROS: {
+    labelLeft: 535,
+    labelTop: 300,
+    textAlign: "left",
+    lineEndX: 510,
+  },
+  APS: {
+    labelLeft: 20,
+    labelTop: 30,
+    textAlign: "right",
+    lineEndX: 250,
+  },
+  "CAES E GATOS": {
+    labelLeft: 20,
+    labelTop: 115,
+    textAlign: "right",
+    lineEndX: 250,
+  },
+  ATS: {
+    labelLeft: 20,
+    labelTop: 205,
+    textAlign: "right",
+    lineEndX: 250,
+  },
+  CASA: {
+    labelLeft: 20,
+    labelTop: 290,
+    textAlign: "right",
+    lineEndX: 250,
+  },
+  VIDA: {
+    labelLeft: 20,
+    labelTop: 365,
+    textAlign: "right",
+    lineEndX: 250,
+  },
 };
 
 const budgetRows = [
@@ -421,8 +472,28 @@ export async function getServerSideProps() {
       portfolioPieOffset = end;
 
       const angle = (middle / 100) * 360;
-      const radius = 82;
       const radians = (angle - 90) * (Math.PI / 180);
+      const pointRadius = 118;
+      const elbowRadius = 150;
+      const centerX = 370;
+      const centerY = 220;
+
+      const pointX =
+        centerX + Math.cos(radians) * pointRadius;
+      const pointY =
+        centerY + Math.sin(radians) * pointRadius;
+      const elbowX =
+        centerX + Math.cos(radians) * elbowRadius;
+      const elbowY =
+        centerY + Math.sin(radians) * elbowRadius;
+
+      const position =
+        portfolioCalloutPositions[item.branch] || {
+          labelLeft: 535,
+          labelTop: 220,
+          textAlign: "left",
+          lineEndX: 510,
+        };
 
       return {
         ...item,
@@ -432,8 +503,15 @@ export async function getServerSideProps() {
           portfolioPieColors[
             index % portfolioPieColors.length
           ],
-        labelLeft: 110 + Math.cos(radians) * radius,
-        labelTop: 110 + Math.sin(radians) * radius,
+        pointX,
+        pointY,
+        elbowX,
+        elbowY,
+        labelLeft: position.labelLeft,
+        labelTop: position.labelTop,
+        textAlign: position.textAlign,
+        lineEndX: position.lineEndX,
+        lineEndY: position.labelTop + 22,
       };
     });
 
@@ -1358,63 +1436,78 @@ export default function Dashboard({
               Sem dados de carteira para apresentar.
             </p>
           ) : (
-            <div style={portfolioPieLayout}>
-              <div style={portfolioPieWrap}>
-                <div
-                  style={{
-                    ...portfolioPieChart,
-                    background: `conic-gradient(${portfolioPieGradient})`,
-                  }}
-                >
-                  {portfolioPieSegments.map((item) => (
-                    item.percentage >= 5 ? (
-                      <div
-                        key={`label-${item.branch}`}
-                        style={{
-                          ...portfolioPieSliceLabel,
-                          left: item.labelLeft,
-                          top: item.labelTop,
-                        }}
-                      >
-                        <span style={portfolioPieSliceIcon}>
-                          {item.icon}
-                        </span>
-                        <strong>{item.branch}</strong>
-                        <span>{item.percentage.toFixed(0)}%</span>
-                      </div>
-                    ) : null
-                  ))}
+            <div style={portfolioCalloutChart}>
+              <svg
+                style={portfolioCalloutSvg}
+                viewBox="0 0 740 440"
+                preserveAspectRatio="none"
+              >
+                {portfolioPieSegments.map((item) => (
+                  <g key={`line-${item.branch}`}>
+                    <polyline
+                      points={`${item.pointX},${item.pointY} ${item.elbowX},${item.elbowY} ${item.lineEndX},${item.lineEndY}`}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx={item.pointX}
+                      cy={item.pointY}
+                      r="5"
+                      fill="white"
+                      stroke={item.color}
+                      strokeWidth="3"
+                    />
+                  </g>
+                ))}
+              </svg>
 
-                  <div style={portfolioPieCenter}>
-                    <strong>
-                      {formatEuro(portfolioAnnualPremium)}
-                    </strong>
-                    <span>Total prémio</span>
-                  </div>
+              <div
+                style={{
+                  ...portfolioPieChart,
+                  background: `conic-gradient(${portfolioPieGradient})`,
+                }}
+              >
+                <div style={portfolioPieCenter}>
+                  <strong>
+                    {formatEuro(portfolioAnnualPremium)}
+                  </strong>
+                  <span>Total prémio</span>
                 </div>
               </div>
 
-              <div style={portfolioPieLegend}>
-                {portfolioPieSegments.map((item) => (
-                  <div key={item.branch} style={portfolioPieLegendItem}>
+              {portfolioPieSegments.map((item) => (
+                <div
+                  key={`label-${item.branch}`}
+                  style={{
+                    ...portfolioCalloutLabel,
+                    left: item.labelLeft,
+                    top: item.labelTop,
+                    textAlign: item.textAlign,
+                    borderColor: item.color,
+                  }}
+                >
+                  <div style={portfolioCalloutTitle}>
                     <span
                       style={{
-                        ...portfolioPieLegendColor,
+                        ...portfolioCalloutIcon,
                         background: item.color,
                       }}
                     >
                       {item.icon}
                     </span>
 
-                    <div style={portfolioPieLegendText}>
-                      <strong>{item.branch}</strong>
-                      <span>
-                        {item.count} apólice(s) · {formatEuro(item.premium)} · {item.percentage.toFixed(1)}%
-                      </span>
-                    </div>
+                    <strong>{item.branch}</strong>
                   </div>
-                ))}
-              </div>
+
+                  <span>{formatEuro(item.premium)}</span>
+                  <b style={{ color: item.color }}>
+                    {item.percentage.toFixed(1)}%
+                  </b>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -2202,54 +2295,37 @@ const portfolioDistributionPanel = {
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const portfolioPieLayout = {
-  display: "grid",
-  gridTemplateColumns: "260px 1fr",
-  gap: 24,
-  alignItems: "center",
-  marginTop: 18,
+const portfolioCalloutChart = {
+  position: "relative",
+  width: "100%",
+  maxWidth: 900,
+  height: 440,
+  margin: "18px auto 0",
 };
 
-const portfolioPieWrap = {
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
+const portfolioCalloutSvg = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  pointerEvents: "none",
+  overflow: "visible",
 };
 
 const portfolioPieChart = {
-  width: 220,
-  height: 220,
+  width: 260,
+  height: 260,
   borderRadius: "50%",
-  position: "relative",
-  boxShadow: "0 8px 24px rgba(15,23,42,0.16)",
-};
-
-const portfolioPieSliceLabel = {
   position: "absolute",
+  left: "50%",
+  top: "50%",
   transform: "translate(-50%, -50%)",
-  color: "white",
-  textShadow: "0 1px 4px rgba(0,0,0,0.45)",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  textAlign: "center",
-  gap: 2,
-  fontSize: 11,
-  fontWeight: "bold",
-  lineHeight: 1.1,
-  pointerEvents: "none",
-  width: 72,
-};
-
-const portfolioPieSliceIcon = {
-  fontSize: 24,
-  lineHeight: 1,
+  boxShadow: "0 8px 24px rgba(15,23,42,0.16)",
 };
 
 const portfolioPieCenter = {
   position: "absolute",
-  inset: 58,
+  inset: 72,
   background: "white",
   borderRadius: "50%",
   display: "flex",
@@ -2263,39 +2339,35 @@ const portfolioPieCenter = {
   fontSize: 12,
 };
 
-const portfolioPieLegend = {
+const portfolioCalloutLabel = {
+  position: "absolute",
+  width: 170,
+  background: "white",
+  border: "1px solid",
+  borderRadius: 14,
+  padding: "10px 12px",
+  boxShadow: "0 6px 18px rgba(15,23,42,0.10)",
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 12,
-};
-
-const portfolioPieLegendItem = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  background: "#f9fafb",
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
-  padding: 10,
-};
-
-const portfolioPieLegendColor = {
-  width: 28,
-  height: 28,
-  borderRadius: "50%",
-  flexShrink: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 14,
-};
-
-const portfolioPieLegendText = {
-  display: "grid",
-  gap: 3,
+  gap: 4,
   color: "#111827",
   fontSize: 13,
 };
 
+const portfolioCalloutTitle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const portfolioCalloutIcon = {
+  width: 30,
+  height: 30,
+  borderRadius: "50%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 16,
+  flexShrink: 0,
+};
 
 
