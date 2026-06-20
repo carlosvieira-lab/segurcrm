@@ -226,16 +226,12 @@ export async function getServerSideProps() {
 
   const monthlyPolicies =
     activePolicies.filter((policy) => {
-      const date =
-        policy.created_at ||
-        policy.start_date ||
-        policy.issue_date ||
-        policy.effective_date ||
-        policy.contract_date;
+      if (!policy.start_date) {
+        return false;
+      }
 
-      if (!date) return false;
-
-      const cleanDate = String(date).slice(0, 10);
+      const cleanDate =
+        String(policy.start_date).slice(0, 10);
 
       return (
         cleanDate >= monthStart &&
