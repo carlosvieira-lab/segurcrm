@@ -162,6 +162,16 @@ export async function getServerSideProps() {
       .from("opportunities")
       .select("*");
 
+  const { data: commissionReceipts } =
+    await supabase
+      .from("commission_receipts")
+      .select("amount");
+
+  const { data: financialDeals } =
+    await supabase
+      .from("financial_deals")
+      .select("received_commission");
+
   const { data: dueDashboardAlerts } =
     await supabase
       .from("dashboard_alerts")
@@ -375,6 +385,23 @@ export async function getServerSideProps() {
   const monthlyCommission =
     monthlyBudgetTotals.commission;
 
+  const insuranceRevenue =
+    (commissionReceipts || []).reduce(
+      (sum, item) =>
+        sum + Number(item.amount || 0),
+      0
+    );
+
+  const financialRevenue =
+    (financialDeals || []).reduce(
+      (sum, item) =>
+        sum + Number(item.received_commission || 0),
+      0
+    );
+
+  const totalRevenue =
+    insuranceRevenue + financialRevenue;
+
   return {
     props: {
       totalClients:
@@ -409,6 +436,9 @@ export async function getServerSideProps() {
       monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
+      insuranceRevenue,
+      financialRevenue,
+      totalRevenue,
       currentMonthLabel:
         new Intl.DateTimeFormat("pt-PT", {
           month: "long",
@@ -538,6 +568,9 @@ export default function Dashboard({
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
+  insuranceRevenue,
+  financialRevenue,
+  totalRevenue,
   currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -1089,6 +1122,35 @@ export default function Dashboard({
               title="Comissão anual"
               value={formatEuro(portfolioAnnualCommission)}
               subvalue={`Estimativa mensal: ${formatEuro(portfolioMonthlyCommissionEstimate)}`}
+            />
+          </div>
+        </section>
+
+        <section style={revenuePanel}>
+          <div>
+            <h2 style={panelTitle}>
+              💰 Proveitos do Negócio
+            </h2>
+
+            <p style={panelSubtitle}>
+              Recebimentos efetivos de seguros e negócios financeiros.
+            </p>
+          </div>
+
+          <div style={productionGrid}>
+            <ProductionMetric
+              title="Seguros"
+              value={formatEuro(insuranceRevenue)}
+            />
+
+            <ProductionMetric
+              title="Financeiros"
+              value={formatEuro(financialRevenue)}
+            />
+
+            <ProductionMetric
+              title="Total"
+              value={formatEuro(totalRevenue)}
             />
           </div>
         </section>
@@ -1823,6 +1885,14 @@ const portfolioPanel = {
   marginBottom: 30,
 };
 
+const revenuePanel = {
+  background: "linear-gradient(135deg,#fff7ed,#fed7aa)",
+  border: "2px solid #ea580c",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+};
+
 const productionPanel = {
   background: "linear-gradient(135deg,#ecfdf5,#bbf7d0)",
   border: "2px solid #16a34a",
@@ -1959,7 +2029,6 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
 
 
 
