@@ -36,10 +36,38 @@ export async function getServerSideProps() {
       .from("clients")
       .select("*");
 
-  const { data: policies } =
-    await supabase
-      .from("policies")
-      .select("*");
+  async function fetchPoliciesRange(from, to) {
+    const { data, error } =
+      await supabase
+        .from("policies")
+        .select("*")
+        .range(from, to);
+
+    if (error) {
+      console.log(
+        "Erro ao carregar apólices no Dashboard:",
+        error.message
+      );
+      return [];
+    }
+
+    return data || [];
+  }
+
+  const firstPoliciesBatch =
+    await fetchPoliciesRange(0, 999);
+
+  const secondPoliciesBatch =
+    await fetchPoliciesRange(1000, 1999);
+
+  const thirdPoliciesBatch =
+    await fetchPoliciesRange(2000, 2999);
+
+  const policies = [
+    ...firstPoliciesBatch,
+    ...secondPoliciesBatch,
+    ...thirdPoliciesBatch,
+  ];
 
   const { data: tasks } =
     await supabase
