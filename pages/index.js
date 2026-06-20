@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -22,6 +23,8 @@ const portfolioBranchOrder = [
   "ATS",
   "VIDA",
   "SAUDE",
+  "APS",
+  "CAES E GATOS",
   "OUTROS",
 ];
 
@@ -31,6 +34,8 @@ const portfolioPieColors = [
   "#f59e0b",
   "#dc2626",
   "#7c3aed",
+  "#06b6d4",
+  "#92400e",
   "#9ca3af",
 ];
 
@@ -40,6 +45,8 @@ const portfolioBranchIcons = {
   ATS: "🛡️",
   VIDA: "❤️",
   SAUDE: "➕",
+  APS: "💼",
+  "CAES E GATOS": "🐶",
   OUTROS: "📦",
 };
 
@@ -131,13 +138,12 @@ function getPortfolioBranchGroup(branch) {
   if (normalizedBranch === "ATCP" || normalizedBranch === "ATCO") return "ATS";
   if (normalizedBranch === "VIDA") return "VIDA";
   if (normalizedBranch === "SAUDE") return "SAUDE";
+  if (normalizedBranch === "APS") return "APS";
+  if (normalizedBranch === "CAES E GATOS") return "CAES E GATOS";
 
   if (
     normalizedBranch === "MREMP" ||
-    normalizedBranch === "APS" ||
-    normalizedBranch === "FINANCEIROS" ||
     normalizedBranch === "VIAGEM" ||
-    normalizedBranch === "CAES E GATOS" ||
     normalizedBranch === "OUTROS"
   ) {
     return "OUTROS";
@@ -1344,7 +1350,7 @@ export default function Dashboard({
             </h2>
 
             <p style={panelSubtitle}>
-              Prémio anual em vigor por ramo. ATCP e ATCO estão agrupados como ATS.
+              Prémio anual em vigor por ramo. ATCP e ATCO estão agrupados como ATS; FINANCEIROS não entram neste gráfico.
             </p>
           </div>
 
