@@ -84,6 +84,14 @@ export default function Clientes({ clients }) {
     });
   }, [visibleClients, search]);
 
+  const effectiveClients =
+    visibleClients.filter((c) => c.status === "ativo");
+
+  const policyRatio =
+    effectiveClients.length > 0
+      ? (1129 / effectiveClients.length).toFixed(2)
+      : "0.00";
+
   async function createClientRecord(e) {
     e.preventDefault();
     setSaving(true);
@@ -174,12 +182,18 @@ export default function Clientes({ clients }) {
 
           <StatCard
             title="Ativos"
-            value={visibleClients.filter((c) => c.status === "ativo").length}
+            value={effectiveClients.length}
           />
 
           <StatCard
             title="Potenciais"
             value={visibleClients.filter((c) => c.status === "potencial").length}
+          />
+
+          <StatCard
+            title="Rácio apólices/cliente"
+            value={policyRatio}
+            background="#ede9fe"
           />
         </section>
 
@@ -351,9 +365,9 @@ export default function Clientes({ clients }) {
   );
 }
 
-function StatCard({ title, value }) {
+function StatCard({ title, value, background = "white" }) {
   return (
-    <div style={statCard}>
+    <div style={{ ...statCard, background }}>
       <p style={cardLabel}>{title}</p>
       <h2 style={cardValue}>{value}</h2>
     </div>
@@ -388,7 +402,7 @@ const subtitle = {
 
 const stats = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, 1fr)",
+  gridTemplateColumns: "repeat(4, 1fr)",
   gap: 16,
   marginBottom: 24,
 };
