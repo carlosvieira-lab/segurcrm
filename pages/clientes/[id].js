@@ -1637,6 +1637,7 @@ const timelineItems = createTimeline(
                         <th style={summaryTh}>Seguradora</th>
                         <th style={summaryTh}>Ramo</th>
                         <th style={summaryTh}>Vencimento anual</th>
+                        <th style={summaryTh}>Ações</th>
                       </tr>
                     </thead>
 
@@ -1657,6 +1658,16 @@ const timelineItems = createTimeline(
 
                           <td style={summaryTd}>
                             {formatDate(policy.renewal_date)}
+                          </td>
+
+                          <td style={summaryTd}>
+                            <a
+                              href={`#apolice-${policy.id}`}
+                              style={summaryOpenButton}
+                              onClick={() => setShowPoliciesSummaryModal(false)}
+                            >
+                              🔍 Ver
+                            </a>
                           </td>
                         </tr>
                       ))}
@@ -2942,8 +2953,10 @@ const timelineItems = createTimeline(
               {policies.map((policy) => (
                 <div
   key={policy.id}
+  id={`apolice-${policy.id}`}
   style={{
     ...policyCard,
+    scrollMarginTop: 24,
     background:
       policy.status === "anulada"
         ? "#fee2e2"
@@ -3967,6 +3980,18 @@ const summaryTd = {
   padding: "12px 10px",
   borderBottom: "1px solid #e5e7eb",
   color: "#111827",
+};
+
+const summaryOpenButton = {
+  background: "#2563eb",
+  color: "white",
+  padding: "7px 11px",
+  borderRadius: 9,
+  textDecoration: "none",
+  fontWeight: "bold",
+  fontSize: 12,
+  display: "inline-block",
+  whiteSpace: "nowrap",
 };
 
 
