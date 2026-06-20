@@ -19,14 +19,9 @@ const supabase = createClient(
 const portfolioBranchOrder = [
   "AUTOMÓVEL",
   "CASA",
-  "SAUDE",
   "ATS",
-  "MREMP",
   "VIDA",
-  "APS",
-  "FINANCEIROS",
-  "VIAGEM",
-  "CAES E GATOS",
+  "SAUDE",
   "OUTROS",
 ];
 
@@ -34,15 +29,19 @@ const portfolioPieColors = [
   "#2563eb",
   "#16a34a",
   "#f59e0b",
-  "#7c3aed",
-  "#0f766e",
   "#dc2626",
-  "#0891b2",
-  "#111827",
-  "#ea580c",
-  "#65a30d",
-  "#9333ea",
+  "#7c3aed",
+  "#9ca3af",
 ];
+
+const portfolioBranchIcons = {
+  AUTOMÓVEL: "🚗",
+  CASA: "🏠",
+  ATS: "🛡️",
+  VIDA: "❤️",
+  SAUDE: "➕",
+  OUTROS: "📦",
+};
 
 const budgetRows = [
   {
@@ -129,15 +128,20 @@ function getPortfolioBranchGroup(branch) {
 
   if (normalizedBranch === "AUTOMOVEL") return "AUTOMÓVEL";
   if (normalizedBranch === "CASA") return "CASA";
-  if (normalizedBranch === "SAUDE") return "SAUDE";
   if (normalizedBranch === "ATCP" || normalizedBranch === "ATCO") return "ATS";
-  if (normalizedBranch === "MREMP") return "MREMP";
   if (normalizedBranch === "VIDA") return "VIDA";
-  if (normalizedBranch === "APS") return "APS";
-  if (normalizedBranch === "FINANCEIROS") return "FINANCEIROS";
-  if (normalizedBranch === "VIAGEM") return "VIAGEM";
-  if (normalizedBranch === "CAES E GATOS") return "CAES E GATOS";
-  if (normalizedBranch === "OUTROS") return "OUTROS";
+  if (normalizedBranch === "SAUDE") return "SAUDE";
+
+  if (
+    normalizedBranch === "MREMP" ||
+    normalizedBranch === "APS" ||
+    normalizedBranch === "FINANCEIROS" ||
+    normalizedBranch === "VIAGEM" ||
+    normalizedBranch === "CAES E GATOS" ||
+    normalizedBranch === "OUTROS"
+  ) {
+    return "OUTROS";
+  }
 
   return null;
 }
@@ -396,6 +400,8 @@ export async function getServerSideProps() {
       1
     );
 
+  let portfolioPieOffset = 25;
+
   const portfolioPieSegments =
     portfolioDistribution.map((item, index) => {
       const percentage =
@@ -403,31 +409,48 @@ export async function getServerSideProps() {
           ? (item.premium / portfolioAnnualPremium) * 100
           : 0;
 
+      const start = portfolioPieOffset;
+      const end = portfolioPieOffset + percentage;
+      const middle = start + percentage / 2;
+
+      portfolioPieOffset = end;
+
+      const angle = (middle / 100) * 360;
+      const radius = 82;
+      const radians = (angle - 90) * (Math.PI / 180);
+
       return {
         ...item,
         percentage,
+        icon: portfolioBranchIcons[item.branch] || "•",
         color:
           portfolioPieColors[
             index % portfolioPieColors.length
           ],
+        labelLeft: 110 + Math.cos(radians) * radius,
+        labelTop: 110 + Math.sin(radians) * radius,
       };
     });
-
-  let portfolioPieOffset = 25;
 
   const portfolioPieGradient =
     portfolioPieSegments.length > 0
       ? portfolioPieSegments
-          .map((item) => {
-            const start = portfolioPieOffset;
-            const end =
-              portfolioPieOffset + item.percentage;
+          .reduce(
+            (acc, item) => {
+              const start = acc.offset;
+              const end = start + item.percentage;
 
-            portfolioPieOffset = end;
+              acc.parts.push(`${item.color} ${start}% ${end}%`);
+              acc.offset = end;
 
-            return `${item.color} ${start}% ${end}%`;
-          })
-          .join(", ")
+              return acc;
+            },
+            {
+              offset: 25,
+              parts: [],
+            }
+          )
+          .parts.join(", ")
       : "#e5e7eb 0% 100%";
 
   const budgetPoliciesThisMonth =
@@ -1321,7 +1344,7 @@ export default function Dashboard({
             </h2>
 
             <p style={panelSubtitle}>
-              Prémio anual em vigor por ramo definido no CRM. ATCP e ATCO estão agrupados como ATS.
+              Prémio anual em vigor por ramo. ATCP e ATCO estão agrupados como ATS.
             </p>
           </div>
 
@@ -1338,11 +1361,30 @@ export default function Dashboard({
                     background: `conic-gradient(${portfolioPieGradient})`,
                   }}
                 >
+                  {portfolioPieSegments.map((item) => (
+                    item.percentage >= 5 ? (
+                      <div
+                        key={`label-${item.branch}`}
+                        style={{
+                          ...portfolioPieSliceLabel,
+                          left: item.labelLeft,
+                          top: item.labelTop,
+                        }}
+                      >
+                        <span style={portfolioPieSliceIcon}>
+                          {item.icon}
+                        </span>
+                        <strong>{item.branch}</strong>
+                        <span>{item.percentage.toFixed(0)}%</span>
+                      </div>
+                    ) : null
+                  ))}
+
                   <div style={portfolioPieCenter}>
                     <strong>
                       {formatEuro(portfolioAnnualPremium)}
                     </strong>
-                    <span>Total</span>
+                    <span>Total prémio</span>
                   </div>
                 </div>
               </div>
@@ -1355,7 +1397,9 @@ export default function Dashboard({
                         ...portfolioPieLegendColor,
                         background: item.color,
                       }}
-                    />
+                    >
+                      {item.icon}
+                    </span>
 
                     <div style={portfolioPieLegendText}>
                       <strong>{item.branch}</strong>
@@ -2175,9 +2219,32 @@ const portfolioPieChart = {
   boxShadow: "0 8px 24px rgba(15,23,42,0.16)",
 };
 
+const portfolioPieSliceLabel = {
+  position: "absolute",
+  transform: "translate(-50%, -50%)",
+  color: "white",
+  textShadow: "0 1px 4px rgba(0,0,0,0.45)",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  gap: 2,
+  fontSize: 11,
+  fontWeight: "bold",
+  lineHeight: 1.1,
+  pointerEvents: "none",
+  width: 72,
+};
+
+const portfolioPieSliceIcon = {
+  fontSize: 24,
+  lineHeight: 1,
+};
+
 const portfolioPieCenter = {
   position: "absolute",
-  inset: 48,
+  inset: 58,
   background: "white",
   borderRadius: "50%",
   display: "flex",
@@ -2188,7 +2255,7 @@ const portfolioPieCenter = {
   padding: 12,
   boxShadow: "inset 0 0 0 1px #e5e7eb",
   color: "#111827",
-  fontSize: 13,
+  fontSize: 12,
 };
 
 const portfolioPieLegend = {
@@ -2208,10 +2275,14 @@ const portfolioPieLegendItem = {
 };
 
 const portfolioPieLegendColor = {
-  width: 14,
-  height: 14,
+  width: 28,
+  height: 28,
   borderRadius: "50%",
   flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 14,
 };
 
 const portfolioPieLegendText = {
@@ -2220,3 +2291,4 @@ const portfolioPieLegendText = {
   color: "#111827",
   fontSize: 13,
 };
+
