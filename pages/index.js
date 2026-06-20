@@ -16,6 +16,20 @@ const supabase = createClient(
   supabaseKey
 );
 
+const portfolioBranchOrder = [
+  "AUTOMÓVEL",
+  "CASA",
+  "SAUDE",
+  "ATS",
+  "MREMP",
+  "VIDA",
+  "APS",
+  "FINANCEIROS",
+  "VIAGEM",
+  "CAES E GATOS",
+  "OUTROS",
+];
+
 const budgetRows = [
   {
     label: "AUTOMÓVEL",
@@ -94,6 +108,24 @@ function getFirstFractionCommission(policy) {
       policy.comissao_anual ||
       0
   );
+}
+
+function getPortfolioBranchGroup(branch) {
+  const normalizedBranch = normalizeText(branch);
+
+  if (normalizedBranch === "AUTOMOVEL") return "AUTOMÓVEL";
+  if (normalizedBranch === "CASA") return "CASA";
+  if (normalizedBranch === "SAUDE") return "SAUDE";
+  if (normalizedBranch === "ATCP" || normalizedBranch === "ATCO") return "ATS";
+  if (normalizedBranch === "MREMP") return "MREMP";
+  if (normalizedBranch === "VIDA") return "VIDA";
+  if (normalizedBranch === "APS") return "APS";
+  if (normalizedBranch === "FINANCEIROS") return "FINANCEIROS";
+  if (normalizedBranch === "VIAGEM") return "VIAGEM";
+  if (normalizedBranch === "CAES E GATOS") return "CAES E GATOS";
+  if (normalizedBranch === "OUTROS") return "OUTROS";
+
+  return null;
 }
 
 export async function getServerSideProps() {
@@ -304,6 +336,52 @@ export async function getServerSideProps() {
       0
     );
 
+  const portfolioDistributionMap =
+    activePolicies.reduce((acc, policy) => {
+      const group =
+        getPortfolioBranchGroup(policy.branch);
+
+      if (!group) {
+        return acc;
+      }
+
+      if (!acc[group]) {
+        acc[group] = {
+          branch: group,
+          count: 0,
+          premium: 0,
+        };
+      }
+
+      acc[group].count += 1;
+      acc[group].premium += getPolicyPremium(policy);
+
+      return acc;
+    }, {});
+
+  const portfolioDistribution =
+    portfolioBranchOrder
+      .map((branch) => ({
+        branch,
+        count:
+          portfolioDistributionMap[branch]?.count || 0,
+        premium:
+          portfolioDistributionMap[branch]?.premium || 0,
+      }))
+      .filter(
+        (item) =>
+          item.count > 0 ||
+          item.premium > 0
+      );
+
+  const maxPortfolioDistributionPremium =
+    Math.max(
+      ...portfolioDistribution.map(
+        (item) => item.premium
+      ),
+      1
+    );
+
   const budgetPoliciesThisMonth =
     activePolicies.filter((policy) => {
       if (!policy.start_date) {
@@ -403,6 +481,8 @@ export async function getServerSideProps() {
       portfolioAnnualCommission,
       portfolioMonthlyCommissionEstimate:
         portfolioAnnualCommission / 12,
+      portfolioDistribution,
+      maxPortfolioDistributionPremium,
       monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
@@ -532,6 +612,8 @@ export default function Dashboard({
   portfolioAnnualPremium,
   portfolioAnnualCommission,
   portfolioMonthlyCommissionEstimate,
+  portfolioDistribution,
+  maxPortfolioDistributionPremium,
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
@@ -1182,42 +1264,57 @@ export default function Dashboard({
           />
         </section>
 
-        <section style={quickGrid}>
-          <QuickLink
-            href="/clientes"
-            title="Clientes"
-            desc="Consultar carteira"
-          />
+        <section style={portfolioDistributionPanel}>
+          <div>
+            <h2 style={panelTitle}>
+              📊 Distribuição da Carteira por Ramo
+            </h2>
 
-          <QuickLink
-            href="/apolices"
-            title="Apólices"
-            desc="Gestão de apólices"
-          />
+            <p style={panelSubtitle}>
+              Prémio anual em vigor por ramo definido no CRM. ATCP e ATCO estão agrupados como ATS.
+            </p>
+          </div>
 
-          <QuickLink
-            href="/tarefas"
-            title="Tarefas"
-            desc="Agenda operacional"
-          />
+          {portfolioDistribution.length === 0 ? (
+            <p style={mutedText}>
+              Sem dados de carteira para apresentar.
+            </p>
+          ) : (
+            <div style={portfolioDistributionList}>
+              {portfolioDistribution.map((item) => {
+                const percentage =
+                  portfolioAnnualPremium > 0
+                    ? (item.premium / portfolioAnnualPremium) * 100
+                    : 0;
 
-          <QuickLink
-            href="/oportunidades"
-            title="Agenda de Captação"
-            desc="Contactos comerciais"
-          />
+                const barWidth =
+                  maxPortfolioDistributionPremium > 0
+                    ? (item.premium / maxPortfolioDistributionPremium) * 100
+                    : 0;
 
-          <QuickLink
-            href="/renovacoes"
-            title="Renovações"
-            desc="Controlo de vencimentos"
-          />
+                return (
+                  <div key={item.branch} style={portfolioDistributionRow}>
+                    <div style={portfolioDistributionInfo}>
+                      <strong>{item.branch}</strong>
 
-          <QuickLink
-            href="/financeiro"
-            title="Financeiro"
-            desc="Comissões e cobranças"
-          />
+                      <span>
+                        {item.count} apólice(s) · {formatEuro(item.premium)} · {percentage.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div style={portfolioDistributionBarTrack}>
+                      <div
+                        style={{
+                          ...portfolioDistributionBar,
+                          width: `${Math.max(barWidth, 2)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -1993,3 +2090,46 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
+const portfolioDistributionPanel = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 18,
+  padding: 24,
+  marginBottom: 30,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const portfolioDistributionList = {
+  display: "grid",
+  gap: 14,
+  marginTop: 18,
+};
+
+const portfolioDistributionRow = {
+  display: "grid",
+  gridTemplateColumns: "minmax(220px, 320px) 1fr",
+  gap: 16,
+  alignItems: "center",
+};
+
+const portfolioDistributionInfo = {
+  display: "grid",
+  gap: 5,
+  color: "#111827",
+};
+
+const portfolioDistributionBarTrack = {
+  height: 22,
+  background: "#e5e7eb",
+  borderRadius: 999,
+  overflow: "hidden",
+};
+
+const portfolioDistributionBar = {
+  height: "100%",
+  background: "linear-gradient(90deg,#2563eb,#16a34a)",
+  borderRadius: 999,
+};
+
+
