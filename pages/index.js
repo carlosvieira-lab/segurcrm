@@ -16,6 +16,86 @@ const supabase = createClient(
   supabaseKey
 );
 
+const budgetRows = [
+  {
+    label: "AUTOMÓVEL",
+    crmBranches: ["AUTOMÓVEL"],
+    premiumObjective: 3800,
+    commissionObjective: 342,
+  },
+  {
+    label: "CASA",
+    crmBranches: ["CASA", "MREMP"],
+    premiumObjective: 700,
+    commissionObjective: 77,
+  },
+  {
+    label: "ATS",
+    crmBranches: ["ATCP", "ATCO"],
+    premiumObjective: 500,
+    commissionObjective: 50,
+  },
+  {
+    label: "SAUDE",
+    crmBranches: ["SAUDE"],
+    premiumObjective: 150,
+    commissionObjective: 20,
+  },
+  {
+    label: "VIDA",
+    crmBranches: ["VIDA"],
+    premiumObjective: 350,
+    commissionObjective: 98,
+  },
+  {
+    label: "OUTROS",
+    crmBranches: ["APS", "FINANCEIROS", "VIAGEM", "CAES E GATOS", "OUTROS"],
+    premiumObjective: 100,
+    commissionObjective: 10,
+  },
+];
+
+function normalizeText(value) {
+  return String(value || "")
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function branchBelongsToBudgetRow(policyBranch, row) {
+  const normalizedBranch = normalizeText(policyBranch);
+
+  return row.crmBranches
+    .map((branch) => normalizeText(branch))
+    .includes(normalizedBranch);
+}
+
+function getFirstFractionPremium(policy) {
+  const annualPremium = Number(
+    policy.annual_premium ||
+      policy.total_premium ||
+      policy.premium ||
+      policy.premio_anual ||
+      policy.premio ||
+      0
+  );
+
+  const multiplier = getFrequencyMultiplier(policy.payment_frequency);
+
+  return annualPremium / multiplier;
+}
+
+function getFirstFractionCommission(policy) {
+  return Number(
+    policy.commission_per_payment ||
+      policy.commission ||
+      policy.comissao ||
+      policy.comissao_anual ||
+      0
+  );
+}
+
 export async function getServerSideProps() {
   const today = new Date()
     .toISOString()
@@ -224,7 +304,7 @@ export async function getServerSideProps() {
       0
     );
 
-  const monthlyPolicies =
+  const budgetPoliciesThisMonth =
     activePolicies.filter((policy) => {
       if (!policy.start_date) {
         return false;
@@ -239,21 +319,58 @@ export async function getServerSideProps() {
       );
     });
 
-  const monthlyPremium =
-    monthlyPolicies.reduce(
-      (sum, policy) =>
-        sum +
-        getPolicyPremium(policy),
-      0
+  const monthlyBudgetRows =
+    budgetRows.map((budgetRow) => {
+      const rowPolicies =
+        budgetPoliciesThisMonth.filter((policy) =>
+          branchBelongsToBudgetRow(policy.branch, budgetRow)
+        );
+
+      const premiumAchieved =
+        rowPolicies.reduce(
+          (sum, policy) =>
+            sum + getFirstFractionPremium(policy),
+          0
+        );
+
+      const commissionAchieved =
+        rowPolicies.reduce(
+          (sum, policy) =>
+            sum + getFirstFractionCommission(policy),
+          0
+        );
+
+      return {
+        ...budgetRow,
+        count: rowPolicies.length,
+        premiumAchieved,
+        commissionAchieved,
+      };
+    });
+
+  const monthlyBudgetTotals =
+    monthlyBudgetRows.reduce(
+      (acc, row) => {
+        acc.count += row.count;
+        acc.premium += row.premiumAchieved;
+        acc.commission += row.commissionAchieved;
+        return acc;
+      },
+      {
+        count: 0,
+        premium: 0,
+        commission: 0,
+      }
     );
 
+  const monthlyPolicies =
+    monthlyBudgetTotals.count;
+
+  const monthlyPremium =
+    monthlyBudgetTotals.premium;
+
   const monthlyCommission =
-    monthlyPolicies.reduce(
-      (sum, policy) =>
-        sum +
-        getPolicyCommission(policy),
-      0
-    );
+    monthlyBudgetTotals.commission;
 
   return {
     props: {
@@ -286,8 +403,7 @@ export async function getServerSideProps() {
       portfolioAnnualCommission,
       portfolioMonthlyCommissionEstimate:
         portfolioAnnualCommission / 12,
-      monthlyPolicies:
-        monthlyPolicies.length,
+      monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
       currentMonthLabel:
@@ -987,8 +1103,8 @@ export default function Dashboard({
 
           <div style={productionGrid}>
             <ProductionMetric title="Novas apólices" value={monthlyPolicies} />
-            <ProductionMetric title="Prémio produzido" value={formatEuro(monthlyPremium)} />
-            <ProductionMetric title="Comissão prevista" value={formatEuro(monthlyCommission)} />
+            <ProductionMetric title="Prémio" value={formatEuro(monthlyPremium)} />
+            <ProductionMetric title="Comissão" value={formatEuro(monthlyCommission)} />
           </div>
 
           <div style={productionFooter}>
