@@ -402,6 +402,9 @@ export async function getServerSideProps() {
   const totalRevenue =
     insuranceRevenue + financialRevenue;
 
+  const monthlyRevenueEstimate =
+    totalRevenue / 12;
+
   return {
     props: {
       totalClients:
@@ -439,6 +442,7 @@ export async function getServerSideProps() {
       insuranceRevenue,
       financialRevenue,
       totalRevenue,
+      monthlyRevenueEstimate,
       currentMonthLabel:
         new Intl.DateTimeFormat("pt-PT", {
           month: "long",
@@ -1148,10 +1152,21 @@ export default function Dashboard({
               value={formatEuro(financialRevenue)}
             />
 
-            <ProductionMetric
-              title="Total"
-              value={formatEuro(totalRevenue)}
-            />
+            <div style={productionMetric}>
+              <span style={productionMetricLabel}>
+                Total
+              </span>
+
+              <strong style={productionMetricValue}>
+                {formatEuro(totalRevenue)}
+              </strong>
+
+              <div style={revenueEstimateText}>
+                Estimativa mensal:
+                <br />
+                {formatEuro(monthlyRevenueEstimate)}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1969,6 +1984,13 @@ const productionMetricValue = {
   color: "#15803d",
 };
 
+const revenueEstimateText = {
+  marginTop: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#9a3412",
+};
+
 const productionFooter = {
   marginTop: 18,
 };
@@ -2029,6 +2051,8 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
+
 
 
 
