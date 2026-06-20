@@ -30,6 +30,20 @@ const portfolioBranchOrder = [
   "OUTROS",
 ];
 
+const portfolioPieColors = [
+  "#2563eb",
+  "#16a34a",
+  "#f59e0b",
+  "#7c3aed",
+  "#0f766e",
+  "#dc2626",
+  "#0891b2",
+  "#111827",
+  "#ea580c",
+  "#65a30d",
+  "#9333ea",
+];
+
 const budgetRows = [
   {
     label: "AUTOMÓVEL",
@@ -382,6 +396,40 @@ export async function getServerSideProps() {
       1
     );
 
+  const portfolioPieSegments =
+    portfolioDistribution.map((item, index) => {
+      const percentage =
+        portfolioAnnualPremium > 0
+          ? (item.premium / portfolioAnnualPremium) * 100
+          : 0;
+
+      return {
+        ...item,
+        percentage,
+        color:
+          portfolioPieColors[
+            index % portfolioPieColors.length
+          ],
+      };
+    });
+
+  let portfolioPieOffset = 25;
+
+  const portfolioPieGradient =
+    portfolioPieSegments.length > 0
+      ? portfolioPieSegments
+          .map((item) => {
+            const start = portfolioPieOffset;
+            const end =
+              portfolioPieOffset + item.percentage;
+
+            portfolioPieOffset = end;
+
+            return `${item.color} ${start}% ${end}%`;
+          })
+          .join(", ")
+      : "#e5e7eb 0% 100%";
+
   const budgetPoliciesThisMonth =
     activePolicies.filter((policy) => {
       if (!policy.start_date) {
@@ -482,7 +530,8 @@ export async function getServerSideProps() {
       portfolioMonthlyCommissionEstimate:
         portfolioAnnualCommission / 12,
       portfolioDistribution,
-      maxPortfolioDistributionPremium,
+      portfolioPieSegments,
+      portfolioPieGradient,
       monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
@@ -613,7 +662,8 @@ export default function Dashboard({
   portfolioAnnualCommission,
   portfolioMonthlyCommissionEstimate,
   portfolioDistribution,
-  maxPortfolioDistributionPremium,
+  portfolioPieSegments,
+  portfolioPieGradient,
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
@@ -1267,7 +1317,7 @@ export default function Dashboard({
         <section style={portfolioDistributionPanel}>
           <div>
             <h2 style={panelTitle}>
-              📊 Distribuição da Carteira por Ramo
+              🧀 Distribuição da Carteira por Ramo
             </h2>
 
             <p style={panelSubtitle}>
@@ -1275,44 +1325,47 @@ export default function Dashboard({
             </p>
           </div>
 
-          {portfolioDistribution.length === 0 ? (
+          {portfolioPieSegments.length === 0 ? (
             <p style={mutedText}>
               Sem dados de carteira para apresentar.
             </p>
           ) : (
-            <div style={portfolioDistributionList}>
-              {portfolioDistribution.map((item) => {
-                const percentage =
-                  portfolioAnnualPremium > 0
-                    ? (item.premium / portfolioAnnualPremium) * 100
-                    : 0;
+            <div style={portfolioPieLayout}>
+              <div style={portfolioPieWrap}>
+                <div
+                  style={{
+                    ...portfolioPieChart,
+                    background: `conic-gradient(${portfolioPieGradient})`,
+                  }}
+                >
+                  <div style={portfolioPieCenter}>
+                    <strong>
+                      {formatEuro(portfolioAnnualPremium)}
+                    </strong>
+                    <span>Total</span>
+                  </div>
+                </div>
+              </div>
 
-                const barWidth =
-                  maxPortfolioDistributionPremium > 0
-                    ? (item.premium / maxPortfolioDistributionPremium) * 100
-                    : 0;
+              <div style={portfolioPieLegend}>
+                {portfolioPieSegments.map((item) => (
+                  <div key={item.branch} style={portfolioPieLegendItem}>
+                    <span
+                      style={{
+                        ...portfolioPieLegendColor,
+                        background: item.color,
+                      }}
+                    />
 
-                return (
-                  <div key={item.branch} style={portfolioDistributionRow}>
-                    <div style={portfolioDistributionInfo}>
+                    <div style={portfolioPieLegendText}>
                       <strong>{item.branch}</strong>
-
                       <span>
-                        {item.count} apólice(s) · {formatEuro(item.premium)} · {percentage.toFixed(1)}%
+                        {item.count} apólice(s) · {formatEuro(item.premium)} · {item.percentage.toFixed(1)}%
                       </span>
                     </div>
-
-                    <div style={portfolioDistributionBarTrack}>
-                      <div
-                        style={{
-                          ...portfolioDistributionBar,
-                          width: `${Math.max(barWidth, 2)}%`,
-                        }}
-                      />
-                    </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           )}
         </section>
@@ -2100,36 +2153,70 @@ const portfolioDistributionPanel = {
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const portfolioDistributionList = {
+const portfolioPieLayout = {
   display: "grid",
-  gap: 14,
+  gridTemplateColumns: "260px 1fr",
+  gap: 24,
+  alignItems: "center",
   marginTop: 18,
 };
 
-const portfolioDistributionRow = {
-  display: "grid",
-  gridTemplateColumns: "minmax(220px, 320px) 1fr",
-  gap: 16,
+const portfolioPieWrap = {
+  display: "flex",
+  justifyContent: "center",
   alignItems: "center",
 };
 
-const portfolioDistributionInfo = {
-  display: "grid",
-  gap: 5,
+const portfolioPieChart = {
+  width: 220,
+  height: 220,
+  borderRadius: "50%",
+  position: "relative",
+  boxShadow: "0 8px 24px rgba(15,23,42,0.16)",
+};
+
+const portfolioPieCenter = {
+  position: "absolute",
+  inset: 48,
+  background: "white",
+  borderRadius: "50%",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  padding: 12,
+  boxShadow: "inset 0 0 0 1px #e5e7eb",
   color: "#111827",
+  fontSize: 13,
 };
 
-const portfolioDistributionBarTrack = {
-  height: 22,
-  background: "#e5e7eb",
-  borderRadius: 999,
-  overflow: "hidden",
+const portfolioPieLegend = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
 };
 
-const portfolioDistributionBar = {
-  height: "100%",
-  background: "linear-gradient(90deg,#2563eb,#16a34a)",
-  borderRadius: 999,
+const portfolioPieLegendItem = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  padding: 10,
 };
 
+const portfolioPieLegendColor = {
+  width: 14,
+  height: 14,
+  borderRadius: "50%",
+  flexShrink: 0,
+};
 
+const portfolioPieLegendText = {
+  display: "grid",
+  gap: 3,
+  color: "#111827",
+  fontSize: 13,
+};
