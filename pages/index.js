@@ -288,6 +288,8 @@ export async function getServerSideProps() {
         completedDashboardAlerts || [],
       portfolioAnnualPremium,
       portfolioAnnualCommission,
+      portfolioMonthlyCommissionEstimate:
+        portfolioAnnualCommission / 12,
       monthlyPolicies:
         monthlyPolicies.length,
       monthlyPremium,
@@ -417,6 +419,7 @@ export default function Dashboard({
   completedDashboardAlerts,
   portfolioAnnualPremium,
   portfolioAnnualCommission,
+  portfolioMonthlyCommissionEstimate,
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
@@ -967,7 +970,11 @@ export default function Dashboard({
             <PortfolioMetric title="Clientes efetivos" value={activeClients} />
             <PortfolioMetric title="Apólices ativas" value={activePolicies} />
             <PortfolioMetric title="Prémio anual" value={formatEuro(portfolioAnnualPremium)} />
-            <PortfolioMetric title="Comissão anual" value={formatEuro(portfolioAnnualCommission)} />
+            <PortfolioMetric
+              title="Comissão anual"
+              value={formatEuro(portfolioAnnualCommission)}
+              subvalue={`Estimativa mensal: ${formatEuro(portfolioMonthlyCommissionEstimate)}`}
+            />
           </div>
         </section>
 
@@ -1151,11 +1158,17 @@ function AlertRow({ item, onComplete, onCalendar, important = false }) {
   );
 }
 
-function PortfolioMetric({ title, value }) {
+function PortfolioMetric({ title, value, subvalue }) {
   return (
     <div style={portfolioMetric}>
       <span style={portfolioMetricLabel}>{title}</span>
       <strong style={portfolioMetricValue}>{value}</strong>
+
+      {subvalue && (
+        <span style={portfolioMetricSubvalue}>
+          {subvalue}
+        </span>
+      )}
     </div>
   );
 }
@@ -1773,6 +1786,14 @@ const portfolioMetricLabel = {
 const portfolioMetricValue = {
   fontSize: 28,
   color: "#0e7490",
+};
+
+const portfolioMetricSubvalue = {
+  display: "block",
+  marginTop: 8,
+  color: "#64748b",
+  fontSize: 14,
+  fontWeight: "bold",
 };
 
 const productionGrid = {
