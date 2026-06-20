@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
@@ -29,14 +28,14 @@ const portfolioBranchOrder = [
 ];
 
 const portfolioPieColors = [
-  "#2563eb",
-  "#16a34a",
-  "#f59e0b",
-  "#dc2626",
-  "#7c3aed",
-  "#06b6d4",
-  "#92400e",
-  "#9ca3af",
+  "#2563eb", // AUTOMÓVEL
+  "#16a34a", // CASA
+  "#f59e0b", // ATS
+  "#dc2626", // VIDA
+  "#ec4899", // SAUDE
+  "#06b6d4", // APS
+  "#92400e", // CAES E GATOS
+  "#6b7280", // OUTROS
 ];
 
 const portfolioBranchIcons = {
@@ -2297,4 +2296,6 @@ const portfolioPieLegendText = {
   color: "#111827",
   fontSize: 13,
 };
+
+
 
