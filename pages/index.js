@@ -575,6 +575,7 @@ export default function Dashboard({
   insuranceRevenue,
   financialRevenue,
   totalRevenue,
+  monthlyRevenueEstimate,
   currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -2051,9 +2052,5 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
-
-
-
 
 
