@@ -314,16 +314,24 @@ function getPolicyPremium(policy) {
   ) || 0;
 }
 
+function getFrequencyMultiplier(frequency) {
+  const value = String(frequency || "anual").toLowerCase();
+
+  if (value === "mensal") return 12;
+  if (value === "trimestral") return 4;
+  if (value === "semestral") return 2;
+
+  return 1;
+}
+
 function getPolicyCommission(policy) {
-  return Number(
-    policy.annual_commission ??
-      policy.commission ??
-      policy.commission_value ??
-      policy.valor_comissao ??
-      policy.comissao_anual ??
-      policy.comissao ??
-      0
-  ) || 0;
+  const commissionPerPayment =
+    Number(policy.commission_per_payment || 0);
+
+  return (
+    commissionPerPayment *
+    getFrequencyMultiplier(policy.payment_frequency)
+  );
 }
 
 function calculateAge(date) {
