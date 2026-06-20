@@ -19,9 +19,38 @@ export async function getServerSideProps() {
     .select("*")
     .order("created_at", { ascending: false });
 
+  async function fetchPoliciesRange(from, to) {
+    const { data, error } = await supabase
+      .from("policies")
+      .select("id, client_id, status")
+      .range(from, to);
+
+    if (error) {
+      console.log(
+        "Erro ao carregar apólices na página Clientes:",
+        error.message
+      );
+
+      return [];
+    }
+
+    return data || [];
+  }
+
+  const firstPoliciesBatch = await fetchPoliciesRange(0, 999);
+  const secondPoliciesBatch = await fetchPoliciesRange(1000, 1999);
+  const thirdPoliciesBatch = await fetchPoliciesRange(2000, 2999);
+
+  const policies = [
+    ...firstPoliciesBatch,
+    ...secondPoliciesBatch,
+    ...thirdPoliciesBatch,
+  ];
+
   return {
     props: {
       clients: clients || [],
+      policies,
     },
   };
 }
@@ -34,7 +63,7 @@ function cleanText(value) {
     .trim();
 }
 
-export default function Clientes({ clients }) {
+export default function Clientes({ clients, policies }) {
   const [search, setSearch] = useState("");
 
   const [name, setName] = useState("");
@@ -82,14 +111,33 @@ export default function Clientes({ clients }) {
 
       return searchable.includes(term);
     });
-  }, [visibleClients, search]);
+  const visibleClientIds =
+    new Set(visibleClients.map((client) => client.id));
+
+  const effectiveClientIds =
+    new Set(
+      (policies || [])
+        .filter((policy) => visibleClientIds.has(policy.client_id))
+        .map((policy) => policy.client_id)
+        .filter(Boolean)
+    );
 
   const effectiveClients =
-    visibleClients.filter((c) => c.status === "ativo");
+    effectiveClientIds.size;
+
+  const potentialClients =
+    Math.max(visibleClients.length - effectiveClients, 0);
+
+  const activePolicies =
+    (policies || []).filter(
+      (policy) =>
+        policy.status === "ativa" &&
+        visibleClientIds.has(policy.client_id)
+    );
 
   const policyRatio =
-    effectiveClients.length > 0
-      ? (1129 / effectiveClients.length).toFixed(2)
+    effectiveClients > 0
+      ? (activePolicies.length / effectiveClients).toFixed(2)
       : "0.00";
 
   async function createClientRecord(e) {
@@ -181,19 +229,20 @@ export default function Clientes({ clients }) {
           <StatCard title="Total de clientes" value={visibleClients.length} />
 
           <StatCard
-            title="Ativos"
-            value={effectiveClients.length}
+            title="Efetivos"
+            value={effectiveClients}
           />
 
           <StatCard
             title="Potenciais"
-            value={visibleClients.filter((c) => c.status === "potencial").length}
+            value={potentialClients}
           />
 
           <StatCard
             title="Rácio apólices/cliente"
             value={policyRatio}
-            background="#ede9fe"
+            background="#111827"
+            color="white"
           />
         </section>
 
@@ -365,11 +414,13 @@ export default function Clientes({ clients }) {
   );
 }
 
-function StatCard({ title, value, background = "white" }) {
+function StatCard({ title, value, background = "white", color = "#111827" }) {
   return (
-    <div style={{ ...statCard, background }}>
-      <p style={cardLabel}>{title}</p>
-      <h2 style={cardValue}>{value}</h2>
+    <div style={{ ...statCard, background, color }}>
+      <p style={{ ...cardLabel, color: color === "white" ? "#e5e7eb" : "#6b7280" }}>
+        {title}
+      </p>
+      <h2 style={{ ...cardValue, color }}>{value}</h2>
     </div>
   );
 }
@@ -564,4 +615,3 @@ const deleteButton = {
   fontWeight: "bold",
   cursor: "pointer",
 };
-
