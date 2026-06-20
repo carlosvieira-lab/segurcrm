@@ -16,89 +16,8 @@ const supabase = createClient(
   supabaseKey
 );
 
-const portfolioBranchOrder = [
-  "AUTOMÓVEL",
-  "CASA",
-  "ATS",
-  "VIDA",
-  "SAUDE",
-  "APS",
-  "CAES E GATOS",
-  "OUTROS",
-];
 
-const portfolioPieColors = [
-  "#2563eb", // AUTOMÓVEL
-  "#16a34a", // CASA
-  "#f59e0b", // ATS
-  "#dc2626", // VIDA
-  "#ec4899", // SAUDE
-  "#06b6d4", // APS
-  "#92400e", // CAES E GATOS
-  "#6b7280", // OUTROS
-];
 
-const portfolioBranchIcons = {
-  AUTOMÓVEL: "🚗",
-  CASA: "🏠",
-  ATS: "🛡️",
-  VIDA: "❤️",
-  SAUDE: "➕",
-  APS: "💼",
-  "CAES E GATOS": "🐶",
-  OUTROS: "📦",
-};
-
-const portfolioCalloutPositions = {
-  AUTOMÓVEL: {
-    labelLeft: 535,
-    labelTop: 50,
-    textAlign: "left",
-    lineEndX: 510,
-  },
-  SAUDE: {
-    labelLeft: 535,
-    labelTop: 170,
-    textAlign: "left",
-    lineEndX: 510,
-  },
-  OUTROS: {
-    labelLeft: 535,
-    labelTop: 300,
-    textAlign: "left",
-    lineEndX: 510,
-  },
-  APS: {
-    labelLeft: 20,
-    labelTop: 30,
-    textAlign: "right",
-    lineEndX: 250,
-  },
-  "CAES E GATOS": {
-    labelLeft: 20,
-    labelTop: 115,
-    textAlign: "right",
-    lineEndX: 250,
-  },
-  ATS: {
-    labelLeft: 20,
-    labelTop: 205,
-    textAlign: "right",
-    lineEndX: 250,
-  },
-  CASA: {
-    labelLeft: 20,
-    labelTop: 290,
-    textAlign: "right",
-    lineEndX: 250,
-  },
-  VIDA: {
-    labelLeft: 20,
-    labelTop: 365,
-    textAlign: "right",
-    lineEndX: 250,
-  },
-};
 
 const budgetRows = [
   {
@@ -178,28 +97,6 @@ function getFirstFractionCommission(policy) {
       policy.comissao_anual ||
       0
   );
-}
-
-function getPortfolioBranchGroup(branch) {
-  const normalizedBranch = normalizeText(branch);
-
-  if (normalizedBranch === "AUTOMOVEL") return "AUTOMÓVEL";
-  if (normalizedBranch === "CASA") return "CASA";
-  if (normalizedBranch === "ATCP" || normalizedBranch === "ATCO") return "ATS";
-  if (normalizedBranch === "VIDA") return "VIDA";
-  if (normalizedBranch === "SAUDE") return "SAUDE";
-  if (normalizedBranch === "APS") return "APS";
-  if (normalizedBranch === "CAES E GATOS") return "CAES E GATOS";
-
-  if (
-    normalizedBranch === "MREMP" ||
-    normalizedBranch === "VIAGEM" ||
-    normalizedBranch === "OUTROS"
-  ) {
-    return "OUTROS";
-  }
-
-  return null;
 }
 
 export async function getServerSideProps() {
@@ -410,132 +307,6 @@ export async function getServerSideProps() {
       0
     );
 
-  const portfolioDistributionMap =
-    activePolicies.reduce((acc, policy) => {
-      const group =
-        getPortfolioBranchGroup(policy.branch);
-
-      if (!group) {
-        return acc;
-      }
-
-      if (!acc[group]) {
-        acc[group] = {
-          branch: group,
-          count: 0,
-          premium: 0,
-        };
-      }
-
-      acc[group].count += 1;
-      acc[group].premium += getPolicyPremium(policy);
-
-      return acc;
-    }, {});
-
-  const portfolioDistribution =
-    portfolioBranchOrder
-      .map((branch) => ({
-        branch,
-        count:
-          portfolioDistributionMap[branch]?.count || 0,
-        premium:
-          portfolioDistributionMap[branch]?.premium || 0,
-      }))
-      .filter(
-        (item) =>
-          item.count > 0 ||
-          item.premium > 0
-      );
-
-  const maxPortfolioDistributionPremium =
-    Math.max(
-      ...portfolioDistribution.map(
-        (item) => item.premium
-      ),
-      1
-    );
-
-  let portfolioPieOffset = 25;
-
-  const portfolioPieSegments =
-    portfolioDistribution.map((item, index) => {
-      const percentage =
-        portfolioAnnualPremium > 0
-          ? (item.premium / portfolioAnnualPremium) * 100
-          : 0;
-
-      const start = portfolioPieOffset;
-      const end = portfolioPieOffset + percentage;
-      const middle = start + percentage / 2;
-
-      portfolioPieOffset = end;
-
-      const angle = (middle / 100) * 360;
-      const radians = (angle - 90) * (Math.PI / 180);
-      const pointRadius = 118;
-      const elbowRadius = 150;
-      const centerX = 370;
-      const centerY = 220;
-
-      const pointX =
-        centerX + Math.cos(radians) * pointRadius;
-      const pointY =
-        centerY + Math.sin(radians) * pointRadius;
-      const elbowX =
-        centerX + Math.cos(radians) * elbowRadius;
-      const elbowY =
-        centerY + Math.sin(radians) * elbowRadius;
-
-      const position =
-        portfolioCalloutPositions[item.branch] || {
-          labelLeft: 535,
-          labelTop: 220,
-          textAlign: "left",
-          lineEndX: 510,
-        };
-
-      return {
-        ...item,
-        percentage,
-        icon: portfolioBranchIcons[item.branch] || "•",
-        color:
-          portfolioPieColors[
-            index % portfolioPieColors.length
-          ],
-        pointX,
-        pointY,
-        elbowX,
-        elbowY,
-        labelLeft: position.labelLeft,
-        labelTop: position.labelTop,
-        textAlign: position.textAlign,
-        lineEndX: position.lineEndX,
-        lineEndY: position.labelTop + 22,
-      };
-    });
-
-  const portfolioPieGradient =
-    portfolioPieSegments.length > 0
-      ? portfolioPieSegments
-          .reduce(
-            (acc, item) => {
-              const start = acc.offset;
-              const end = start + item.percentage;
-
-              acc.parts.push(`${item.color} ${start}% ${end}%`);
-              acc.offset = end;
-
-              return acc;
-            },
-            {
-              offset: 25,
-              parts: [],
-            }
-          )
-          .parts.join(", ")
-      : "#e5e7eb 0% 100%";
-
   const budgetPoliciesThisMonth =
     activePolicies.filter((policy) => {
       if (!policy.start_date) {
@@ -635,9 +406,6 @@ export async function getServerSideProps() {
       portfolioAnnualCommission,
       portfolioMonthlyCommissionEstimate:
         portfolioAnnualCommission / 12,
-      portfolioDistribution,
-      portfolioPieSegments,
-      portfolioPieGradient,
       monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
@@ -767,9 +535,6 @@ export default function Dashboard({
   portfolioAnnualPremium,
   portfolioAnnualCommission,
   portfolioMonthlyCommissionEstimate,
-  portfolioDistribution,
-  portfolioPieSegments,
-  portfolioPieGradient,
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
@@ -1420,97 +1185,6 @@ export default function Dashboard({
           />
         </section>
 
-        <section style={portfolioDistributionPanel}>
-          <div>
-            <h2 style={panelTitle}>
-              🧀 Distribuição da Carteira por Ramo
-            </h2>
-
-            <p style={panelSubtitle}>
-              Prémio anual em vigor por ramo. ATCP e ATCO estão agrupados como ATS; FINANCEIROS não entram neste gráfico.
-            </p>
-          </div>
-
-          {portfolioPieSegments.length === 0 ? (
-            <p style={mutedText}>
-              Sem dados de carteira para apresentar.
-            </p>
-          ) : (
-            <div style={portfolioCalloutChart}>
-              <svg
-                style={portfolioCalloutSvg}
-                viewBox="0 0 740 440"
-                preserveAspectRatio="none"
-              >
-                {portfolioPieSegments.map((item) => (
-                  <g key={`line-${item.branch}`}>
-                    <polyline
-                      points={`${item.pointX},${item.pointY} ${item.elbowX},${item.elbowY} ${item.lineEndX},${item.lineEndY}`}
-                      fill="none"
-                      stroke={item.color}
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle
-                      cx={item.pointX}
-                      cy={item.pointY}
-                      r="5"
-                      fill="white"
-                      stroke={item.color}
-                      strokeWidth="3"
-                    />
-                  </g>
-                ))}
-              </svg>
-
-              <div
-                style={{
-                  ...portfolioPieChart,
-                  background: `conic-gradient(${portfolioPieGradient})`,
-                }}
-              >
-                <div style={portfolioPieCenter}>
-                  <strong>
-                    {formatEuro(portfolioAnnualPremium)}
-                  </strong>
-                  <span>Total prémio</span>
-                </div>
-              </div>
-
-              {portfolioPieSegments.map((item) => (
-                <div
-                  key={`label-${item.branch}`}
-                  style={{
-                    ...portfolioCalloutLabel,
-                    left: item.labelLeft,
-                    top: item.labelTop,
-                    textAlign: item.textAlign,
-                    borderColor: item.color,
-                  }}
-                >
-                  <div style={portfolioCalloutTitle}>
-                    <span
-                      style={{
-                        ...portfolioCalloutIcon,
-                        background: item.color,
-                      }}
-                    >
-                      {item.icon}
-                    </span>
-
-                    <strong>{item.branch}</strong>
-                  </div>
-
-                  <span>{formatEuro(item.premium)}</span>
-                  <b style={{ color: item.color }}>
-                    {item.percentage.toFixed(1)}%
-                  </b>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       </main>
     </div>
   );
@@ -2286,88 +1960,7 @@ const quickCard = {
     "0 1px 4px rgba(0,0,0,0.08)",
 };
 
-const portfolioDistributionPanel = {
-  background: "white",
-  border: "1px solid #e5e7eb",
-  borderRadius: 18,
-  padding: 24,
-  marginBottom: 30,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-};
 
-const portfolioCalloutChart = {
-  position: "relative",
-  width: "100%",
-  maxWidth: 900,
-  height: 440,
-  margin: "18px auto 0",
-};
 
-const portfolioCalloutSvg = {
-  position: "absolute",
-  inset: 0,
-  width: "100%",
-  height: "100%",
-  pointerEvents: "none",
-  overflow: "visible",
-};
-
-const portfolioPieChart = {
-  width: 260,
-  height: 260,
-  borderRadius: "50%",
-  position: "absolute",
-  left: "50%",
-  top: "50%",
-  transform: "translate(-50%, -50%)",
-  boxShadow: "0 8px 24px rgba(15,23,42,0.16)",
-};
-
-const portfolioPieCenter = {
-  position: "absolute",
-  inset: 72,
-  background: "white",
-  borderRadius: "50%",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  textAlign: "center",
-  padding: 12,
-  boxShadow: "inset 0 0 0 1px #e5e7eb",
-  color: "#111827",
-  fontSize: 12,
-};
-
-const portfolioCalloutLabel = {
-  position: "absolute",
-  width: 170,
-  background: "white",
-  border: "1px solid",
-  borderRadius: 14,
-  padding: "10px 12px",
-  boxShadow: "0 6px 18px rgba(15,23,42,0.10)",
-  display: "grid",
-  gap: 4,
-  color: "#111827",
-  fontSize: 13,
-};
-
-const portfolioCalloutTitle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-};
-
-const portfolioCalloutIcon = {
-  width: 30,
-  height: 30,
-  borderRadius: "50%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 16,
-  flexShrink: 0,
-};
 
 
