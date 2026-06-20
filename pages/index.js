@@ -152,22 +152,25 @@ export async function getServerSideProps() {
   const activePolicies =
     (policies || []).filter(
       (policy) =>
-        policy.status !== "anulada"
+        policy.status === "ativa"
     );
 
-  const activeClientIds =
+  const effectiveClientIds =
     new Set(
-      activePolicies
+      (policies || [])
         .map((policy) => policy.client_id)
         .filter(Boolean)
     );
 
   const activeClients =
-    activeClientIds.size;
+    effectiveClientIds.size;
 
   const potentialClients =
-    (clients?.length || 0) -
-    activeClients;
+    Math.max(
+      (clients?.length || 0) -
+        activeClients,
+      0
+    );
 
   const policyRatio =
     activeClients > 0
@@ -925,7 +928,7 @@ export default function Dashboard({
           </div>
 
           <div style={portfolioGrid}>
-            <PortfolioMetric title="Clientes ativos" value={activeClients} />
+            <PortfolioMetric title="Clientes efetivos" value={activeClients} />
             <PortfolioMetric title="Apólices ativas" value={activePolicies} />
             <PortfolioMetric title="Prémio anual" value={formatEuro(portfolioAnnualPremium)} />
             <PortfolioMetric title="Comissão anual" value={formatEuro(portfolioAnnualCommission)} />
@@ -958,7 +961,7 @@ export default function Dashboard({
 
         <section style={grid}>
           <Card
-            title="Clientes em vigor"
+            title="Clientes efetivos"
             value={
               activeClients
             }
