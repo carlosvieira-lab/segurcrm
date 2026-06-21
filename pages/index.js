@@ -402,8 +402,13 @@ export async function getServerSideProps() {
   const totalRevenue =
     insuranceRevenue + financialRevenue;
 
-  const monthlyRevenueEstimate =
-    totalRevenue / 12;
+  const elapsedMonths =
+    currentMonth + 1;
+
+  const monthlyRevenueAverage =
+    elapsedMonths > 0
+      ? totalRevenue / elapsedMonths
+      : 0;
 
   return {
     props: {
@@ -442,7 +447,7 @@ export async function getServerSideProps() {
       insuranceRevenue,
       financialRevenue,
       totalRevenue,
-      monthlyRevenueEstimate,
+      monthlyRevenueAverage,
       currentMonthLabel:
         new Intl.DateTimeFormat("pt-PT", {
           month: "long",
@@ -575,7 +580,7 @@ export default function Dashboard({
   insuranceRevenue,
   financialRevenue,
   totalRevenue,
-  monthlyRevenueEstimate,
+  monthlyRevenueAverage,
   currentMonthLabel,
 }) {
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -1163,9 +1168,9 @@ export default function Dashboard({
               </strong>
 
               <div style={revenueEstimateText}>
-                Estimativa mensal:
+                Média mensal real:
                 <br />
-                {formatEuro(monthlyRevenueEstimate)}
+                {formatEuro(monthlyRevenueAverage)}
               </div>
             </div>
           </div>
@@ -2052,5 +2057,8 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
+
+
+
 
 
