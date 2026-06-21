@@ -385,12 +385,15 @@ export async function getServerSideProps() {
   const monthlyCommission =
     monthlyBudgetTotals.commission;
 
-  const insuranceRevenue =
+  const insuranceRevenueGross =
     (commissionReceipts || []).reduce(
       (sum, item) =>
         sum + Number(item.amount || 0),
       0
     );
+
+  const insuranceRevenue =
+    insuranceRevenueGross * 0.77;
 
   const financialRevenue =
     (financialDeals || []).reduce(
@@ -444,6 +447,7 @@ export async function getServerSideProps() {
       monthlyPolicies,
       monthlyPremium,
       monthlyCommission,
+      insuranceRevenueGross,
       insuranceRevenue,
       financialRevenue,
       totalRevenue,
@@ -577,6 +581,7 @@ export default function Dashboard({
   monthlyPolicies,
   monthlyPremium,
   monthlyCommission,
+  insuranceRevenueGross,
   insuranceRevenue,
   financialRevenue,
   totalRevenue,
@@ -1148,10 +1153,24 @@ export default function Dashboard({
           </div>
 
           <div style={productionGrid}>
-            <ProductionMetric
-              title="Seguros"
-              value={formatEuro(insuranceRevenue)}
-            />
+            <div style={productionMetric}>
+              <span style={productionMetricLabel}>
+                Seguros
+              </span>
+
+              <strong style={productionMetricValue}>
+                {formatEuro(insuranceRevenueGross)}
+              </strong>
+
+              <div style={revenueEstimateText}>
+                IRS (23%): -
+                {formatEuro(insuranceRevenueGross * 0.23)}
+                <br />
+                Líquido:
+                {" "}
+                {formatEuro(insuranceRevenue)}
+              </div>
+            </div>
 
             <ProductionMetric
               title="Financeiros"
@@ -2057,8 +2076,5 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
-
-
 
 
