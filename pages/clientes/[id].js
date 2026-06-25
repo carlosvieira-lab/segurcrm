@@ -585,6 +585,7 @@ const [clientForm, setClientForm] = useState({
     client?.driving_license_start_date || "",
 
   iban: client?.iban || "",
+  mortgage_interest: client?.mortgage_interest || "AINDA_NAO_SEI",
   notes: client?.notes || "",
   interactions: client?.interactions || "",
 });
@@ -728,6 +729,7 @@ async function saveClient(e) {
         clientForm.driving_license_start_date,
 
       iban: clientForm.iban,
+      mortgage_interest: clientForm.mortgage_interest,
       notes: clientForm.notes,
       interactions: clientForm.interactions,
     })
@@ -1817,6 +1819,24 @@ const timelineItems = createTimeline(
         }
       />
 
+      <label style={fieldLabel}>
+        Crédito Habitação
+        <select
+          style={mortgageSelectInput}
+          value={clientForm.mortgage_interest || "AINDA_NAO_SEI"}
+          onChange={(e) =>
+            setClientForm({
+              ...clientForm,
+              mortgage_interest: e.target.value,
+            })
+          }
+        >
+          <option value="SIM">SIM</option>
+          <option value="NAO">NÃO</option>
+          <option value="AINDA_NAO_SEI">AINDA NÃO SEI</option>
+        </select>
+      </label>
+
       <textarea
         style={{
           ...input,
@@ -2684,6 +2704,21 @@ const timelineItems = createTimeline(
             />
 
             <InfoItem label="IBAN" value={client.iban} />
+
+            <div style={mortgageInfoItem}>
+              <span style={mortgageInfoLabel}>
+                🏠 Crédito Habitação
+              </span>
+
+              <strong style={mortgageInfoValue}>
+                {client.mortgage_interest === "SIM"
+                  ? "SIM"
+                  : client.mortgage_interest === "NAO"
+                  ? "NÃO"
+                  : "AINDA NÃO SEI"}
+              </strong>
+            </div>
+
             <InfoItem label="Observações" value={client.notes} />
           
   
@@ -3276,6 +3311,40 @@ const infoLabel = {
 const infoValue = {
   color: "#111827",
   fontSize: 15,
+};
+
+const mortgageInfoItem = {
+  background: "#fee2e2",
+  border: "2px solid #dc2626",
+  padding: 14,
+  borderRadius: 14,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const mortgageInfoLabel = {
+  color: "#991b1b",
+  fontSize: 13,
+  fontWeight: "bold",
+};
+
+const mortgageInfoValue = {
+  color: "#991b1b",
+  fontSize: 16,
+  fontWeight: "bold",
+};
+
+const mortgageSelectInput = {
+  padding: 12,
+  borderRadius: 10,
+  border: "2px solid #dc2626",
+  fontSize: 14,
+  width: "100%",
+  boxSizing: "border-box",
+  background: "#fee2e2",
+  color: "#991b1b",
+  fontWeight: "bold",
 };
 
 const clientStats = {
