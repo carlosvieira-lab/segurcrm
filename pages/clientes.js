@@ -63,6 +63,18 @@ function cleanText(value) {
     .trim();
 }
 
+
+function getClientPolicyCounts(clientId, policies) {
+  const clientPolicies = (policies || []).filter(
+    (policy) => policy.client_id === clientId
+  );
+
+  return {
+    activeCount: clientPolicies.filter((p) => p.status === "ativa").length,
+    cancelledCount: clientPolicies.filter((p) => p.status === "anulada").length,
+  };
+}
+
 export default function Clientes({ clients, policies }) {
   const [search, setSearch] = useState("");
 
@@ -383,6 +395,22 @@ export default function Clientes({ clients, policies }) {
                       <p style={smallText}>
                         {client.city || "Sem cidade"}
                       </p>
+
+                      {(() => {
+                        const { activeCount, cancelledCount } =
+                          getClientPolicyCounts(client.id, policies);
+
+                        return (
+                          <div style={clientPolicySummary}>
+                            <span style={activePolicySummary}>
+                              ● {activeCount} {activeCount === 1 ? "apólice em vigor" : "apólices em vigor"}
+                            </span>
+                            <span style={cancelledPolicySummary}>
+                              ● {cancelledCount} {cancelledCount === 1 ? "apólice anulada" : "apólices anuladas"}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div style={rightSide}>
@@ -584,6 +612,20 @@ const statusBadge = {
   fontWeight: "bold",
   textAlign: "center",
 };
+
+
+
+const clientPolicySummary = {
+  display: "flex",
+  gap: 16,
+  flexWrap: "wrap",
+  marginTop: 6,
+  fontSize: 13,
+  fontWeight: "bold",
+};
+
+const activePolicySummary = { color: "#16a34a" };
+const cancelledPolicySummary = { color: "#dc2626" };
 
 const rightSide = {
   display: "grid",
