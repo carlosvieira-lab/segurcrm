@@ -570,6 +570,12 @@ export default function Importacoes({ clients, policies, insurers }) {
   function rowBlockingReason(row) {
     if (!row.nif) return "Sem NIF";
     if (!row.policyNumber) return "Sem nº apólice";
+
+    if (importMode === "generali") {
+      if (row.existingClient) return "NIF já existe no CRM";
+      if (row.existingPolicy) return "Apólice já existe no CRM";
+    }
+
     if (duplicatedPoliciesInExcel.has(normalizePolicyNumber(row.policyNumber))) {
       return "Apólice duplicada no Excel";
     }
@@ -604,11 +610,19 @@ export default function Importacoes({ clients, policies, insurers }) {
       (row) =>
         row.policyNumber &&
         !row.existingPolicy &&
-        !duplicatedPoliciesInExcel.has(normalizePolicyNumber(row.policyNumber))
+        !rowBlockingReason(row)
     ).length;
 
     const policiesExisting = analyzedRows.filter(
       (row) => row.policyNumber && row.existingPolicy
+    ).length;
+
+    const existingNifsBlocked = analyzedRows.filter(
+      (row) => importMode === "generali" && row.existingClient
+    ).length;
+
+    const existingPoliciesBlocked = analyzedRows.filter(
+      (row) => importMode === "generali" && row.existingPolicy
     ).length;
 
     const rowsWithErrors = analyzedRows.filter((row) => rowBlockingReason(row)).length;
@@ -627,6 +641,8 @@ export default function Importacoes({ clients, policies, insurers }) {
       clientsExisting,
       policiesNew,
       policiesExisting,
+      existingNifsBlocked,
+      existingPoliciesBlocked,
       rowsWithErrors,
       duplicatedNifs: duplicatedNifsInExcel.size,
       duplicatedPolicies: duplicatedPoliciesInExcel.size,
@@ -868,7 +884,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
   async function confirmGeneraliImport() {
     const confirm = window.confirm(
-      "Confirmas a importação Generali?\n\nRegras:\n- Clientes existentes por NIF serão usados e NÃO serão duplicados.\n- Dados do cliente existente só são preenchidos se estiverem vazios.\n- Clientes novos serão criados.\n- Apólices já existentes serão ignoradas.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO serão importadas.\n- NIF repetido é permitido quando o cliente tem várias apólices.\n- A comissão importada é a soma da Comissão Cobrança + Comissão Distribuição.\n- O prémio comercial anual é calculado pelo período do recibo."
+      "Confirmas a importação Generali?\n\nRegras fundamentais:\n- NIF que já exista no CRM NÃO é importado.\n- Nº de apólice que já exista no CRM NÃO é importado.\n- A Generali não repete o mesmo nº de apólice em ramos diferentes.\n- Linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel NÃO são importadas.\n- Clientes novos serão criados apenas quando o NIF ainda não existir no CRM.\n- O prémio comercial anual mantém o cálculo pelo período do recibo.\n- A comissão importada é a soma da Comissão Cobrança + Comissão Distribuição."
     );
 
     if (!confirm) return;
@@ -887,6 +903,7 @@ export default function Importacoes({ clients, policies, insurers }) {
       clientsUpdated: 0,
       clientsEnriched: 0,
       clientsSkipped: 0,
+      existingNifsSkipped: 0,
       policiesCreated: 0,
       policiesUpdated: 0,
       policiesExistingIgnored: 0,
@@ -912,6 +929,15 @@ export default function Importacoes({ clients, policies, insurers }) {
 
         if (blockingReason) {
           result.skipped += 1;
+
+          if (blockingReason === "NIF já existe no CRM") {
+            result.existingNifsSkipped += 1;
+          }
+
+          if (blockingReason === "Apólice já existe no CRM") {
+            result.policiesExistingIgnored += 1;
+          }
+
           result.errors.push(`Linha ${row.index}: ${blockingReason}.`);
           continue;
         }
@@ -931,31 +957,10 @@ export default function Importacoes({ clients, policies, insurers }) {
         let client = localClientsByNif.get(row.nif);
 
         if (client) {
-          const updatePayload = {
-            name: client.name || row.clientName,
-            status: "ativo",
-          };
-
-          if (row.phone) updatePayload.phone = row.phone;
-          if (row.email) updatePayload.email = row.email;
-          if (row.address) updatePayload.address = row.address;
-          if (row.locality) updatePayload.city = row.locality;
-          if (row.postalCode) updatePayload.postal_code = row.postalCode;
-
-          const { error: clientUpdateError } = await supabase
-            .from("clients")
-            .update(updatePayload)
-            .eq("id", client.id);
-
-          if (clientUpdateError) {
-            throw clientUpdateError;
-          }
-
-          result.clientsUpdated += 1;
-
-          if (row.phone || row.email || row.address || row.locality || row.postalCode) {
-            result.clientsEnriched += 1;
-          }
+          result.skipped += 1;
+          result.existingNifsSkipped += 1;
+          result.errors.push(`Linha ${row.index}: NIF já existe no CRM.`);
+          continue;
         } else {
           const insertPayload = {
             type: "particular",
@@ -1083,7 +1088,7 @@ export default function Importacoes({ clients, policies, insurers }) {
           <p style={muted}>
             {importMode === "realvida"
               ? "Esta versão lê, valida e permite importar após confirmação. Por segurança, não preenche data de início e deixa o ramo em branco para preencher manualmente. Os nomes dos clientes são gravados com maiúscula apenas na primeira letra de cada nome. O nº de apólice Real Vida é tratado como Mod/Apolice e compara 07/170634 com 7/170634."
-              : "Esta fase lê e valida o Excel Generali em pré-visualização, sem gravar nada no CRM. Vamos confirmar clientes, NIF, telefone, email, morada, apólice, ramo, prémio, comissão e datas antes de ativar a importação final."}
+              : "Importação Generali com regras rígidas: NIF já existente no CRM não entra; nº de apólice já existente não entra; nº de apólice repetido no Excel fica bloqueado; prémio anual calculado pelo período do recibo; comissão total = comissão de cobrança + comissão de distribuição."}
           </p>
 
           {importMode === "realvida" && !realVida && (
@@ -1129,6 +1134,8 @@ export default function Importacoes({ clients, policies, insurers }) {
               <SummaryCard title="Clientes novos" value={summary.clientsNew} color="#16a34a" />
               <SummaryCard title="Apólices existentes" value={summary.policiesExisting} color="#7c3aed" />
               <SummaryCard title="Apólices novas" value={summary.policiesNew} color="#0f766e" />
+              <SummaryCard title="NIF já no CRM" value={summary.existingNifsBlocked || 0} color="#dc2626" />
+              <SummaryCard title="Apólices já no CRM" value={summary.existingPoliciesBlocked || 0} color="#dc2626" />
               <SummaryCard title="Linhas bloqueadas" value={summary.rowsWithErrors} color="#dc2626" />
               <SummaryCard title="NIF repetidos Excel" value={summary.duplicatedNifs} color="#2563eb" />
               <SummaryCard title="Apólices duplicadas Excel" value={summary.duplicatedPolicies} color="#f59e0b" />
@@ -1174,7 +1181,7 @@ export default function Importacoes({ clients, policies, insurers }) {
 
               {summary.rowsWithErrors > 0 && (
                 <div style={warningBox}>
-                  Existem linhas bloqueadas. Só ficam bloqueadas linhas sem NIF, sem nº apólice ou com nº apólice repetido no Excel. NIF repetido é permitido quando o cliente tem várias apólices.
+                  Existem linhas bloqueadas. Na Generali ficam bloqueadas linhas sem NIF, sem nº apólice, com NIF já existente no CRM, com nº de apólice já existente no CRM ou com nº de apólice repetido no Excel.
                 </div>
               )}
 
@@ -1185,6 +1192,7 @@ export default function Importacoes({ clients, policies, insurers }) {
                   <div style={resultGrid}>
                     <span>Clientes criados: <strong>{importResult.clientsCreated}</strong></span>
                     <span>Clientes atualizados: <strong>{importResult.clientsUpdated}</strong></span>
+                    <span>NIF já existentes ignorados: <strong>{importResult.existingNifsSkipped || 0}</strong></span>
                     <span>Clientes enriquecidos: <strong>{importResult.clientsEnriched || 0}</strong></span>
                     <span>Apólices criadas: <strong>{importResult.policiesCreated}</strong></span>
                     <span>Apólices atualizadas: <strong>{importResult.policiesUpdated || 0}</strong></span>
