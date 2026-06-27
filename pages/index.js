@@ -595,6 +595,18 @@ export default function Dashboard({
   const [saving, setSaving] = useState(false);
   const [completionModalAlert, setCompletionModalAlert] = useState(null);
   const [completionNote, setCompletionNote] = useState("");
+  const [hiddenBirthdayClientIds, setHiddenBirthdayClientIds] = useState([]);
+
+  const visibleBirthdaysToday = birthdaysToday.filter(
+    (client) => !hiddenBirthdayClientIds.includes(client.id)
+  );
+
+  function hideBirthday(clientId) {
+    setHiddenBirthdayClientIds((current) => [
+      ...current,
+      clientId,
+    ]);
+  }
 
   async function saveDashboardAlert(openCalendar = false) {
     if (!alertForm.title.trim()) {
@@ -1085,7 +1097,7 @@ export default function Dashboard({
           </Link>
         )}
 
-        {birthdaysToday.length >
+        {visibleBirthdaysToday.length >
           0 && (
           <div style={birthdayCard}>
             <h2 style={birthdayTitle}>
@@ -1093,25 +1105,37 @@ export default function Dashboard({
             </h2>
 
             <div style={birthdayList}>
-              {birthdaysToday.map(
+              {visibleBirthdaysToday.map(
                 (client) => (
-                  <Link
+                  <div
                     key={client.id}
-                    href={`/clientes/${client.id}`}
                     style={birthdayItem}
                   >
-                    <strong>
-                      {client.name ||
-                        "Cliente sem nome"}
-                    </strong>
+                    <Link
+                      href={`/clientes/${client.id}`}
+                      style={birthdayClientLink}
+                    >
+                      <strong>
+                        {client.name ||
+                          "Cliente sem nome"}
+                      </strong>
 
-                    <span>
-                      {calculateAge(
-                        client.birth_date
-                      )}{" "}
-                      anos
-                    </span>
-                  </Link>
+                      <span>
+                        {calculateAge(
+                          client.birth_date
+                        )}{" "}
+                        anos
+                      </span>
+                    </Link>
+
+                    <button
+                      type="button"
+                      style={birthdayDoneButton}
+                      onClick={() => hideBirthday(client.id)}
+                    >
+                      🎉 Já dei os parabéns
+                    </button>
+                  </div>
                 )
               )}
             </div>
@@ -1910,11 +1934,32 @@ const birthdayItem = {
   background: "rgba(255,255,255,0.7)",
   padding: 14,
   borderRadius: 12,
+  color: "#111827",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const birthdayClientLink = {
   textDecoration: "none",
   color: "#111827",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  gap: 18,
+  flex: 1,
+};
+
+const birthdayDoneButton = {
+  background: "#92400e",
+  color: "white",
+  border: "none",
+  borderRadius: 10,
+  padding: "9px 12px",
+  fontWeight: "bold",
+  cursor: "pointer",
 };
 
 const portfolioPanel = {
@@ -2076,5 +2121,3 @@ const quickCard = {
   boxShadow:
     "0 1px 4px rgba(0,0,0,0.08)",
 };
-
-
