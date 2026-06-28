@@ -12,32 +12,46 @@ const supabaseKey =
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function getServerSideProps() {
-  async function fetchPoliciesRange(from, to) {
-    const { data, error } = await supabase
-      .from("policies")
-      .select(`
-        *,
-        insurers(name)
-      `)
-      .range(from, to);
+  async function fetchAllPolicies() {
+    const pageSize = 1000;
+    let from = 0;
+    let allPolicies = [];
 
-    if (error) {
-      console.log("Erro ao carregar apólices:", error.message);
-      return [];
+    while (true) {
+      const { data, error } = await supabase
+        .from("policies")
+        .select(`
+          *,
+          insurers(name)
+        `)
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        console.log("Erro ao carregar apólices:", error.message);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      allPolicies = [
+        ...allPolicies,
+        ...data,
+      ];
+
+      if (data.length < pageSize) {
+        break;
+      }
+
+      from += pageSize;
     }
 
-    return data || [];
+    return allPolicies;
   }
 
-  const firstBatch = await fetchPoliciesRange(0, 999);
-  const secondBatch = await fetchPoliciesRange(1000, 1999);
-  const thirdBatch = await fetchPoliciesRange(2000, 2999);
-
-  const policies = [
-    ...firstBatch,
-    ...secondBatch,
-    ...thirdBatch,
-  ];
+  const policies = await fetchAllPolicies();
 
   return {
     props: {
@@ -524,7 +538,7 @@ export default function FinanceiroCompacto({ policies }) {
 
           <p style={chartNote}>
             Controlo técnico: esta página carregou {policies.length} apólices do Supabase.
-            Se aparecer 1000, o limite ainda está ativo. Se aparecer 1005, está correto.
+            A paginação agora é automática e continua a carregar blocos de 1000 até não existirem mais apólices.
           </p>
 
           <div style={alertsGrid}>
