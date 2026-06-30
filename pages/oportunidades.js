@@ -165,6 +165,32 @@ function buildWhatsappLink(phone) {
   return `https://wa.me/351${numbers}`;
 }
 
+
+function hasDevelopedProcedures(item) {
+  const status = cleanText(item.status);
+  const notes = String(item.procedure_notes || "").trim();
+  const normalizedNotes = cleanText(notes);
+
+  if (
+    status === "contactado" ||
+    status === "em tratamento" ||
+    status === "em progresso"
+  ) {
+    return true;
+  }
+
+  if (!notes) return false;
+
+  const lines = notes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length > 1) return true;
+
+  return Boolean(normalizedNotes && !normalizedNotes.includes("oportunidade criada"));
+}
+
 export default function Oportunidades({ opportunities, clients }) {
   const router = useRouter();
   const [clientNif, setClientNif] = useState("");
@@ -178,6 +204,7 @@ export default function Oportunidades({ opportunities, clients }) {
   const [saving, setSaving] = useState(false);
   const [clientFound, setClientFound] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeOpportunityView, setActiveOpportunityView] = useState("tratamento");
 
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
@@ -552,24 +579,71 @@ export default function Oportunidades({ opportunities, clients }) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const toContact = filtered.filter(
+  const activeNotWonOrLost = filtered.filter(
+    (item) => item.status !== "ganho" && item.status !== "perdido"
+  );
+
+  const inTreatment = activeNotWonOrLost.filter((item) =>
+    hasDevelopedProcedures(item)
+  );
+
+  const toContactToday = activeNotWonOrLost.filter(
     (item) =>
-      item.status !== "ganho" &&
-      item.status !== "perdido" &&
+      !hasDevelopedProcedures(item) &&
       item.contact_date &&
       item.contact_date <= today
   );
 
-  const future = filtered.filter(
+  const future = activeNotWonOrLost.filter(
     (item) =>
-      item.status !== "ganho" &&
-      item.status !== "perdido" &&
-      item.contact_date &&
-      item.contact_date > today
+      !hasDevelopedProcedures(item) &&
+      (!item.contact_date || item.contact_date > today)
   );
 
   const won = filtered.filter((item) => item.status === "ganho");
-  const lost = filtered.filter((item) => item.status === "perdido");
+
+  const opportunityViews = [
+    {
+      id: "tratamento",
+      title: "EM TRATAMENTO",
+      subtitle: "Oportunidades onde já existem procedimentos ou contacto desenvolvido.",
+      icon: "🔴",
+      count: inTreatment.length,
+      color: "#7c3aed",
+      items: inTreatment,
+    },
+    {
+      id: "hoje",
+      title: "PARA CONTACTAR HOJE",
+      subtitle: "Oportunidades com data de contacto para hoje ou já vencidas.",
+      icon: "📞",
+      count: toContactToday.length,
+      color: "#dc2626",
+      items: toContactToday,
+    },
+    {
+      id: "futuras",
+      title: "FUTURAS",
+      subtitle: "Todas as oportunidades que ainda não são para hoje.",
+      icon: "🗓️",
+      count: future.length,
+      color: "#2563eb",
+      items: future,
+    },
+    {
+      id: "contratadas",
+      title: "CONTRATADAS",
+      subtitle: "Oportunidades ganhas/contratadas.",
+      icon: "✅",
+      count: won.length,
+      color: "#16a34a",
+      items: won,
+    },
+  ];
+
+  const selectedOpportunityView =
+    opportunityViews.find((view) => view.id === activeOpportunityView) ||
+    opportunityViews[0];
 
   return (
     <div style={page}>
@@ -693,44 +767,65 @@ export default function Oportunidades({ opportunities, clients }) {
           </form>
         </section>
 
-        <section style={statsGrid}>
-          <StatCard title="Total carregadas" value={filtered.length} color="#111827" />
-          <StatCard title="A contactar" value={toContact.length} color="#dc2626" />
-          <StatCard title="Futuras" value={future.length} color="#2563eb" />
-          <StatCard title="Ganhas" value={won.length} color="#16a34a" />
-          <StatCard title="Perdidas" value={lost.length} color="#6b7280" />
+        <section style={opportunityHubCard}>
+          <div style={opportunityHubHeader}>
+            <div>
+              <h2 style={sectionTitle}>Painel de oportunidades</h2>
+              <p style={hubSubtitle}>
+                As perdidas não aparecem aqui porque voltam automaticamente para contacto futuro.
+              </p>
+            </div>
+
+            <div style={totalBadge}>
+              Total filtrado: <strong>{filtered.length}</strong>
+            </div>
+          </div>
+
+          <div style={opportunityTabsGrid}>
+            {opportunityViews.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                style={{
+                  ...opportunityTabButton,
+                  ...(activeOpportunityView === view.id
+                    ? {
+                        borderColor: view.color,
+                        background: "#f8fafc",
+                        boxShadow: "0 10px 28px rgba(15,23,42,0.12)",
+                      }
+                    : {}),
+                }}
+                onClick={() => setActiveOpportunityView(view.id)}
+              >
+                <span style={opportunityTabIcon}>{view.icon}</span>
+
+                <span style={opportunityTabContent}>
+                  <strong style={{ color: view.color }}>
+                    {view.title}
+                  </strong>
+
+                  <small>{view.subtitle}</small>
+                </span>
+
+                <span
+                  style={{
+                    ...opportunityTabCount,
+                    background: view.color,
+                  }}
+                >
+                  {view.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </section>
 
-        <Section title="A contactar agora">
+        <Section
+          title={`${selectedOpportunityView.icon} ${selectedOpportunityView.title} (${selectedOpportunityView.count})`}
+        >
           <OpportunityGrid
-            items={toContact}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
-
-        <Section title="Contactos futuros">
-          <OpportunityGrid
-            items={future}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
-
-        <Section title="Ganhas">
-          <OpportunityGrid
-            items={won}
-            editOpportunity={editOpportunity}
-            addProcedure={addProcedure}
-            updateStatus={updateStatus}
-          />
-        </Section>
-
-        <Section title="Perdidas">
-          <OpportunityGrid
-            items={lost}
+            items={selectedOpportunityView.items}
             editOpportunity={editOpportunity}
             addProcedure={addProcedure}
             updateStatus={updateStatus}
@@ -985,6 +1080,76 @@ const linkedClientBox = {
   color: "#166534",
   padding: 12,
   borderRadius: 10,
+  fontWeight: "bold",
+};
+
+const opportunityHubCard = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const opportunityHubHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
+  marginBottom: 18,
+  flexWrap: "wrap",
+};
+
+const hubSubtitle = {
+  color: "#6b7280",
+  margin: "8px 0 0",
+};
+
+const totalBadge = {
+  background: "#f3f4f6",
+  color: "#111827",
+  padding: "10px 14px",
+  borderRadius: 999,
+  fontWeight: "bold",
+};
+
+const opportunityTabsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 14,
+};
+
+const opportunityTabButton = {
+  border: "2px solid #e5e7eb",
+  background: "#ffffff",
+  padding: 16,
+  borderRadius: 16,
+  cursor: "pointer",
+  display: "grid",
+  gridTemplateColumns: "42px 1fr auto",
+  gap: 12,
+  alignItems: "center",
+  textAlign: "left",
+};
+
+const opportunityTabIcon = {
+  fontSize: 26,
+};
+
+const opportunityTabContent = {
+  display: "grid",
+  gap: 5,
+  color: "#6b7280",
+};
+
+const opportunityTabCount = {
+  color: "white",
+  borderRadius: 999,
+  minWidth: 36,
+  height: 36,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
   fontWeight: "bold",
 };
 
