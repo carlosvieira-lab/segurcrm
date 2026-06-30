@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -129,6 +130,8 @@ function getLast12Months() {
 }
 
 export default function FinanceiroCompacto({ policies }) {
+  const [activeFinanceTab, setActiveFinanceTab] = useState("insurers");
+
   const activePolicies = policies.filter((p) => p.status !== "anulada");
   const cancelledPolicies = policies.filter((p) => p.status === "anulada");
 
@@ -450,89 +453,6 @@ export default function FinanceiroCompacto({ policies }) {
           />
         </section>
 
-        <section style={contentGrid}>
-          <Panel title="🏆 Comissão por seguradora">
-            <div style={rankingGrid}>
-              {insurerRows.length === 0 ? (
-                <p style={muted}>Sem dados disponíveis.</p>
-              ) : (
-                insurerRows.map((row, index) => (
-                  <RankingCard
-                    key={row.name}
-                    index={index}
-                    name={row.name}
-                    policies={row.policies}
-                    premium={row.premium}
-                    commission={row.commission}
-                  />
-                ))
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="📊 Evolução últimos 12 meses">
-            <div style={chart}>
-              {monthlyRows.map((item) => {
-                const height = Math.max(
-                  8,
-                  Math.round((item.commission / maxMonthlyCommission) * 140)
-                );
-
-                return (
-                  <div key={item.monthKey} style={chartItem}>
-                    <div style={barWrap}>
-                      <div
-                        title={`${item.label}: ${formatEuro(item.commission)}`}
-                        style={{
-                          ...bar,
-                          height,
-                        }}
-                      />
-                    </div>
-                    <span style={chartLabel}>{item.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <p style={chartNote}>
-              Evolução baseada na data de início/criação das apólices em vigor.
-            </p>
-          </Panel>
-        </section>
-
-        <section style={contentGrid}>
-          <Panel title="🧭 Comissão por ramo">
-            <div style={branchGrid}>
-              {branchRows.length === 0 ? (
-                <p style={muted}>Sem dados disponíveis.</p>
-              ) : (
-                branchRows.map((row) => (
-                  <BranchCard key={row.name} row={row} />
-                ))
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="📆 Comissão por fracionamento">
-            {frequencyRows.length === 0 ? (
-              <p style={muted}>Sem dados disponíveis.</p>
-            ) : (
-              <div style={frequencyGrid}>
-                {frequencyRows.map((row) => (
-                  <div key={row.frequency} style={frequencyCard}>
-                    <p style={cardLabel}>{row.frequency}</p>
-                    <h3 style={frequencyValue}>
-                      {formatEuro(row.commission)}
-                    </h3>
-                    <p style={muted}>{row.policies} apólices</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
-        </section>
-
         <section style={alertsPanel}>
           <h2 style={alertsTitle}>⚠️ Alertas financeiros</h2>
 
@@ -562,17 +482,157 @@ export default function FinanceiroCompacto({ policies }) {
           </div>
         </section>
 
-        <section style={tableGrid}>
-          <Panel title="Tabela — seguradoras">
-            <FinanceTable rows={insurerRows} />
-          </Panel>
+        <section style={tabsCard}>
+          <h2 style={tabsTitle}>Análise financeira detalhada</h2>
 
-          <Panel title="Tabela — ramos">
-            <FinanceTable rows={branchRows} />
-          </Panel>
+          <div style={financeTabs}>
+            <FinanceTabButton
+              label="🏆 Comissões por seguradora"
+              active={activeFinanceTab === "insurers"}
+              onClick={() => setActiveFinanceTab("insurers")}
+            />
+
+            <FinanceTabButton
+              label="📊 Evolução últimos 12 meses"
+              active={activeFinanceTab === "monthly"}
+              onClick={() => setActiveFinanceTab("monthly")}
+            />
+
+            <FinanceTabButton
+              label="🧭 Comissão por ramo"
+              active={activeFinanceTab === "branches"}
+              onClick={() => setActiveFinanceTab("branches")}
+            />
+
+            <FinanceTabButton
+              label="📆 Comissão por fracionamento"
+              active={activeFinanceTab === "frequency"}
+              onClick={() => setActiveFinanceTab("frequency")}
+            />
+
+            <FinanceTabButton
+              label="📋 Tabelas"
+              active={activeFinanceTab === "tables"}
+              onClick={() => setActiveFinanceTab("tables")}
+            />
+          </div>
         </section>
+
+        {activeFinanceTab === "insurers" && (
+          <Panel title="🏆 Comissão por seguradora">
+            <div style={rankingGrid}>
+              {insurerRows.length === 0 ? (
+                <p style={muted}>Sem dados disponíveis.</p>
+              ) : (
+                insurerRows.map((row, index) => (
+                  <RankingCard
+                    key={row.name}
+                    index={index}
+                    name={row.name}
+                    policies={row.policies}
+                    premium={row.premium}
+                    commission={row.commission}
+                  />
+                ))
+              )}
+            </div>
+          </Panel>
+        )}
+
+        {activeFinanceTab === "monthly" && (
+          <Panel title="📊 Evolução últimos 12 meses">
+            <div style={chart}>
+              {monthlyRows.map((item) => {
+                const height = Math.max(
+                  8,
+                  Math.round((item.commission / maxMonthlyCommission) * 140)
+                );
+
+                return (
+                  <div key={item.monthKey} style={chartItem}>
+                    <div style={barWrap}>
+                      <div
+                        title={`${item.label}: ${formatEuro(item.commission)}`}
+                        style={{
+                          ...bar,
+                          height,
+                        }}
+                      />
+                    </div>
+                    <span style={chartLabel}>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p style={chartNote}>
+              Evolução baseada na data de início/criação das apólices em vigor.
+            </p>
+          </Panel>
+        )}
+
+        {activeFinanceTab === "branches" && (
+          <Panel title="🧭 Comissão por ramo">
+            <div style={branchGrid}>
+              {branchRows.length === 0 ? (
+                <p style={muted}>Sem dados disponíveis.</p>
+              ) : (
+                branchRows.map((row) => (
+                  <BranchCard key={row.name} row={row} />
+                ))
+              )}
+            </div>
+          </Panel>
+        )}
+
+        {activeFinanceTab === "frequency" && (
+          <Panel title="📆 Comissão por fracionamento">
+            {frequencyRows.length === 0 ? (
+              <p style={muted}>Sem dados disponíveis.</p>
+            ) : (
+              <div style={frequencyGrid}>
+                {frequencyRows.map((row) => (
+                  <div key={row.frequency} style={frequencyCard}>
+                    <p style={cardLabel}>{row.frequency}</p>
+                    <h3 style={frequencyValue}>
+                      {formatEuro(row.commission)}
+                    </h3>
+                    <p style={muted}>{row.policies} apólices</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        )}
+
+        {activeFinanceTab === "tables" && (
+          <section style={tableGrid}>
+            <Panel title="Tabela — seguradoras">
+              <FinanceTable rows={insurerRows} />
+            </Panel>
+
+            <Panel title="Tabela — ramos">
+              <FinanceTable rows={branchRows} />
+            </Panel>
+          </section>
+        )}
       </main>
     </div>
+  );
+}
+
+function FinanceTabButton({ label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      style={{
+        ...financeTabButton,
+        ...(active ? financeTabButtonActive : {}),
+      }}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -810,6 +870,46 @@ const cardValue = {
   fontSize: 22,
   margin: "6px 0 0",
   lineHeight: 1.08,
+};
+
+const tabsCard = {
+  background: "white",
+  borderRadius: 18,
+  padding: 16,
+  marginBottom: 16,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+};
+
+const tabsTitle = {
+  margin: "0 0 12px",
+  color: "#0f172a",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const financeTabs = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+const financeTabButton = {
+  background: "#f8fafc",
+  color: "#334155",
+  border: "1px solid #cbd5e1",
+  borderRadius: 999,
+  padding: "11px 15px",
+  cursor: "pointer",
+  fontWeight: 900,
+  fontSize: 13,
+};
+
+const financeTabButtonActive = {
+  background: "#15803d",
+  color: "white",
+  border: "1px solid #15803d",
+  boxShadow: "0 6px 18px rgba(21,128,61,0.18)",
 };
 
 const contentGrid = {
