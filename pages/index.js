@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -597,15 +597,42 @@ export default function Dashboard({
   const [completionNote, setCompletionNote] = useState("");
   const [hiddenBirthdayClientIds, setHiddenBirthdayClientIds] = useState([]);
 
+  const birthdayStorageKey = `hidden-birthdays-${new Date()
+    .toISOString()
+    .split("T")[0]}`;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(birthdayStorageKey);
+      const parsed = stored ? JSON.parse(stored) : [];
+
+      if (Array.isArray(parsed)) {
+        setHiddenBirthdayClientIds(parsed);
+      }
+    } catch {
+      setHiddenBirthdayClientIds([]);
+    }
+  }, [birthdayStorageKey]);
+
   const visibleBirthdaysToday = birthdaysToday.filter(
     (client) => !hiddenBirthdayClientIds.includes(client.id)
   );
 
   function hideBirthday(clientId) {
-    setHiddenBirthdayClientIds((current) => [
-      ...current,
-      clientId,
-    ]);
+    setHiddenBirthdayClientIds((current) => {
+      const next = current.includes(clientId)
+        ? current
+        : [...current, clientId];
+
+      try {
+        window.localStorage.setItem(
+          birthdayStorageKey,
+          JSON.stringify(next)
+        );
+      } catch {}
+
+      return next;
+    });
   }
 
   async function saveDashboardAlert(openCalendar = false) {
