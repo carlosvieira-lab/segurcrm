@@ -1,4 +1,4 @@
-import Link from "next/link";
+mport Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -34,6 +34,68 @@ const branchList = [
   "VIAGEM",
   "CAES E GATOS",
   "OUTROS",
+];
+
+const defaultCommunicationTemplates = [
+  {
+    id: "default-anulacao-preco",
+    code: "ANULACAO_PRECO",
+    name: "Anulação por preço",
+    category: "ANULAÇÕES",
+    channel: "WHATSAPP",
+    description: "Mensagem de recuperação e agradecimento após anulação por preço.",
+    text: `Olá {PRIMEIRO_NOME},
+
+Tomei conhecimento da anulação da sua apólice {NUMERO_APOLICE}, da {SEGURADORA}, relativa ao seu seguro {RAMO}{MATRICULA_TEXTO}.
+
+Lamento não ter tido oportunidade de falar consigo antes dessa decisão, pois acredito que poderíamos ter analisado outras soluções que lhe permitissem manter o seguro connosco, mantendo a qualidade da proteção e, eventualmente, com uma solução mais competitiva.
+
+Ainda assim, quero agradecer sinceramente a confiança que depositou em mim durante o período em que tive o privilégio de ser o seu mediador.
+
+Continuarei totalmente disponível para o ajudar no futuro, seja em seguros, crédito habitação ou qualquer outra necessidade em que possa ser útil.
+
+Espero voltar a merecer a sua confiança.
+
+Muito obrigado e votos das maiores felicidades.
+
+Carlos Vieira`,
+  },
+  {
+    id: "default-renovacao-auto",
+    code: "RENOVACAO_AUTOMOVEL",
+    name: "Renovação Automóvel",
+    category: "RENOVAÇÕES",
+    channel: "WHATSAPP",
+    description: "Aviso de renovação para apólice automóvel.",
+    branch_hint: "AUTOMÓVEL",
+    text: `Olá {PRIMEIRO_NOME},
+
+A sua apólice {NUMERO_APOLICE}, da {SEGURADORA}, relativa ao seguro {RAMO}{MATRICULA_TEXTO}, tem renovação prevista para {RENOVACAO}.
+
+Antes da renovação, posso rever consigo se as coberturas, capitais e preço continuam ajustados às suas necessidades.
+
+Estou disponível para ajudar.
+
+Carlos Vieira`,
+  },
+  {
+    id: "default-documentos-auto",
+    code: "PEDIDO_DOCUMENTOS_AUTOMOVEL",
+    name: "Pedido de documentos Automóvel",
+    category: "DOCUMENTOS",
+    channel: "WHATSAPP",
+    description: "Pedido de documentos para seguro automóvel.",
+    branch_hint: "AUTOMÓVEL",
+    text: `Olá {PRIMEIRO_NOME},
+
+Para avançarmos com a análise do seu seguro automóvel{MATRICULA_TEXTO}, preciso que me envie, por favor, os documentos em falta.
+
+Assim que receber tudo, trato do processo e dou-lhe feedback.
+
+Obrigado.
+
+Carlos Vieira`,
+  },
 ];
 
 export async function getServerSideProps({ params }) {
@@ -73,6 +135,19 @@ export async function getServerSideProps({ params }) {
     .eq("client_id", id)
     .order("created_at", { ascending: false });
 
+
+  const { data: communicationTemplates } = await supabase
+    .from("communication_templates")
+    .select("*")
+    .order("category", { ascending: true })
+    .order("name", { ascending: true });
+
+  const { data: communicationLogs } = await supabase
+    .from("communication_logs")
+    .select("*, communication_templates(name, code, category, channel)")
+    .eq("client_id", id)
+    .order("created_at", { ascending: false });
+
   return {
     props: {
       client,
@@ -81,6 +156,8 @@ export async function getServerSideProps({ params }) {
       claims: claims || [],
       tasks: tasks || [],
       opportunities: opportunities || [],
+      communicationTemplates: communicationTemplates || [],
+      communicationLogs: communicationLogs || [],
     },
   };
 }
@@ -501,7 +578,16 @@ function timelineStyle(type) {
   };
 }
 
-export default function ClientePage({ client, policies, allPolicies, claims, tasks, opportunities }) {
+export default function ClientePage({
+  client,
+  policies,
+  allPolicies,
+  claims,
+  tasks,
+  opportunities,
+  communicationTemplates,
+  communicationLogs,
+}) {
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [showPoliciesSummaryModal, setShowPoliciesSummaryModal] = useState(false);
   const [showCotModal, setShowCotModal] = useState(false);
@@ -590,7 +676,30 @@ const [clientForm, setClientForm] = useState({
   interactions: client?.interactions || "",
 });
 
+const availableCommunicationTemplates =
+  Array.isArray(communicationTemplates) && communicationTemplates.length > 0
+    ? communicationTemplates
+    : defaultCommunicationTemplates;
+
+const firstCommunicationTemplate =
+  availableCommunicationTemplates[0] || defaultCommunicationTemplates[0];
+
+const firstPolicyForCommunication =
+  policies?.find((policy) => policy.status !== "anulada") || policies?.[0] || null;
+
+const [selectedCommunicationCategory, setSelectedCommunicationCategory] =
+  useState(firstCommunicationTemplate?.category || "");
+
+const [selectedCommunicationTemplateId, setSelectedCommunicationTemplateId] =
+  useState(firstCommunicationTemplate?.id || "");
+
+const [selectedCommunicationPolicyId, setSelectedCommunicationPolicyId] =
+  useState(firstPolicyForCommunication?.id || "");
+
 const [communicationMessage, setCommunicationMessage] =
+  useState("");
+
+const [communicationObservations, setCommunicationObservations] =
   useState("");
 
 const [emailSubject, setEmailSubject] =
@@ -620,7 +729,182 @@ function getPhoneCallHref(phone) {
   return `tel:+${finalPhone}`;
 }
 
-function openWhatsApp() {
+function getTemplateText(template) {
+  return (
+    template?.text ||
+    template?.body ||
+    template?.message ||
+    template?.content ||
+    ""
+  );
+}
+
+function getTemplateLabel(template) {
+  return template?.name || template?.title || template?.code || "Template";
+}
+
+function getSelectedCommunicationTemplate() {
+  return availableCommunicationTemplates.find(
+    (template) => String(template.id) === String(selectedCommunicationTemplateId)
+  ) || firstCommunicationTemplate;
+}
+
+function getSelectedCommunicationPolicy() {
+  return policies.find(
+    (policy) => String(policy.id) === String(selectedCommunicationPolicyId)
+  ) || firstPolicyForCommunication;
+}
+
+function getFirstName(name) {
+  return String(name || "")
+    .trim()
+    .split(" ")
+    .filter(Boolean)[0] || String(name || "").trim();
+}
+
+function replaceCommunicationVariables(text, policy) {
+  const licensePlate = String(policy?.license_plate || "").trim();
+
+  const variables = {
+    NOME: client.name || "",
+    PRIMEIRO_NOME: getFirstName(client.name),
+    TELEFONE: client.phone || "",
+    EMAIL: client.email || "",
+    NUMERO_APOLICE: policy?.policy_number || "",
+    SEGURADORA: policy?.insurers?.name || "",
+    RAMO: policy?.branch || "",
+    MATRICULA: licensePlate,
+    MATRICULA_TEXTO: licensePlate ? `, matrícula ${licensePlate}` : "",
+    PREMIO: policy?.annual_premium ? formatEuro(policy.annual_premium) : "",
+    RENOVACAO: policy?.renewal_date ? formatDate(policy.renewal_date) : "",
+  };
+
+  return String(text || "").replace(/\{([A-Z_]+)\}/g, (match, key) => {
+    return Object.prototype.hasOwnProperty.call(variables, key)
+      ? variables[key]
+      : match;
+  });
+}
+
+function applyCommunicationTemplate(templateId, policyId = selectedCommunicationPolicyId) {
+  const template = availableCommunicationTemplates.find(
+    (item) => String(item.id) === String(templateId)
+  );
+
+  const policy = policies.find(
+    (item) => String(item.id) === String(policyId)
+  ) || firstPolicyForCommunication;
+
+  setSelectedCommunicationTemplateId(templateId);
+  setSelectedCommunicationCategory(template?.category || "");
+  setCommunicationMessage(
+    replaceCommunicationVariables(getTemplateText(template), policy)
+  );
+  setEmailSubject(template?.name || template?.code || "Contacto");
+}
+
+function applyPolicyToCommunication(policyId) {
+  setSelectedCommunicationPolicyId(policyId);
+
+  const template = getSelectedCommunicationTemplate();
+  const policy = policies.find(
+    (item) => String(item.id) === String(policyId)
+  ) || firstPolicyForCommunication;
+
+  setCommunicationMessage(
+    replaceCommunicationVariables(getTemplateText(template), policy)
+  );
+}
+
+function getCommunicationCategories() {
+  return Array.from(
+    new Set(
+      availableCommunicationTemplates
+        .map((template) => template.category || "GERAL")
+        .filter(Boolean)
+    )
+  );
+}
+
+function getFilteredCommunicationTemplates() {
+  return availableCommunicationTemplates.filter((template) => {
+    if (!selectedCommunicationCategory) return true;
+    return String(template.category || "GERAL") === selectedCommunicationCategory;
+  });
+}
+
+function getSuggestedCommunicationTemplates() {
+  const branches = new Set(
+    policies.map((policy) => normalizeBranchName(policy.branch))
+  );
+
+  return availableCommunicationTemplates.filter((template) => {
+    const hint = normalizeBranchName(
+      template.branch_hint || template.branch || template.ramo || ""
+    );
+
+    if (hint && branches.has(hint)) return true;
+
+    const text = `${template.code || ""} ${template.name || ""} ${template.category || ""}`;
+
+    if (branches.has("AUTOMOVEL")) {
+      return /AUTO|AUTOMOVEL|ANULACAO|RENOVACAO|DOCUMENTOS/i.test(
+        normalizeBranchName(text)
+      );
+    }
+
+    return false;
+  });
+}
+
+async function saveCommunicationLog(channel) {
+  const template = getSelectedCommunicationTemplate();
+  const policy = getSelectedCommunicationPolicy();
+
+  const payloads = [
+    {
+      client_id: client.id,
+      policy_id: policy?.id || null,
+      policy_number: policy?.policy_number || null,
+      template_id:
+        String(template?.id || "").startsWith("default-") ? null : template?.id || null,
+      template_code: template?.code || null,
+      template_name: getTemplateLabel(template),
+      category: template?.category || null,
+      channel,
+      message: communicationMessage,
+      observations: communicationObservations || null,
+      phone: client.phone || null,
+      email: client.email || null,
+    },
+    {
+      client_id: client.id,
+      template_id:
+        String(template?.id || "").startsWith("default-") ? null : template?.id || null,
+      channel,
+      message: communicationMessage,
+      observations: communicationObservations || null,
+    },
+    {
+      client_id: client.id,
+      channel,
+      message: communicationMessage,
+    },
+  ];
+
+  for (const payload of payloads) {
+    const { error } = await supabase
+      .from("communication_logs")
+      .insert(payload);
+
+    if (!error) return true;
+  }
+
+  alert("Não foi possível gravar o histórico de comunicação. O envio vai abrir na mesma.");
+  return false;
+}
+
+async function openWhatsApp() {
   const phone = cleanPhoneNumber(client.phone);
 
   if (!phone) {
@@ -632,6 +916,8 @@ function openWhatsApp() {
     alert("Escreve a mensagem antes de abrir o WhatsApp.");
     return;
   }
+
+  await saveCommunicationLog("WHATSAPP");
 
   const finalPhone = phone.startsWith("351")
     ? phone
@@ -645,7 +931,7 @@ function openWhatsApp() {
   window.open(url, "_blank");
 }
 
-function openEmail() {
+async function openEmail() {
   if (!client.email) {
     alert("Este cliente não tem email registado.");
     return;
@@ -655,6 +941,8 @@ function openEmail() {
     alert("Escreve a mensagem antes de abrir o email.");
     return;
   }
+
+  await saveCommunicationLog("EMAIL");
 
   const subject =
     emailSubject.trim() || "Contacto";
@@ -2832,54 +3120,142 @@ const timelineItems = createTimeline(
         </section>
 
         <section style={communicationCard}>
-          <h2 style={sectionTitle}>Comunicação com cliente</h2>
+          <div style={communicationHeader}>
+            <div>
+              <h2 style={sectionTitle}>💬 Centro de Comunicação</h2>
+              <p style={communicationSubtitle}>
+                Escolhe um template, confirma a apólice, edita a mensagem e grava o contacto no histórico.
+              </p>
+            </div>
+
+            <div style={contactSummary}>
+              <span>
+                <strong>Telefone:</strong> {client.phone || "-"}
+              </span>
+
+              <span>
+                <strong>Email:</strong> {client.email || "-"}
+              </span>
+            </div>
+          </div>
+
+          {getSuggestedCommunicationTemplates().length > 0 && (
+            <div style={suggestedTemplatesBox}>
+              <strong>Templates sugeridos para este cliente:</strong>
+
+              <div style={suggestedTemplatesList}>
+                {getSuggestedCommunicationTemplates().slice(0, 6).map((template) => (
+                  <button
+                    key={`suggested-${template.id}`}
+                    type="button"
+                    style={suggestedTemplateButton}
+                    onClick={() => applyCommunicationTemplate(template.id)}
+                  >
+                    {getTemplateLabel(template)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={communicationGrid}>
-            <div>
-              <label style={fieldLabel}>
-                Assunto do email
-              </label>
+            <label style={fieldLabel}>
+              Categoria
+              <select
+                style={input}
+                value={selectedCommunicationCategory}
+                onChange={(e) => {
+                  const category = e.target.value;
+                  const firstTemplate = availableCommunicationTemplates.find(
+                    (template) => String(template.category || "GERAL") === category
+                  );
 
+                  setSelectedCommunicationCategory(category);
+
+                  if (firstTemplate) {
+                    applyCommunicationTemplate(firstTemplate.id);
+                  }
+                }}
+              >
+                {getCommunicationCategories().map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={fieldLabel}>
+              Template
+              <select
+                style={input}
+                value={selectedCommunicationTemplateId}
+                onChange={(e) => applyCommunicationTemplate(e.target.value)}
+              >
+                {getFilteredCommunicationTemplates().map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {getTemplateLabel(template)} · {template.channel || "WHATSAPP"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={fieldLabel}>
+              Apólice para preencher variáveis
+              <select
+                style={input}
+                value={selectedCommunicationPolicyId}
+                onChange={(e) => applyPolicyToCommunication(e.target.value)}
+              >
+                <option value="">Sem apólice</option>
+                {policies.map((policy) => (
+                  <option key={policy.id} value={policy.id}>
+                    {policy.policy_number || "Sem nº"} · {policy.branch || "Sem ramo"} · {policy.insurers?.name || "Sem seguradora"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={fieldLabel}>
+              Assunto do email
               <input
                 style={input}
                 value={emailSubject}
-                onChange={(e) =>
-                  setEmailSubject(e.target.value)
-                }
+                onChange={(e) => setEmailSubject(e.target.value)}
                 placeholder="Ex: Proposta seguro casa"
               />
-            </div>
+            </label>
 
-            <div>
-              <label style={fieldLabel}>
-                Contactos
-              </label>
-
-              <div style={contactSummary}>
-                <span>
-                  <strong>Telefone:</strong>{" "}
-                  {client.phone || "-"}
-                </span>
-
-                <span>
-                  <strong>Email:</strong>{" "}
-                  {client.email || "-"}
-                </span>
-              </div>
+            <div style={variablesBox}>
+              <strong>Variáveis disponíveis</strong>
+              <p>
+                {`{NOME} {PRIMEIRO_NOME} {TELEFONE} {EMAIL} {NUMERO_APOLICE} {SEGURADORA} {RAMO} {MATRICULA} {MATRICULA_TEXTO} {PREMIO} {RENOVACAO}`}
+              </p>
             </div>
 
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={fieldLabel}>
-                Mensagem
+                Mensagem editável antes do envio
               </label>
 
               <textarea
                 style={communicationTextarea}
                 value={communicationMessage}
-                onChange={(e) =>
-                  setCommunicationMessage(e.target.value)
-                }
-                placeholder="Escreve aqui a mensagem para enviar por WhatsApp ou email..."
+                onChange={(e) => setCommunicationMessage(e.target.value)}
+                placeholder="Escolhe um template para preencher automaticamente a mensagem..."
+              />
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={fieldLabel}>
+                Observações internas para o histórico
+              </label>
+
+              <input
+                style={input}
+                value={communicationObservations}
+                onChange={(e) => setCommunicationObservations(e.target.value)}
+                placeholder="Ex: Enviado após anulação por preço; cliente ficou de analisar..."
               />
             </div>
 
@@ -2889,7 +3265,7 @@ const timelineItems = createTimeline(
                 style={whatsappButton}
                 onClick={openWhatsApp}
               >
-                Abrir WhatsApp
+                Abrir WhatsApp e gravar histórico
               </button>
 
               <button
@@ -2897,10 +3273,60 @@ const timelineItems = createTimeline(
                 style={emailButton}
                 onClick={openEmail}
               >
-                Abrir Email
+                Abrir Email e gravar histórico
+              </button>
+
+              <button
+                type="button"
+                style={clearCommunicationButton}
+                onClick={() => {
+                  setCommunicationMessage("");
+                  setCommunicationObservations("");
+                }}
+              >
+                Limpar mensagem
               </button>
             </div>
           </div>
+        </section>
+
+        <section style={communicationHistoryCard}>
+          <h2 style={sectionTitle}>📞 Histórico de Comunicação</h2>
+
+          {!communicationLogs || communicationLogs.length === 0 ? (
+            <p>Sem comunicações registadas.</p>
+          ) : (
+            <div style={communicationHistoryList}>
+              {communicationLogs.slice(0, 20).map((log) => (
+                <div key={log.id} style={communicationHistoryItem}>
+                  <div style={communicationHistoryTop}>
+                    <span style={communicationHistoryBadge}>
+                      {log.channel || log.communication_channel || "-"}
+                    </span>
+
+                    <span style={communicationHistoryDate}>
+                      {formatTimelineDate(log.created_at || log.sent_at || log.date)}
+                    </span>
+                  </div>
+
+                  <strong style={communicationHistoryTitle}>
+                    {log.template_name || log.communication_templates?.name || log.template_code || "Contacto manual"}
+                  </strong>
+
+                  <p style={communicationHistoryObservation}>
+                    {log.observations || log.notes || "Sem observações."}
+                  </p>
+
+                  {log.message && (
+                    <details style={communicationHistoryDetails}>
+                      <summary>Ver mensagem</summary>
+                      <p>{log.message}</p>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section style={quickNoteCard}>
@@ -3906,6 +4332,46 @@ const communicationCard = {
   boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
 };
 
+const communicationHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 18,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+  marginBottom: 16,
+};
+
+const communicationSubtitle = {
+  color: "#166534",
+  margin: "6px 0 0",
+};
+
+const suggestedTemplatesBox = {
+  background: "white",
+  border: "1px solid #bbf7d0",
+  borderRadius: 14,
+  padding: 14,
+  marginBottom: 16,
+  display: "grid",
+  gap: 10,
+};
+
+const suggestedTemplatesList = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const suggestedTemplateButton = {
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #86efac",
+  padding: "8px 11px",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
 const communicationGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -3933,6 +4399,15 @@ const communicationTextarea = {
   fontFamily: "Arial, sans-serif",
 };
 
+const variablesBox = {
+  gridColumn: "1 / -1",
+  background: "white",
+  border: "1px solid #d1fae5",
+  borderRadius: 12,
+  padding: 12,
+  color: "#166534",
+};
+
 const communicationButtons = {
   display: "flex",
   gap: 12,
@@ -3958,6 +4433,77 @@ const emailButton = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
+};
+
+
+const clearCommunicationButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "12px 18px",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const communicationHistoryCard = {
+  background: "white",
+  padding: 24,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const communicationHistoryList = {
+  display: "grid",
+  gap: 12,
+};
+
+const communicationHistoryItem = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+};
+
+const communicationHistoryTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 8,
+};
+
+const communicationHistoryBadge = {
+  background: "#dcfce7",
+  color: "#166534",
+  padding: "5px 9px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: "bold",
+};
+
+const communicationHistoryDate = {
+  color: "#6b7280",
+  fontSize: 13,
+};
+
+const communicationHistoryTitle = {
+  display: "block",
+  color: "#111827",
+  marginBottom: 6,
+};
+
+const communicationHistoryObservation = {
+  color: "#6b7280",
+  margin: 0,
+};
+
+const communicationHistoryDetails = {
+  marginTop: 10,
+  color: "#374151",
+  whiteSpace: "pre-wrap",
 };
 
 const formButtons = {
