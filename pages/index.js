@@ -119,38 +119,47 @@ export async function getServerSideProps() {
       .from("clients")
       .select("*");
 
-  async function fetchPoliciesRange(from, to) {
-    const { data, error } =
-      await supabase
-        .from("policies")
-        .select("*")
-        .range(from, to);
+  async function fetchAllPolicies() {
+    const pageSize = 1000;
+    let from = 0;
+    let allPolicies = [];
 
-    if (error) {
-      console.log(
-        "Erro ao carregar apólices no Dashboard:",
-        error.message
-      );
-      return [];
+    while (true) {
+      const { data, error } =
+        await supabase
+          .from("policies")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+
+      if (error) {
+        console.log(
+          "Erro ao carregar apólices no Dashboard:",
+          error.message
+        );
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      allPolicies = [
+        ...allPolicies,
+        ...data,
+      ];
+
+      if (data.length < pageSize) {
+        break;
+      }
+
+      from += pageSize;
     }
 
-    return data || [];
+    return allPolicies;
   }
 
-  const firstPoliciesBatch =
-    await fetchPoliciesRange(0, 999);
-
-  const secondPoliciesBatch =
-    await fetchPoliciesRange(1000, 1999);
-
-  const thirdPoliciesBatch =
-    await fetchPoliciesRange(2000, 2999);
-
-  const policies = [
-    ...firstPoliciesBatch,
-    ...secondPoliciesBatch,
-    ...thirdPoliciesBatch,
-  ];
+  const policies = await fetchAllPolicies();
 
   const { data: tasks } =
     await supabase
@@ -273,12 +282,12 @@ export async function getServerSideProps() {
   const activePolicies =
     (policies || []).filter(
       (policy) =>
-        policy.status === "ativa"
+        normalizeText(policy.status) !== "ANULADA"
     );
 
   const effectiveClientIds =
     new Set(
-      (policies || [])
+      activePolicies
         .map((policy) => policy.client_id)
         .filter(Boolean)
     );
