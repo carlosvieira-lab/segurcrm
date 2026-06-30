@@ -5014,3 +5014,4 @@ const cancellationNote = {
   margin: "6px 0 0",
   color: "#7f1d1d",
   whiteSpace: "pre-wrap",
+};
