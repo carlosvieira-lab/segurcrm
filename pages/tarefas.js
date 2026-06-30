@@ -63,11 +63,43 @@ function normalizeCategory(category) {
   return "SEM CATEGORIA";
 }
 
+function normalizeStatus(status) {
+  return String(status || "aberta")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function isTaskInTreatment(task) {
+  const status = normalizeStatus(task.status);
+  const description = String(task.description || "").toLowerCase();
+
+  return (
+    status.includes("tratamento") ||
+    description.includes("procedimentos / cronologia") ||
+    description.includes("procedimento:")
+  );
+}
+
+function buildProcedureLine(note) {
+  return `${new Date().toLocaleString("pt-PT", {
+    dateStyle: "short",
+    timeStyle: "short",
+  })} - Procedimento: ${note}`;
+}
+
 export default function Tarefas({ tasks }) {
   const router = useRouter();
   const dashboardFilter = router.query.filtro || "";
 
-  const [priorityFilter, setPriorityFilter] = useState("TODAS");
+  const [activeTab, setActiveTab] = useState(
+    dashboardFilter === "vencidas"
+      ? "VENCIDAS"
+      : dashboardFilter === "hoje"
+      ? "HOJE"
+      : "EM_TRATAMENTO"
+  );
   const [categoryFilter, setCategoryFilter] = useState("TODAS");
 
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -96,6 +128,8 @@ export default function Tarefas({ tasks }) {
 
   const openTasks = tasks.filter((t) => t.status !== "concluida");
 
+  const completedTasks = tasks.filter((t) => t.status === "concluida");
+
   const today = todayIso();
 
   const overdueTasks = openTasks.filter(
@@ -105,6 +139,8 @@ export default function Tarefas({ tasks }) {
   const todayTasks = openTasks.filter(
     (t) => t.due_date === today
   );
+
+  const inTreatmentTasks = openTasks.filter(isTaskInTreatment);
 
   const normalTasks = openTasks.filter(
     (t) => normalizePriority(t.priority) === "NORMAL"
@@ -130,13 +166,18 @@ export default function Tarefas({ tasks }) {
     (t) => normalizeCategory(t.category) === "SEM CATEGORIA"
   );
 
-  let filteredTasks = openTasks;
+  const baseTasksByTab = {
+    EM_TRATAMENTO: inTreatmentTasks,
+    HOJE: todayTasks,
+    VENCIDAS: overdueTasks,
+    MUITO_URGENTES: veryUrgentTasks,
+    URGENTES: urgentTasks,
+    NORMAIS: normalTasks,
+    CONCLUIDAS: completedTasks,
+    TODAS: openTasks,
+  };
 
-  if (priorityFilter !== "TODAS") {
-    filteredTasks = filteredTasks.filter(
-      (t) => normalizePriority(t.priority) === priorityFilter
-    );
-  }
+  let filteredTasks = baseTasksByTab[activeTab] || openTasks;
 
   if (categoryFilter !== "TODAS") {
     filteredTasks = filteredTasks.filter(
@@ -144,24 +185,18 @@ export default function Tarefas({ tasks }) {
     );
   }
 
-  if (dashboardFilter === "vencidas") {
-    filteredTasks = filteredTasks.filter(
-      (t) => t.due_date && t.due_date < today
-    );
-  }
+  const filteredTitleByTab = {
+    EM_TRATAMENTO: "Tarefas em tratamento",
+    HOJE: "Tarefas para hoje",
+    VENCIDAS: "Tarefas vencidas",
+    MUITO_URGENTES: "Tarefas muito urgentes",
+    URGENTES: "Tarefas urgentes",
+    NORMAIS: "Tarefas normais",
+    CONCLUIDAS: "Tarefas concluídas",
+    TODAS: "Todas as tarefas abertas",
+  };
 
-  if (dashboardFilter === "hoje") {
-    filteredTasks = filteredTasks.filter(
-      (t) => t.due_date === today
-    );
-  }
-
-  const filteredTitle =
-    dashboardFilter === "vencidas"
-      ? "Tarefas vencidas"
-      : dashboardFilter === "hoje"
-      ? "Tarefas para hoje"
-      : "Tarefas filtradas";
+  const filteredTitle = filteredTitleByTab[activeTab] || "Tarefas filtradas";
 
   async function createTask(e) {
     e.preventDefault();
@@ -234,6 +269,35 @@ export default function Tarefas({ tasks }) {
         due_date: editTaskForm.due_date || null,
       })
       .eq("id", editingTaskId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    window.location.reload();
+  }
+
+  async function addProcedure(task) {
+    const note = prompt("Novo procedimento / cronologia da tarefa");
+    if (!note) return;
+
+    const previous = task.description || "";
+    const line = buildProcedureLine(note);
+
+    const nextDescription = previous.includes("Procedimentos / cronologia")
+      ? `${previous}\n${line}`
+      : previous
+      ? `${previous}\n\nProcedimentos / cronologia\n${line}`
+      : `Procedimentos / cronologia\n${line}`;
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        description: nextDescription,
+        status: "em tratamento",
+      })
+      .eq("id", task.id);
 
     if (error) {
       alert(error.message);
@@ -495,109 +559,123 @@ export default function Tarefas({ tasks }) {
         )}
 
         <section style={card}>
-          <h2>Vista rápida</h2>
+          <h2>Painel de trabalho</h2>
 
-          <div style={statsGrid}>
-            <FilterCard
-              title="Todas abertas"
-              value={openTasks.length}
-              active={!dashboardFilter}
-              color="#111827"
-              onClick={() => router.push("/tarefas")}
+          <div style={tabsGrid}>
+            <TaskTab
+              title="Em tratamento"
+              value={inTreatmentTasks.length}
+              color="#7c3aed"
+              active={activeTab === "EM_TRATAMENTO"}
+              onClick={() => setActiveTab("EM_TRATAMENTO")}
             />
 
-            <FilterCard
+            <TaskTab
+              title="Para hoje"
+              value={todayTasks.length}
+              color="#2563eb"
+              active={activeTab === "HOJE"}
+              onClick={() => setActiveTab("HOJE")}
+            />
+
+            <TaskTab
               title="Vencidas"
               value={overdueTasks.length}
-              active={dashboardFilter === "vencidas"}
               color="#dc2626"
-              onClick={() => router.push("/tarefas?filtro=vencidas")}
+              active={activeTab === "VENCIDAS"}
+              onClick={() => setActiveTab("VENCIDAS")}
             />
 
-            <FilterCard
-              title="Hoje"
-              value={todayTasks.length}
-              active={dashboardFilter === "hoje"}
-              color="#7c3aed"
-              onClick={() => router.push("/tarefas?filtro=hoje")}
-            />
-          </div>
-        </section>
-
-        <section style={card}>
-          <h2>Prioridade</h2>
-
-          <div style={statsGrid}>
-            <FilterCard
-              title="Todas"
-              value={openTasks.length}
-              active={priorityFilter === "TODAS"}
-              color="#111827"
-              onClick={() => setPriorityFilter("TODAS")}
-            />
-
-            <FilterCard
-              title="Normais"
-              value={normalTasks.length}
-              active={priorityFilter === "NORMAL"}
-              color="#2563eb"
-              onClick={() => setPriorityFilter("NORMAL")}
-            />
-
-            <FilterCard
-              title="Urgentes"
-              value={urgentTasks.length}
-              active={priorityFilter === "URGENTE"}
-              color="#f59e0b"
-              onClick={() => setPriorityFilter("URGENTE")}
-            />
-
-            <FilterCard
+            <TaskTab
               title="Muito urgentes"
               value={veryUrgentTasks.length}
-              active={priorityFilter === "MUITO URGENTE"}
-              color="#dc2626"
-              onClick={() => setPriorityFilter("MUITO URGENTE")}
-            />
-          </div>
-        </section>
-
-        <section style={card}>
-          <h2>Categoria</h2>
-
-          <div style={statsGrid}>
-            <FilterCard
-              title="Todas"
-              value={openTasks.length}
-              active={categoryFilter === "TODAS"}
-              color="#111827"
-              onClick={() => setCategoryFilter("TODAS")}
+              color="#b91c1c"
+              active={activeTab === "MUITO_URGENTES"}
+              onClick={() => setActiveTab("MUITO_URGENTES")}
             />
 
-            <FilterCard
-              title="Administrativas"
-              value={administrativeTasks.length}
-              active={categoryFilter === "ADMINISTRATIVA"}
+            <TaskTab
+              title="Urgentes"
+              value={urgentTasks.length}
+              color="#f59e0b"
+              active={activeTab === "URGENTES"}
+              onClick={() => setActiveTab("URGENTES")}
+            />
+
+            <TaskTab
+              title="Normais"
+              value={normalTasks.length}
               color="#0f766e"
-              onClick={() => setCategoryFilter("ADMINISTRATIVA")}
+              active={activeTab === "NORMAIS"}
+              onClick={() => setActiveTab("NORMAIS")}
             />
 
-            <FilterCard
-              title="Comerciais"
-              value={commercialTasks.length}
-              active={categoryFilter === "COMERCIAL"}
-              color="#7c3aed"
-              onClick={() => setCategoryFilter("COMERCIAL")}
+            <TaskTab
+              title="Todas abertas"
+              value={openTasks.length}
+              color="#111827"
+              active={activeTab === "TODAS"}
+              onClick={() => setActiveTab("TODAS")}
             />
 
-            <FilterCard
-              title="Sem categoria"
-              value={uncategorizedTasks.length}
-              active={categoryFilter === "SEM CATEGORIA"}
-              color="#6b7280"
-              onClick={() => setCategoryFilter("SEM CATEGORIA")}
+            <TaskTab
+              title="Concluídas"
+              value={completedTasks.length}
+              color="#16a34a"
+              active={activeTab === "CONCLUIDAS"}
+              onClick={() => setActiveTab("CONCLUIDAS")}
             />
           </div>
+
+          <div style={categoryTabs}>
+            <button
+              type="button"
+              style={{
+                ...categoryTabButton,
+                ...(categoryFilter === "TODAS" ? categoryTabActive : {}),
+              }}
+              onClick={() => setCategoryFilter("TODAS")}
+            >
+              Todas ({openTasks.length})
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...categoryTabButton,
+                ...(categoryFilter === "ADMINISTRATIVA" ? categoryTabActive : {}),
+              }}
+              onClick={() => setCategoryFilter("ADMINISTRATIVA")}
+            >
+              Administrativas ({administrativeTasks.length})
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...categoryTabButton,
+                ...(categoryFilter === "COMERCIAL" ? categoryTabActive : {}),
+              }}
+              onClick={() => setCategoryFilter("COMERCIAL")}
+            >
+              Comerciais ({commercialTasks.length})
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...categoryTabButton,
+                ...(categoryFilter === "SEM CATEGORIA" ? categoryTabActive : {}),
+              }}
+              onClick={() => setCategoryFilter("SEM CATEGORIA")}
+            >
+              Sem categoria ({uncategorizedTasks.length})
+            </button>
+          </div>
+
+          <p style={tabHelpText}>
+            As tarefas em tratamento são aquelas onde já registaste procedimentos. Ao carregar em + Procedimento, a tarefa passa automaticamente para esta aba.
+          </p>
         </section>
 
         <section style={card}>
@@ -634,6 +712,12 @@ export default function Tarefas({ tasks }) {
                         >
                           {category}
                         </span>
+
+                        {isTaskInTreatment(task) && (
+                          <span style={{ ...badge, ...treatmentBadge }}>
+                            EM TRATAMENTO
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -686,11 +770,20 @@ export default function Tarefas({ tasks }) {
                       </button>
 
                       <button
-                        style={{ ...smallButton, background: "#16a34a" }}
-                        onClick={() => completeTask(task.id)}
+                        style={{ ...smallButton, background: "#7c3aed" }}
+                        onClick={() => addProcedure(task)}
                       >
-                        Concluir
+                        + Procedimento
                       </button>
+
+                      {task.status !== "concluida" && (
+                        <button
+                          style={{ ...smallButton, background: "#16a34a" }}
+                          onClick={() => completeTask(task.id)}
+                        >
+                          Concluir
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -700,6 +793,24 @@ export default function Tarefas({ tasks }) {
         </section>
       </main>
     </div>
+  );
+}
+
+function TaskTab({ title, value, color, active, onClick }) {
+  return (
+    <button
+      type="button"
+      style={{
+        ...taskTab,
+        borderTop: `6px solid ${color}`,
+        outline: active ? `3px solid ${color}` : "none",
+        background: active ? "#f8fafc" : "white",
+      }}
+      onClick={onClick}
+    >
+      <span style={taskTabTitle}>{title}</span>
+      <strong style={{ ...taskTabValue, color }}>{value}</strong>
+    </button>
   );
 }
 
@@ -768,6 +879,11 @@ function categoryStyle(category) {
   };
 }
 
+const treatmentBadge = {
+  background: "#ede9fe",
+  color: "#5b21b6",
+};
+
 const page = {
   display: "flex",
   minHeight: "100vh",
@@ -805,6 +921,63 @@ const button = {
   borderRadius: 10,
   cursor: "pointer",
   fontWeight: "bold",
+};
+
+const tabsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 14,
+  marginBottom: 18,
+};
+
+const taskTab = {
+  border: "none",
+  borderRadius: 16,
+  padding: 18,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+  textAlign: "left",
+  cursor: "pointer",
+  display: "grid",
+  gap: 8,
+};
+
+const taskTabTitle = {
+  color: "#374151",
+  fontWeight: "bold",
+  fontSize: 14,
+};
+
+const taskTabValue = {
+  fontSize: 28,
+};
+
+const categoryTabs = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 8,
+};
+
+const categoryTabButton = {
+  background: "#f3f4f6",
+  color: "#374151",
+  border: "1px solid #d1d5db",
+  padding: "10px 14px",
+  borderRadius: 999,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const categoryTabActive = {
+  background: "#111827",
+  color: "white",
+  border: "1px solid #111827",
+};
+
+const tabHelpText = {
+  margin: "16px 0 0",
+  color: "#6b7280",
+  fontSize: 14,
 };
 
 const statsGrid = {
