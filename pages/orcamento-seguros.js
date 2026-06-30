@@ -143,17 +143,55 @@ function formatDate(date) {
 }
 
 export async function getServerSideProps() {
-  const { data: policies, error } = await supabase
-    .from("policies")
-    .select(
-      "id, client_id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, start_date, created_at, insurers(name), clients(id, name)"
-    )
-    .order("created_at", { ascending: false });
+  async function fetchAllPolicies() {
+    const pageSize = 1000;
+    let from = 0;
+    let allPolicies = [];
+    let loadError = null;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("policies")
+        .select(
+          "id, client_id, policy_number, branch, status, annual_premium, commission_per_payment, payment_frequency, policy_issue_date, start_date, created_at, insurers(name), clients(id, name)"
+        )
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        loadError = error.message;
+        console.log("Erro ao carregar apólices no Orçamento Seguros:", error.message);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      allPolicies = [
+        ...allPolicies,
+        ...data,
+      ];
+
+      if (data.length < pageSize) {
+        break;
+      }
+
+      from += pageSize;
+    }
+
+    return {
+      policies: allPolicies,
+      loadError,
+    };
+  }
+
+  const { policies, loadError } = await fetchAllPolicies();
 
   return {
     props: {
-      policies: policies || [],
-      loadError: error?.message || null,
+      policies,
+      loadError,
     },
   };
 }
@@ -323,6 +361,8 @@ export default function OrcamentoSeguros({ policies, loadError }) {
           ATS = ATCP + ATCO · SAUDE = SAUDE · VIDA = VIDA · OUTROS = APS + FINANCEIROS + VIAGEM + CAES E GATOS + OUTROS.
           <br />
           <strong>Lógica:</strong> a apólice entra no mês da sua data de início. Exemplo: início em 24/02/2026 entra em FEV. O prémio considerado é o prémio da primeira fração. A comissão considerada é a comissão da primeira fração.
+          <br />
+          <strong>Controlo:</strong> esta página carregou {policies.length} apólices com paginação automática.
         </section>
 
 
