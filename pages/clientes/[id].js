@@ -588,6 +588,7 @@ export default function ClientePage({
   communicationTemplates,
   communicationLogs,
 }) {
+  const [activeClientTab, setActiveClientTab] = useState("resumo");
   const [showPolicyForm, setShowPolicyForm] = useState(false);
   const [showPoliciesSummaryModal, setShowPoliciesSummaryModal] = useState(false);
   const [showCotModal, setShowCotModal] = useState(false);
@@ -1649,6 +1650,48 @@ const timelineItems = createTimeline(
   claims
 );
 
+const clientTabs = [
+  {
+    id: "resumo",
+    label: "👤 Dados",
+    helper: "Dados principais, estatísticas e ramos fundamentais",
+  },
+  {
+    id: "apolices",
+    label: `🚗 Apólices (${policies.length})`,
+    helper: "Apólices em vigor, anuladas, pagamentos, COT e movimentos",
+  },
+  {
+    id: "comunicacao",
+    label: "💬 Comunicação",
+    helper: "Templates, WhatsApp, email e histórico de comunicação",
+  },
+  {
+    id: "notas",
+    label: "📝 Notas",
+    helper: "Notas rápidas registadas na timeline do cliente",
+  },
+  {
+    id: "timeline",
+    label: `📅 Timeline (${timelineItems.length})`,
+    helper: "Histórico cronológico do cliente",
+  },
+  {
+    id: "sinistros",
+    label: `⚠️ Sinistros (${claims.length})`,
+    helper: "Sinistros associados ao cliente",
+  },
+];
+
+const activeClientTabInfo =
+  clientTabs.find((tab) => tab.id === activeClientTab) || clientTabs[0];
+
+function getClientTabButtonStyle(tabId) {
+  return activeClientTab === tabId
+    ? { ...clientTabButton, ...clientTabButtonActive }
+    : clientTabButton;
+}
+
   return (
     <div style={page}>
       <Sidebar />
@@ -1707,6 +1750,37 @@ const timelineItems = createTimeline(
             </button>
           </div>
         </div>
+
+        <section style={clientTabsCard}>
+          <div style={clientTabsHeader}>
+            <div>
+              <h2 style={clientTabsTitle}>Centro do Cliente</h2>
+              <p style={clientTabsText}>
+                Escolhe a área que queres trabalhar. O resto fica escondido para a ficha não ficar interminável.
+              </p>
+            </div>
+
+            <div style={clientTabsActiveBox}>
+              <span style={clientTabsActiveLabel}>Área aberta</span>
+              <strong>{activeClientTabInfo.label}</strong>
+            </div>
+          </div>
+
+          <div style={clientTabsGrid}>
+            {clientTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                style={getClientTabButtonStyle(tab.id)}
+                onClick={() => setActiveClientTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <p style={clientTabsHelper}>{activeClientTabInfo.helper}</p>
+        </section>
 
         {showPolicyEventModal && selectedEventPolicy && (
           <div style={modalOverlay}>
@@ -2964,6 +3038,7 @@ const timelineItems = createTimeline(
           </section>
         )}
 
+        {activeClientTab === "resumo" && (
         <section style={clientInfoCard}>
           <h2 style={sectionTitle}>Dados do cliente</h2>
 
@@ -3118,7 +3193,10 @@ const timelineItems = createTimeline(
             </div>
           </div>
         </section>
+        )}
 
+        {activeClientTab === "comunicacao" && (
+        <>
         <section style={communicationCard}>
           <div style={communicationHeader}>
             <div>
@@ -3328,7 +3406,10 @@ const timelineItems = createTimeline(
             </div>
           )}
         </section>
+        </>
+        )}
 
+        {activeClientTab === "notas" && (
         <section style={quickNoteCard}>
           <h2 style={sectionTitle}>Nota rápida</h2>
 
@@ -3345,7 +3426,9 @@ const timelineItems = createTimeline(
             </button>
           </form>
         </section>
+        )}
 
+        {activeClientTab === "timeline" && (
         <section style={timelineCard}>
           <h2 style={sectionTitle}>Timeline do Cliente</h2>
 
@@ -3403,7 +3486,9 @@ const timelineItems = createTimeline(
             </div>
           )}
         </section>
+        )}
 
+        {activeClientTab === "apolices" && (
         <section style={card}>
           <h2>Apólices</h2>
 
@@ -3628,7 +3713,9 @@ const timelineItems = createTimeline(
             </div>
           )}
         </section>
+        )}
 
+        {activeClientTab === "sinistros" && (
         <section style={card}>
           <h2>Sinistros associados</h2>
 
@@ -3652,10 +3739,86 @@ const timelineItems = createTimeline(
             </div>
           )}
         </section>
+        )}
       </main>
     </div>
   );
 }
+
+const clientTabsCard = {
+  background: "linear-gradient(135deg, #ffffff, #f8fafc)",
+  padding: 18,
+  borderRadius: 18,
+  marginBottom: 24,
+  border: "1px solid #dbeafe",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+};
+
+const clientTabsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  alignItems: "flex-start",
+  marginBottom: 14,
+};
+
+const clientTabsTitle = {
+  margin: 0,
+  color: "#1e3a8a",
+  fontSize: 22,
+};
+
+const clientTabsText = {
+  color: "#6b7280",
+  margin: "6px 0 0",
+};
+
+const clientTabsActiveBox = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 14,
+  padding: 12,
+  minWidth: 190,
+  display: "grid",
+  gap: 4,
+};
+
+const clientTabsActiveLabel = {
+  color: "#64748b",
+  fontSize: 12,
+  fontWeight: "bold",
+  textTransform: "uppercase",
+};
+
+const clientTabsGrid = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const clientTabButton = {
+  background: "white",
+  color: "#1f2937",
+  border: "1px solid #cbd5e1",
+  padding: "11px 14px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontWeight: "bold",
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+};
+
+const clientTabButtonActive = {
+  background: "#2563eb",
+  color: "white",
+  border: "1px solid #2563eb",
+  boxShadow: "0 8px 18px rgba(37,99,235,0.25)",
+};
+
+const clientTabsHelper = {
+  margin: "12px 0 0",
+  color: "#475569",
+  fontSize: 14,
+};
 
 const page = {
   display: "flex",
@@ -4851,4 +5014,3 @@ const cancellationNote = {
   margin: "6px 0 0",
   color: "#7f1d1d",
   whiteSpace: "pre-wrap",
-};
