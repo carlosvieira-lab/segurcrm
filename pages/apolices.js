@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
 
@@ -102,6 +103,8 @@ function getBarHeight(value, maxValue) {
 }
 
 export default function Apolices({ policies }) {
+  const [activeTab, setActiveTab] = useState("EVOLUCAO");
+
   const activePolicies = policies.filter((p) => p.status === "ativa");
   const cancelledPolicies = policies.filter((p) => p.status === "anulada");
 
@@ -286,6 +289,60 @@ export default function Apolices({ policies }) {
           <StatCard title="Receita anulada" value={formatEuro(totalCancelledPremium)} color="#dc2626" icon="€" />
         </section>
 
+        <section style={tabsCard}>
+          <div style={tabsHeader}>
+            <div>
+              <h2 style={tabsTitle}>Organização da página</h2>
+              <p style={tabsSubtitle}>Os dados globais ficam sempre visíveis. O detalhe abre por abas para a página não ficar interminável.</p>
+            </div>
+          </div>
+
+          <div style={tabsGrid}>
+            <TabButton
+              label="📈 Evolução anual"
+              count={chartYears.length}
+              active={activeTab === "EVOLUCAO"}
+              onClick={() => setActiveTab("EVOLUCAO")}
+            />
+
+            <TabButton
+              label={`🚀 Produção ${currentYear}`}
+              count={currentYearStats.newCount}
+              active={activeTab === "PRODUCAO"}
+              onClick={() => setActiveTab("PRODUCAO")}
+            />
+
+            <TabButton
+              label="📅 Resultados por ano"
+              count={years.length}
+              active={activeTab === "ANOS"}
+              onClick={() => setActiveTab("ANOS")}
+            />
+
+            <TabButton
+              label="🏢 Receita por companhia"
+              count={insurerRanking.length}
+              active={activeTab === "COMPANHIAS"}
+              onClick={() => setActiveTab("COMPANHIAS")}
+            />
+
+            <TabButton
+              label="🏆 Ranking seguradoras"
+              count={insurerRanking.length}
+              active={activeTab === "RANKING"}
+              onClick={() => setActiveTab("RANKING")}
+            />
+
+            <TabButton
+              label="📋 Carteira por seguradora"
+              count={insurerRanking.length}
+              active={activeTab === "CARTEIRA"}
+              onClick={() => setActiveTab("CARTEIRA")}
+            />
+          </div>
+        </section>
+
+        {activeTab === "EVOLUCAO" && (
         <section style={topGrid}>
           <section style={panel}>
             <h2 style={panelTitle}>📈 Evolução anual da receita</h2>
@@ -396,7 +453,77 @@ export default function Apolices({ policies }) {
             />
           </section>
         </section>
+        )}
 
+        {activeTab === "PRODUCAO" && (
+        <section style={topGridProduction}>
+          <section style={panel}>
+            <h2 style={panelTitle}>🚀 Produção nova {currentYear}</h2>
+
+            <div style={currentYearBox}>
+              <div>
+                <span style={boxLabel}>Novas</span>
+                <strong style={greenBig}>{currentYearStats.newCount}</strong>
+              </div>
+
+              <div>
+                <span style={boxLabel}>Receita nova</span>
+                <strong style={greenBig}>{formatEuro(currentYearStats.newPremium)}</strong>
+              </div>
+
+              <div>
+                <span style={boxLabel}>Anuladas</span>
+                <strong style={redBig}>{currentYearStats.cancelledCount}</strong>
+              </div>
+
+              <div>
+                <span style={boxLabel}>Receita anulada</span>
+                <strong style={redBig}>{formatEuro(currentYearStats.cancelledPremium)}</strong>
+              </div>
+            </div>
+
+            <div style={miniCompanyList}>
+              {currentYearInsurers.map(([insurer, item]) => (
+                <div key={insurer} style={miniCompanyRow}>
+                  <span style={companyName}>
+                    <b style={companyIcon}>{insurerIcon(insurer)}</b>
+                    {insurer}
+                  </span>
+                  <strong>{item.count}</strong>
+                  <strong style={greenText}>{formatEuro(item.premium)}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section style={alertsPanel}>
+            <h2 style={alertsTitle}>⚠️ Alertas</h2>
+
+            <AlertCard
+              title="Receita anulada"
+              value={formatEuro(totalCancelledPremium)}
+              text={`${cancelledPolicies.length} apólices anuladas`}
+              color="#dc2626"
+            />
+
+            <AlertCard
+              title={`Produção nova ${currentYear}`}
+              value={formatEuro(currentYearStats.newPremium)}
+              text={`${currentYearStats.newCount} apólices criadas`}
+              color="#16a34a"
+            />
+
+            <AlertCard
+              title="Saldo líquido do ano"
+              value={formatEuro(currentYearStats.newPremium - currentYearStats.cancelledPremium)}
+              text={`${currentYearStats.newCount - currentYearStats.cancelledCount} apólices líquidas`}
+              color={currentYearStats.newPremium - currentYearStats.cancelledPremium >= 0 ? "#16a34a" : "#dc2626"}
+            />
+          </section>
+        </section>
+        )}
+
+        {activeTab === "ANOS" && (
         <section style={panel}>
           <div style={sectionHeader}>
             <h2 style={panelTitle}>Resultados por ano</h2>
@@ -448,9 +575,10 @@ export default function Apolices({ policies }) {
             </div>
           )}
         </section>
+        )}
 
-        <section style={wideGrid}>
-          <section style={panel}>
+        {activeTab === "COMPANHIAS" && (
+        <section style={panel}>
             <h2 style={panelTitle}>🏢 Receita anual por companhia</h2>
 
             {insurerRanking.length === 0 ? (
@@ -536,9 +664,11 @@ export default function Apolices({ policies }) {
                 ))}
               </div>
             </div>
-          </section>
+        </section>
+        )}
 
-          <section style={panel}>
+        {activeTab === "RANKING" && (
+        <section style={panel}>
             <h2 style={panelTitle}>🏆 Ranking seguradoras</h2>
 
             <div style={rankingList}>
@@ -563,9 +693,10 @@ export default function Apolices({ policies }) {
                 </div>
               ))}
             </div>
-          </section>
         </section>
+        )}
 
+        {activeTab === "CARTEIRA" && (
         <section style={panel}>
           <h2 style={panelTitle}>Carteira por seguradora</h2>
 
@@ -596,8 +727,25 @@ export default function Apolices({ policies }) {
             </div>
           )}
         </section>
+        )}
       </main>
     </div>
+  );
+}
+
+function TabButton({ label, count, active, onClick }) {
+  return (
+    <button
+      type="button"
+      style={{
+        ...tabButton,
+        ...(active ? tabButtonActive : {}),
+      }}
+      onClick={onClick}
+    >
+      <span style={tabLabel}>{label}</span>
+      <strong style={tabCount}>{count}</strong>
+    </button>
   );
 }
 
@@ -658,6 +806,73 @@ const stats = {
   marginBottom: 16,
 };
 
+const tabsCard = {
+  background: "white",
+  borderRadius: 18,
+  padding: 16,
+  border: "1px solid #e5e7eb",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  marginBottom: 16,
+};
+
+const tabsHeader = {
+  marginBottom: 12,
+};
+
+const tabsTitle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const tabsSubtitle = {
+  margin: "6px 0 0",
+  color: "#64748b",
+  fontSize: 13,
+};
+
+const tabsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: 10,
+};
+
+const tabButton = {
+  background: "#f8fafc",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 12,
+  cursor: "pointer",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  textAlign: "left",
+};
+
+const tabButtonActive = {
+  background: "linear-gradient(135deg, #dbeafe, #ffffff)",
+  border: "2px solid #2563eb",
+  boxShadow: "0 8px 20px rgba(37,99,235,0.14)",
+};
+
+const tabLabel = {
+  color: "#0f172a",
+  fontWeight: 900,
+};
+
+const tabCount = {
+  background: "#2563eb",
+  color: "white",
+  minWidth: 30,
+  height: 30,
+  borderRadius: 999,
+  display: "grid",
+  placeItems: "center",
+  padding: "0 8px",
+};
+
 const statCard = {
   background: "white",
   padding: 14,
@@ -694,6 +909,14 @@ const cardValue = {
 const topGrid = {
   display: "grid",
   gridTemplateColumns: "1.2fr 0.9fr 0.8fr",
+  gap: 16,
+  marginBottom: 16,
+  alignItems: "stretch",
+};
+
+const topGridProduction = {
+  display: "grid",
+  gridTemplateColumns: "1.2fr 0.8fr",
   gap: 16,
   marginBottom: 16,
   alignItems: "stretch",
