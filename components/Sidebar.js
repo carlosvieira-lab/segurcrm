@@ -96,6 +96,12 @@ export default function Sidebar({ active }) {
           />
 
           <MenuItem
+            href="/centro-comunicacao"
+            label="💬 Centro Comunicação"
+            active={active === "centro-comunicacao"}
+          />
+
+          <MenuItem
             href="/negocios-financeiros"
             label="Negócios Financeiros"
             active={active === "negocios-financeiros"}
@@ -169,6 +175,7 @@ function MenuItem({ href, label, active }) {
   const isNegociosFinanceiros = href === "/negocios-financeiros";
   const isOrcamentoSeguros = href === "/orcamento-seguros";
   const isCotsGenerali = href === "/cots-generali";
+  const isCentroComunicacao = href === "/centro-comunicacao";
 
   return (
     <Link
@@ -182,6 +189,16 @@ function MenuItem({ href, label, active }) {
               background: "#2563eb",
               color: "#ffffff",
               fontWeight: "800",
+              fontSize: "15px",
+              letterSpacing: "0.3px",
+            }
+          : {}),
+
+        ...(isCentroComunicacao
+          ? {
+              background: "#7c3aed",
+              color: "#ffffff",
+              fontWeight: "900",
               fontSize: "15px",
               letterSpacing: "0.3px",
             }
