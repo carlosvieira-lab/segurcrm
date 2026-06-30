@@ -166,10 +166,25 @@ function buildWhatsappLink(phone) {
 }
 
 
+function wasReactivatedFromLoss(item) {
+  const status = cleanText(item.status);
+  const notes = cleanText(item.procedure_notes);
+
+  return (
+    status === "por contactar" &&
+    notes.includes("oportunidade nao concretizada") &&
+    notes.includes("novo contacto agendado")
+  );
+}
+
 function hasDevelopedProcedures(item) {
   const status = cleanText(item.status);
   const notes = String(item.procedure_notes || "").trim();
   const normalizedNotes = cleanText(notes);
+
+  if (wasReactivatedFromLoss(item)) {
+    return false;
+  }
 
   if (
     status === "contactado" ||
@@ -606,7 +621,7 @@ export default function Oportunidades({ opportunities, clients }) {
     {
       id: "tratamento",
       title: "EM TRATAMENTO",
-      subtitle: "Oportunidades onde já existem procedimentos ou contacto desenvolvido.",
+      subtitle: "Oportunidades com procedimentos reais, excluindo perdidas reagendadas.",
       icon: "🔴",
       count: inTreatment.length,
       color: "#7c3aed",
@@ -624,7 +639,7 @@ export default function Oportunidades({ opportunities, clients }) {
     {
       id: "futuras",
       title: "FUTURAS",
-      subtitle: "Todas as oportunidades que ainda não são para hoje.",
+      subtitle: "Todas as que ainda não são para hoje, incluindo perdidas reagendadas.",
       icon: "🗓️",
       count: future.length,
       color: "#2563eb",
