@@ -220,6 +220,8 @@ export default function Oportunidades({ opportunities, clients }) {
   const [clientFound, setClientFound] = useState(false);
   const [search, setSearch] = useState("");
   const [activeOpportunityView, setActiveOpportunityView] = useState("tratamento");
+  const [procedureOpportunityId, setProcedureOpportunityId] = useState(null);
+  const [procedureFormText, setProcedureFormText] = useState("");
 
   useEffect(() => {
     setContactDate(addMonths(renewalDate, -1));
@@ -493,9 +495,23 @@ export default function Oportunidades({ opportunities, clients }) {
     window.location.reload();
   }
 
-  async function addProcedure(item) {
-    const note = prompt("Novo procedimento / cronologia");
-    if (!note) return;
+  function addProcedure(item) {
+    setProcedureOpportunityId(item.id);
+    setProcedureFormText("");
+  }
+
+  function cancelProcedureForm() {
+    setProcedureOpportunityId(null);
+    setProcedureFormText("");
+  }
+
+  async function saveProcedure(item) {
+    const note = procedureFormText.trim();
+
+    if (!note) {
+      alert("Escreve o procedimento antes de concluir.");
+      return;
+    }
 
     const previous = item.procedure_notes || "";
     const next = previous
@@ -512,6 +528,8 @@ export default function Oportunidades({ opportunities, clients }) {
       return;
     }
 
+    setProcedureOpportunityId(null);
+    setProcedureFormText("");
     window.location.reload();
   }
 
@@ -843,6 +861,11 @@ export default function Oportunidades({ opportunities, clients }) {
             items={selectedOpportunityView.items}
             editOpportunity={editOpportunity}
             addProcedure={addProcedure}
+            saveProcedure={saveProcedure}
+            cancelProcedureForm={cancelProcedureForm}
+            procedureOpportunityId={procedureOpportunityId}
+            procedureFormText={procedureFormText}
+            setProcedureFormText={setProcedureFormText}
             updateStatus={updateStatus}
           />
         </Section>
@@ -851,7 +874,17 @@ export default function Oportunidades({ opportunities, clients }) {
   );
 }
 
-function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus }) {
+function OpportunityGrid({
+  items,
+  editOpportunity,
+  addProcedure,
+  saveProcedure,
+  cancelProcedureForm,
+  procedureOpportunityId,
+  procedureFormText,
+  setProcedureFormText,
+  updateStatus,
+}) {
   if (items.length === 0) {
     return <p style={muted}>Sem registos.</p>;
   }
@@ -908,12 +941,52 @@ function OpportunityGrid({ items, editOpportunity, addProcedure, updateStatus })
               <pre style={procedureText}>{item.procedure_notes || "-"}</pre>
             </div>
 
+            {procedureOpportunityId === item.id && (
+              <form
+                style={procedureForm}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveProcedure(item);
+                }}
+              >
+                <label style={procedureFormLabel}>
+                  Novo procedimento
+                  <textarea
+                    style={procedureTextarea}
+                    value={procedureFormText}
+                    onChange={(event) =>
+                      setProcedureFormText(event.target.value)
+                    }
+                    placeholder="Ex: Contactei o cliente; pediu nova simulação; enviar proposta para análise..."
+                    autoFocus
+                  />
+                </label>
+
+                <div style={procedureFormButtons}>
+                  <button type="submit" style={procedureSaveButton}>
+                    Concluir procedimento
+                  </button>
+
+                  <button
+                    type="button"
+                    style={procedureCancelButton}
+                    onClick={cancelProcedureForm}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+
             <div style={buttonGroup}>
               <button style={{ ...smallButton, background: "#111827" }} onClick={() => editOpportunity(item)}>
                 Editar
               </button>
 
-              <button style={{ ...smallButton, background: "#7c3aed" }} onClick={() => addProcedure(item)}>
+              <button
+                style={{ ...smallButton, background: "#7c3aed" }}
+                onClick={() => addProcedure(item)}
+              >
                 + Procedimento
               </button>
 
@@ -1275,6 +1348,62 @@ const procedureText = {
   whiteSpace: "pre-wrap",
   fontFamily: "Arial, sans-serif",
   margin: "10px 0 0",
+};
+
+const procedureForm = {
+  background: "#f5f3ff",
+  border: "1px solid #ddd6fe",
+  padding: 14,
+  borderRadius: 12,
+  marginTop: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const procedureFormLabel = {
+  display: "grid",
+  gap: 8,
+  color: "#5b21b6",
+  fontWeight: "bold",
+  fontSize: 13,
+};
+
+const procedureTextarea = {
+  width: "100%",
+  minHeight: 110,
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #c4b5fd",
+  fontSize: 14,
+  fontFamily: "Arial, sans-serif",
+  boxSizing: "border-box",
+  background: "white",
+};
+
+const procedureFormButtons = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const procedureSaveButton = {
+  background: "#7c3aed",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
+};
+
+const procedureCancelButton = {
+  background: "#6b7280",
+  color: "white",
+  border: "none",
+  padding: "10px 14px",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const buttonGroup = {
