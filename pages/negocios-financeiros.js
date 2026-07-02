@@ -2753,6 +2753,21 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           </div>
         </header>
 
+        {selectedProcessDeal ? (
+          <section style={singleProcessOnlyPanel}>
+            <ProcessDetailCard
+              deal={selectedProcessDeal}
+              historiesByDeal={historiesByDeal}
+              setOpenDealId={setOpenDealId}
+              openEditDeal={openEditDeal}
+              updateDealStage={updateDealStage}
+              markCommissionReceived={markCommissionReceived}
+              markPartnerPending={markPartnerPending}
+              markPartnerPaid={markPartnerPaid}
+            />
+          </section>
+        ) : (
+          <>
         <section style={summaryGrid}>
           <Summary title="Montante financiado" value={formatEuro(totals.amount)} />
           <Summary title="Comissão Teórica" value={formatEuro(totals.expected)} />
@@ -4422,6 +4437,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
     </div>
   );
@@ -4979,3 +4996,4 @@ const funnelRate = { fontWeight: "bold", color: "#374151", textAlign: "right" };
 const historyBox = { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 12, padding: 12, marginTop: 12 };
 const historyList = { display: "grid", gap: 6, marginTop: 8 };
 const historyRow = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", display: "grid", gridTemplateColumns: "120px 170px 1fr", gap: 10, alignItems: "center", fontSize: 13 };
+const singleProcessOnlyPanel = { background: "#ffffff", border: "1px solid #bfdbfe", borderRadius: 18, padding: 18, boxShadow: "0 1px 4px rgba(37,99,235,0.10)", marginBottom: 24 };
