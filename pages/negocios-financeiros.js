@@ -25,6 +25,7 @@ const dealTypes = [
 
 const dealStatuses = [
   "LEAD",
+  "SIMULAÇÃO",
   "AGUARDA DOCS",
   "ENV BANCO",
   "RECUSADO",
@@ -642,6 +643,65 @@ Carlos Vieira
 Loja de Seguros de Trajouce`;
 }
 
+function getDealTimelineStages(deal) {
+  const type = normalizeText(deal?.deal_type);
+
+  if (type.includes("credito pessoal") || type.includes("consolidacao cp")) {
+    return [
+      { key: "lead", label: "LEAD", status: "LEAD", dateField: "entry_date" },
+      { key: "simulacao", label: "SIMULAÇÃO", status: "SIMULAÇÃO" },
+      { key: "envio_banco", label: "ENVIO BANCO", status: "ENV BANCO" },
+      { key: "decisao", label: "DECISÃO", status: "APROVADO", alternativeStatuses: ["APROVADO", "RECUSADO"] },
+      { key: "contratacao", label: "CONTRATAÇÃO", status: "CONTRATADO", dateField: "contract_date" },
+    ];
+  }
+
+  return [
+    { key: "lead", label: "LEAD", status: "LEAD", dateField: "entry_date" },
+    { key: "envio_banco", label: "ENVIO BANCO", status: "ENV BANCO" },
+    { key: "decisao", label: "DECISÃO", status: "APROVADO", alternativeStatuses: ["APROVADO", "RECUSADO"] },
+    { key: "avaliacao", label: "AVALIAÇÃO", status: "AVALIAÇÃO" },
+    { key: "contratacao", label: "CONTRATAÇÃO", status: "CONTRATADO", dateField: "contract_date" },
+  ];
+}
+
+function getStageDate(deal, stage, historyItems) {
+  if (stage.dateField && deal?.[stage.dateField]) {
+    return String(deal[stage.dateField]).slice(0, 10);
+  }
+
+  if (stage.key === "lead") {
+    return String(deal?.entry_date || deal?.created_at || "").slice(0, 10);
+  }
+
+  const statuses = stage.alternativeStatuses || [stage.status];
+  const matches = (historyItems || [])
+    .filter((item) => item.field_name === "status")
+    .filter((item) => statuses.includes(item.new_value))
+    .sort((a, b) => new Date(a.changed_at) - new Date(b.changed_at));
+
+  if (matches[0]?.changed_at) {
+    return String(matches[0].changed_at).slice(0, 10);
+  }
+
+  if (statuses.includes(deal?.status)) {
+    return String(deal?.contract_date || deal?.entry_date || deal?.created_at || "").slice(0, 10);
+  }
+
+  return "";
+}
+
+function getActiveTimelineStageIndex(deal, stages, historyItems) {
+  let activeIndex = -1;
+
+  stages.forEach((stage, index) => {
+    if (getStageDate(deal, stage, historyItems)) {
+      activeIndex = index;
+    }
+  });
+
+  return activeIndex;
+}
 
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals, dealHistory, financeNotes }) {
@@ -2335,6 +2395,23 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     window.location.reload();
   }
 
+  async function updateDealStage(deal, stage) {
+    const today = new Date().toISOString().split("T")[0];
+    const updates = {
+      status: stage.status,
+    };
+
+    if (stage.key === "lead") {
+      updates.entry_date = today;
+    }
+
+    if (stage.key === "contratacao") {
+      updates.contract_date = today;
+    }
+
+    await updateDeal(deal, updates);
+  }
+
   async function markPartnerPaid(deal) {
     const ok = window.confirm("Marcar pagamento ao parceiro como pago?");
     if (!ok) return;
@@ -3976,6 +4053,12 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                           </div>
                         )}
 
+                        <DealTimeline
+                          deal={deal}
+                          historyItems={historiesByDeal[deal.id] || []}
+                          onStageClick={updateDealStage}
+                        />
+
                         <div style={historyBox}>
                           <strong>📜 Histórico de alterações</strong>
 
@@ -4029,6 +4112,52 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+function DealTimeline({ deal, historyItems, onStageClick }) {
+  const stages = getDealTimelineStages(deal);
+  const activeIndex = getActiveTimelineStageIndex(deal, stages, historyItems);
+
+  return (
+    <div style={timelineBox}>
+      <div style={timelineHeader}>
+        <div>
+          <strong>📍 Timeline do processo</strong>
+          <p style={smallMuted}>
+            Clica na fase para registar a data de passagem do processo. A fase fica gravada no histórico.
+          </p>
+        </div>
+
+        <span style={timelineTypeBadge}>{deal.deal_type || "Processo financeiro"}</span>
+      </div>
+
+      <div style={timelineStageGrid}>
+        {stages.map((stage, index) => {
+          const date = getStageDate(deal, stage, historyItems);
+          const done = Boolean(date);
+          const isCurrent = index === activeIndex;
+
+          return (
+            <button
+              key={stage.key}
+              type="button"
+              style={{
+                ...timelineStageButton,
+                ...(done ? timelineStageDone : {}),
+                ...(isCurrent ? timelineStageCurrent : {}),
+              }}
+              onClick={() => onStageClick(deal, stage)}
+              title={`Registar fase ${stage.label}`}
+            >
+              <span style={timelineStageMarker}>{done ? "✓" : index + 1}</span>
+              <strong>{stage.label}</strong>
+              <small>{date ? formatDate(date) : "Por registar"}</small>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -4148,6 +4277,14 @@ const compactDealHeader = { display: "flex", justifyContent: "space-between", ga
 const compactDealTitle = { margin: 0, fontSize: 20 };
 const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 };
 const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
+const timelineBox = { background: "#ffffff", border: "1px solid #bbf7d0", borderRadius: 16, padding: 14, marginTop: 14, marginBottom: 14 };
+const timelineHeader = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap" };
+const timelineTypeBadge = { background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: "bold" };
+const timelineStageGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10 };
+const timelineStageButton = { background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 14, padding: 12, cursor: "pointer", display: "grid", gap: 6, textAlign: "left", color: "#374151" };
+const timelineStageDone = { background: "#ecfdf5", border: "1px solid #86efac", color: "#166534" };
+const timelineStageCurrent = { boxShadow: "0 0 0 3px rgba(22,163,74,0.22)", border: "1px solid #16a34a" };
+const timelineStageMarker = { width: 28, height: 28, borderRadius: 999, background: "#111827", color: "white", display: "grid", placeItems: "center", fontWeight: "bold" };
 const ruleBox = { background: "#ecfeff", border: "1px solid #67e8f9", borderRadius: 12, padding: 12, color: "#155e75", fontWeight: "bold", lineHeight: 1.5 };
 const bankReportControls = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, alignItems: "end", marginBottom: 14 };
 const agendaPanel = { background: "#fff7ed", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(154,52,18,0.16)", border: "1px solid #fed7aa" };
