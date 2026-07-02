@@ -703,6 +703,119 @@ function getActiveTimelineStageIndex(deal, stages, historyItems) {
   return activeIndex;
 }
 
+function getLatestProcessMovementDate(deal, historyItems) {
+  const candidates = [
+    deal?.next_action_date,
+    deal?.commission_received_at,
+    deal?.partner_paid_at,
+    deal?.contract_date,
+    deal?.entry_date,
+    deal?.created_at,
+    ...(historyItems || []).map((item) => item.changed_at),
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).slice(0, 10))
+    .filter(Boolean)
+    .sort((a, b) => new Date(b) - new Date(a));
+
+  return candidates[0] || "";
+}
+
+function getStageDays(date) {
+  if (!date) return null;
+  return daysSince(date);
+}
+
+function getStageStatus(days) {
+  if (days === null || days === undefined) {
+    return {
+      label: "⚪ Sem data",
+      summary: "SEM DATA REGISTADA",
+      color: "#374151",
+      background: "#f3f4f6",
+      border: "#d1d5db",
+    };
+  }
+
+  if (days > 14) {
+    return {
+      label: "🔴 Processo parado",
+      summary: `PROCESSO PARADO HÁ ${days} DIAS`,
+      color: "#991b1b",
+      background: "#fee2e2",
+      border: "#fecaca",
+    };
+  }
+
+  if (days > 7) {
+    return {
+      label: "🟠 Contactar banco",
+      summary: `CONTACTAR BANCO — ${days} DIAS NA FASE ATUAL`,
+      color: "#9a3412",
+      background: "#ffedd5",
+      border: "#fdba74",
+    };
+  }
+
+  if (days > 3) {
+    return {
+      label: "🟡 Acompanhar",
+      summary: `ACOMPANHAR — ${days} DIAS NA FASE ATUAL`,
+      color: "#92400e",
+      background: "#fef3c7",
+      border: "#f59e0b",
+    };
+  }
+
+  return {
+    label: "🟢 Dentro do prazo",
+    summary: `DENTRO DO PRAZO — ${days} DIAS NA FASE ATUAL`,
+    color: "#166534",
+    background: "#dcfce7",
+    border: "#86efac",
+  };
+}
+
+function getDealTimelineSnapshot(deal, historyItems) {
+  const stages = getDealTimelineStages(deal);
+  const activeIndex = getActiveTimelineStageIndex(deal, stages, historyItems);
+  const currentStage = activeIndex >= 0 ? stages[activeIndex] : stages[0];
+  const currentStageDate = currentStage ? getStageDate(deal, currentStage, historyItems) : "";
+  const totalDays = daysSince(deal?.entry_date || deal?.created_at);
+  const currentStageDays = getStageDays(currentStageDate);
+  const latestMovementDate = getLatestProcessMovementDate(deal, historyItems);
+  const lastContactDays = latestMovementDate ? daysSince(latestMovementDate) : null;
+  const statusInfo = getStageStatus(currentStageDays);
+
+  const rows = stages.map((stage, index) => {
+    const startDate = getStageDate(deal, stage, historyItems);
+    const nextStage = stages[index + 1];
+    const nextDate = nextStage ? getStageDate(deal, nextStage, historyItems) : "";
+
+    return {
+      key: stage.key,
+      label: stage.label,
+      startDate,
+      nextDate,
+      days: startDate ? daysBetween(startDate, nextDate || new Date().toISOString().split("T")[0]) : null,
+      isCurrent: index === activeIndex,
+    };
+  });
+
+  return {
+    stages,
+    activeIndex,
+    currentStage,
+    currentStageDate,
+    totalDays,
+    currentStageDays,
+    latestMovementDate,
+    lastContactDays,
+    statusInfo,
+    rows,
+  };
+}
+
 
 export default function NegociosFinanceiros({ deals, partners, clients, contests, campaigns, goals, dealHistory, financeNotes }) {
   const [showDealForm, setShowDealForm] = useState(false);
@@ -4117,8 +4230,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 }
 
 function DealTimeline({ deal, historyItems, onStageClick }) {
-  const stages = getDealTimelineStages(deal);
-  const activeIndex = getActiveTimelineStageIndex(deal, stages, historyItems);
+  const snapshot = getDealTimelineSnapshot(deal, historyItems);
+  const { stages, activeIndex, currentStage, totalDays, currentStageDays, latestMovementDate, lastContactDays, statusInfo, rows } = snapshot;
 
   return (
     <div style={timelineBox}>
@@ -4131,6 +4244,65 @@ function DealTimeline({ deal, historyItems, onStageClick }) {
         </div>
 
         <span style={timelineTypeBadge}>{deal.deal_type || "Processo financeiro"}</span>
+      </div>
+
+      <div style={processStatusGrid}>
+        <div style={processStatusMetric}>
+          <span style={summaryLabel}>📍 Fase atual</span>
+          <strong>{currentStage?.label || deal.status || "-"}</strong>
+        </div>
+
+        <div style={processStatusMetric}>
+          <span style={summaryLabel}>📅 Dias totais</span>
+          <strong>{formatDays(totalDays)}</strong>
+        </div>
+
+        <div style={processStatusMetric}>
+          <span style={summaryLabel}>⏳ Dias na fase atual</span>
+          <strong>{formatDays(currentStageDays)}</strong>
+        </div>
+
+        <div style={processStatusMetric}>
+          <span style={summaryLabel}>📞 Último contacto / movimento</span>
+          <strong>{lastContactDays === null ? "-" : `Há ${lastContactDays} dias`}</strong>
+          <small>{latestMovementDate ? formatDate(latestMovementDate) : "Sem registo"}</small>
+        </div>
+      </div>
+
+      <div
+        style={{
+          ...processShareCard,
+          background: statusInfo.background,
+          color: statusInfo.color,
+          borderColor: statusInfo.border,
+        }}
+      >
+        <span>{statusInfo.label}</span>
+        <strong>{statusInfo.summary}</strong>
+        <small>{currentStage?.label ? `FASE: ${currentStage.label}` : "FASE: -"}</small>
+      </div>
+
+      <div style={phaseDurationBox}>
+        <strong>⏱ Tempo por fase</strong>
+        <div style={phaseDurationGrid}>
+          {rows.map((row, index) => (
+            <div
+              key={row.key}
+              style={{
+                ...phaseDurationRow,
+                ...(row.isCurrent ? phaseDurationCurrent : {}),
+              }}
+            >
+              <span>{row.label}</span>
+              <strong>{row.startDate ? formatDays(row.days) : "-"}</strong>
+              <small>
+                {row.startDate
+                  ? `${formatDate(row.startDate)}${row.nextDate ? ` → ${formatDate(row.nextDate)}` : " → hoje"}`
+                  : "Por registar"}
+              </small>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div style={timelineStageGrid}>
@@ -4277,6 +4449,13 @@ const compactDealHeader = { display: "flex", justifyContent: "space-between", ga
 const compactDealTitle = { margin: 0, fontSize: 20 };
 const compactDealMetrics = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 };
 const dealDetailsBox = { marginTop: 14, paddingTop: 14, borderTop: "1px solid #bbf7d0" };
+const processStatusGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 12 };
+const processStatusMetric = { background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 14, padding: 12, display: "grid", gap: 4 };
+const processShareCard = { border: "2px solid", borderRadius: 16, padding: 16, marginBottom: 12, display: "grid", gap: 6, textAlign: "center", fontWeight: "bold" };
+const phaseDurationBox = { background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 14, padding: 12, marginBottom: 12, display: "grid", gap: 10 };
+const phaseDurationGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 };
+const phaseDurationRow = { background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: 10, display: "grid", gap: 4 };
+const phaseDurationCurrent = { border: "2px solid #2563eb", background: "#eff6ff" };
 const timelineBox = { background: "#ffffff", border: "1px solid #bbf7d0", borderRadius: 16, padding: 14, marginTop: 14, marginBottom: 14 };
 const timelineHeader = { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap" };
 const timelineTypeBadge = { background: "#dcfce7", color: "#166534", borderRadius: 999, padding: "7px 10px", fontSize: 12, fontWeight: "bold" };
