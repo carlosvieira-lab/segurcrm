@@ -821,6 +821,8 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   const [showDealForm, setShowDealForm] = useState(false);
   const [editingDealId, setEditingDealId] = useState(null);
   const [openDealId, setOpenDealId] = useState(null);
+  const [showProcessesPanel, setShowProcessesPanel] = useState(false);
+  const [activeProcessType, setActiveProcessType] = useState("todos");
   const [showPartnerForm, setShowPartnerForm] = useState(false);
   const [dealForm, setDealForm] = useState(buildInitialDealForm);
   const [partnerForm, setPartnerForm] = useState(buildInitialPartnerForm);
@@ -911,6 +913,25 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
     return true;
   });
+
+  const processTypeTabs = [
+    { id: "todos", label: "Todos os processos" },
+    ...dealTypes.map((type) => ({ id: type, label: type })),
+  ];
+
+  const visibleProcessDeals = filteredDeals.filter((deal) => {
+    if (activeProcessType === "todos") return true;
+    return deal.deal_type === activeProcessType;
+  });
+
+  const processTypeCounts = processTypeTabs.reduce((acc, tab) => {
+    acc[tab.id] = filteredDeals.filter((deal) => {
+      if (tab.id === "todos") return true;
+      return deal.deal_type === tab.id;
+    }).length;
+
+    return acc;
+  }, {});
 
   const totals = useMemo(() => {
     return deals.reduce(
@@ -2525,6 +2546,21 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     await updateDeal(deal, updates);
   }
 
+  function openProcessFromPanel(deal) {
+    setOpenDealId(deal.id);
+
+    setTimeout(() => {
+      const element = document.getElementById(`processo-${deal.id}`);
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    }, 100);
+  }
+
   async function markPartnerPaid(deal) {
     const ok = window.confirm("Marcar pagamento ao parceiro como pago?");
     if (!ok) return;
@@ -2585,6 +2621,14 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
           <div style={headerButtons}>
             <button style={button} onClick={openNewDealForm}>+ Novo negócio</button>
+
+            <button
+              style={secondaryButton}
+              onClick={() => setShowProcessesPanel(!showProcessesPanel)}
+            >
+              📁 Processos
+            </button>
+
             <button
               style={secondaryButton}
               onClick={() => setShowCruzadosRanking(!showCruzadosRanking)}
@@ -2648,6 +2692,75 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           <Summary title="Comissões parceiros pagas" value={formatEuro(totals.partnerPaid)} />
           <Summary title="Margem líquida" value={formatEuro(totals.received - totals.partnerTotal)} />
         </section>
+
+        {showProcessesPanel && (
+          <section style={processesPanel}>
+            <div style={compactPanelHeader}>
+              <div>
+                <h2 style={sectionTitle}>📁 Processos</h2>
+                <p style={muted}>
+                  Escolhe o tipo de crédito e abre rapidamente o processo para ver a timeline, indicadores, histórico e ações.
+                </p>
+              </div>
+
+              <button type="button" style={grayButton} onClick={() => setShowProcessesPanel(false)}>
+                Fechar
+              </button>
+            </div>
+
+            <div style={processTabsGrid}>
+              {processTypeTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  style={{
+                    ...processTypeButton,
+                    ...(activeProcessType === tab.id ? activeProcessTypeButton : {}),
+                  }}
+                  onClick={() => setActiveProcessType(tab.id)}
+                >
+                  <strong>{tab.label}</strong>
+                  <span>{processTypeCounts[tab.id] || 0}</span>
+                </button>
+              ))}
+            </div>
+
+            {visibleProcessDeals.length === 0 ? (
+              <p style={muted}>Sem processos nesta seleção.</p>
+            ) : (
+              <div style={processList}>
+                {visibleProcessDeals.map((deal) => {
+                  const currentStage = getDealTimelineSnapshot(deal, historiesByDeal[deal.id] || []).currentStage;
+
+                  return (
+                    <button
+                      key={deal.id}
+                      type="button"
+                      style={{
+                        ...processRowButton,
+                        ...(openDealId === deal.id ? activeProcessRowButton : {}),
+                      }}
+                      onClick={() => openProcessFromPanel(deal)}
+                    >
+                      <div>
+                        <strong>{deal.client_name || "Sem cliente"}</strong>
+                        <span style={processRowMeta}>
+                          {deal.bank_partner?.name || "Sem banco"} · {deal.deal_type || "Sem tipo"}
+                        </span>
+                      </div>
+
+                      <div style={processRowInfo}>
+                        <span>{formatEuro(deal.amount)}</span>
+                        <span>{deal.status || "-"}</span>
+                        <span>{currentStage?.label || "Sem fase"}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         {showNotesPanel && (
           <div
@@ -4092,7 +4205,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                 const isOpen = openDealId === deal.id;
 
                 return (
-                  <article key={deal.id} style={compactDealCard}>
+                  <article key={deal.id} id={`processo-${deal.id}`} style={compactDealCard}>
                     <div style={compactDealHeader}>
                       <div>
                         <h3 style={compactDealTitle}>{deal.client_name}</h3>
@@ -4390,6 +4503,80 @@ const clientButton = { background: "#0f766e", color: "white", padding: "12px 16p
 const muted = { color: "#6b7280" };
 const smallMuted = { color: "#6b7280", fontSize: 12 };
 
+const processesPanel = {
+  background: "linear-gradient(135deg, #eff6ff, #ffffff)",
+  borderRadius: 18,
+  padding: 18,
+  marginBottom: 24,
+  border: "1px solid #bfdbfe",
+  boxShadow: "0 1px 4px rgba(37,99,235,0.12)",
+};
+
+const processTabsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 10,
+  marginBottom: 16,
+};
+
+const processTypeButton = {
+  background: "white",
+  border: "1px solid #dbeafe",
+  borderRadius: 14,
+  padding: 12,
+  cursor: "pointer",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  color: "#1e3a8a",
+};
+
+const activeProcessTypeButton = {
+  background: "#dbeafe",
+  border: "2px solid #2563eb",
+  boxShadow: "0 8px 20px rgba(37,99,235,0.16)",
+};
+
+const processList = {
+  display: "grid",
+  gap: 10,
+};
+
+const processRowButton = {
+  background: "white",
+  border: "1px solid #e5e7eb",
+  borderRadius: 14,
+  padding: 14,
+  cursor: "pointer",
+  display: "grid",
+  gridTemplateColumns: "1.2fr 1fr",
+  gap: 14,
+  alignItems: "center",
+  textAlign: "left",
+};
+
+const activeProcessRowButton = {
+  border: "2px solid #2563eb",
+  background: "#eff6ff",
+};
+
+const processRowMeta = {
+  display: "block",
+  color: "#64748b",
+  fontSize: 13,
+  marginTop: 5,
+};
+
+const processRowInfo = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 8,
+  color: "#334155",
+  fontSize: 13,
+  fontWeight: 800,
+};
+
 const compactPanel = { background: "#f0fdf4", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
 const compactPanelHeader = { display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start", marginBottom: 14 };
 const compactStatsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 };
@@ -4493,3 +4680,4 @@ const funnelRate = { fontWeight: "bold", color: "#374151", textAlign: "right" };
 const historyBox = { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 12, padding: 12, marginTop: 12 };
 const historyList = { display: "grid", gap: 6, marginTop: 8 };
 const historyRow = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", display: "grid", gridTemplateColumns: "120px 170px 1fr", gap: 10, alignItems: "center", fontSize: 13 };
+                       
