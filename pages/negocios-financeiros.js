@@ -643,6 +643,83 @@ Carlos Vieira
 Loja de Seguros de Trajouce`;
 }
 
+
+function getPhaseStyle(value) {
+  const normalized = normalizeText(value);
+
+  if (normalized.includes("contratado")) {
+    return { background: "#dcfce7", color: "#166534", border: "1px solid #86efac" };
+  }
+
+  if (normalized.includes("contratacao") || normalized.includes("aguarda contr")) {
+    return { background: "#ccfbf1", color: "#0f766e", border: "1px solid #5eead4" };
+  }
+
+  if (normalized.includes("avaliacao")) {
+    return { background: "#ffedd5", color: "#c2410c", border: "1px solid #fdba74" };
+  }
+
+  if (normalized.includes("decisao") || normalized.includes("aprovado")) {
+    return { background: "#fef3c7", color: "#92400e", border: "1px solid #f59e0b" };
+  }
+
+  if (normalized.includes("env banco") || normalized.includes("envio banco")) {
+    return { background: "#dbeafe", color: "#1d4ed8", border: "1px solid #93c5fd" };
+  }
+
+  if (normalized.includes("simulacao")) {
+    return { background: "#cffafe", color: "#0e7490", border: "1px solid #67e8f9" };
+  }
+
+  if (normalized.includes("recusado")) {
+    return { background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca" };
+  }
+
+  return { background: "#ede9fe", color: "#6d28d9", border: "1px solid #c4b5fd" };
+}
+
+function getBankVisual(name) {
+  const normalized = normalizeText(name);
+
+  if (normalized.includes("novo banco") || normalized.includes(" nb") || normalized.startsWith("nb")) {
+    return { logo: "NB", label: "Novo Banco", color: "#111827", background: "#f9fafb", border: "#d1d5db" };
+  }
+
+  if (normalized.includes("millennium") || normalized.includes("bcp")) {
+    return { logo: "M", label: "Millennium bcp", color: "#db2777", background: "#fdf2f8", border: "#fbcfe8" };
+  }
+
+  if (normalized.includes("santander")) {
+    return { logo: "S", label: "Santander", color: "#dc2626", background: "#fef2f2", border: "#fecaca" };
+  }
+
+  if (normalized.includes("bpi")) {
+    return { logo: "BPI", label: "BPI", color: "#ea580c", background: "#fff7ed", border: "#fdba74" };
+  }
+
+  if (normalized.includes("caixa agricola") || normalized.includes("credito agricola") || normalized.includes("ca ")) {
+    return { logo: "CA", label: "Caixa Agrícola", color: "#15803d", background: "#f0fdf4", border: "#86efac" };
+  }
+
+  if (normalized.includes("caixa geral") || normalized.includes("cgd")) {
+    return { logo: "CGD", label: "CGD", color: "#1d4ed8", background: "#eff6ff", border: "#93c5fd" };
+  }
+
+  if (normalized.includes("montepio")) {
+    return { logo: "M", label: "Montepio", color: "#d97706", background: "#fffbeb", border: "#fcd34d" };
+  }
+
+  if (normalized.includes("abanca")) {
+    return { logo: "AB", label: "Abanca", color: "#2563eb", background: "#eff6ff", border: "#93c5fd" };
+  }
+
+  if (normalized.includes("bankinter")) {
+    return { logo: "BK", label: "Bankinter", color: "#f97316", background: "#fff7ed", border: "#fdba74" };
+  }
+
+  return { logo: "🏦", label: name || "Sem banco", color: "#334155", background: "#f8fafc", border: "#cbd5e1" };
+}
+
 function getDealTimelineStages(deal) {
   const type = normalizeText(deal?.deal_type);
 
@@ -923,6 +1000,10 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
     if (activeProcessType === "todos") return true;
     return deal.deal_type === activeProcessType;
   });
+
+  const selectedProcessDeal = openDealId
+    ? deals.find((deal) => deal.id === openDealId) || null
+    : null;
 
   const processTypeCounts = processTypeTabs.reduce((acc, tab) => {
     acc[tab.id] = filteredDeals.filter((deal) => {
@@ -2548,17 +2629,6 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
   function openProcessFromPanel(deal) {
     setOpenDealId(deal.id);
-
-    setTimeout(() => {
-      const element = document.getElementById(`processo-${deal.id}`);
-
-      if (element) {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }
-    }, 100);
   }
 
   async function markPartnerPaid(deal) {
@@ -2725,34 +2795,49 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
               ))}
             </div>
 
-            {visibleProcessDeals.length === 0 ? (
+            {selectedProcessDeal ? (
+              <ProcessDetailCard
+                deal={selectedProcessDeal}
+                historiesByDeal={historiesByDeal}
+                setOpenDealId={setOpenDealId}
+                openEditDeal={openEditDeal}
+                updateDealStage={updateDealStage}
+                markCommissionReceived={markCommissionReceived}
+                markPartnerPending={markPartnerPending}
+                markPartnerPaid={markPartnerPaid}
+              />
+            ) : visibleProcessDeals.length === 0 ? (
               <p style={muted}>Sem processos nesta seleção.</p>
             ) : (
               <div style={processList}>
                 {visibleProcessDeals.map((deal) => {
-                  const currentStage = getDealTimelineSnapshot(deal, historiesByDeal[deal.id] || []).currentStage;
+                  const snapshot = getDealTimelineSnapshot(deal, historiesByDeal[deal.id] || []);
+                  const currentStage = snapshot.currentStage;
+                  const stageStyle = getPhaseStyle(currentStage?.label || deal.status);
 
                   return (
                     <button
                       key={deal.id}
                       type="button"
-                      style={{
-                        ...processRowButton,
-                        ...(openDealId === deal.id ? activeProcessRowButton : {}),
-                      }}
+                      style={processRowButton}
                       onClick={() => openProcessFromPanel(deal)}
                     >
                       <div>
                         <strong>{deal.client_name || "Sem cliente"}</strong>
                         <span style={processRowMeta}>
-                          {deal.bank_partner?.name || "Sem banco"} · {deal.deal_type || "Sem tipo"}
+                          <BankBadge name={deal.bank_partner?.name} />
+                          <span>{deal.deal_type || "Sem tipo"}</span>
                         </span>
                       </div>
 
                       <div style={processRowInfo}>
                         <span>{formatEuro(deal.amount)}</span>
-                        <span>{deal.status || "-"}</span>
-                        <span>{currentStage?.label || "Sem fase"}</span>
+                        <span style={{ ...processPhaseBadge, ...stageStyle }}>
+                          {currentStage?.label || deal.status || "Sem fase"}
+                        </span>
+                        <span style={{ color: snapshot.statusInfo.color }}>
+                          {formatDays(snapshot.currentStageDays)}
+                        </span>
                       </div>
                     </button>
                   );
@@ -4342,6 +4427,167 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
   );
 }
 
+
+function BankBadge({ name }) {
+  const bank = getBankVisual(name);
+
+  return (
+    <span style={bankBadgeWrap}>
+      <span
+        style={{
+          ...bankLogoBadge,
+          color: bank.color,
+          background: bank.background,
+          borderColor: bank.border,
+        }}
+      >
+        {bank.logo}
+      </span>
+      <span>{name || bank.label}</span>
+    </span>
+  );
+}
+
+function ProcessDetailCard({
+  deal,
+  historiesByDeal,
+  setOpenDealId,
+  openEditDeal,
+  updateDealStage,
+  markCommissionReceived,
+  markPartnerPending,
+  markPartnerPaid,
+}) {
+  const historyItems = historiesByDeal[deal.id] || [];
+  const partnerDue = calculatePartnerPayment(
+    deal.amount,
+    deal.partner_payment_type,
+    deal.partner_payment_rate,
+    deal.partner_payment_value
+  );
+  const contractDays = daysBetween(deal.entry_date, deal.contract_date);
+  const snapshot = getDealTimelineSnapshot(deal, historyItems);
+  const phaseStyle = getPhaseStyle(snapshot.currentStage?.label || deal.status);
+
+  return (
+    <article style={processDetailCard}>
+      <div style={processDetailTopBar}>
+        <button type="button" style={grayButton} onClick={() => setOpenDealId(null)}>
+          ← Voltar aos processos
+        </button>
+
+        <button type="button" style={button} onClick={() => openEditDeal(deal)}>
+          Editar negócio
+        </button>
+      </div>
+
+      <div style={compactDealHeader}>
+        <div>
+          <h3 style={compactDealTitle}>{deal.client_name || "Sem cliente"}</h3>
+          <p style={muted}>
+            {deal.deal_type || "Sem tipo"} · <BankBadge name={deal.bank_partner?.name} /> · {deal.source_partner?.name || "Sem parceiro"}
+          </p>
+        </div>
+
+        <span style={{ ...processPhaseBadge, ...phaseStyle }}>
+          {snapshot.currentStage?.label || deal.status || "Sem fase"}
+        </span>
+      </div>
+
+      <div style={compactDealMetrics}>
+        <Mini title="Montante" value={formatEuro(deal.amount)} />
+        <Mini title="Comissão Real" value={formatEuro(deal.received_commission)} />
+        <Mini title="Comissão parceiro" value={formatEuro(partnerDue)} />
+        <Mini title="Tempo" value={formatDays(contractDays)} />
+        <Mini title="Próxima ação" value={deal.next_action || "-"} />
+      </div>
+
+      <div style={miniGrid}>
+        <Mini title="Comissão Teórica" value={formatEuro(deal.expected_commission)} />
+        <Mini title="% Comissão Banco" value={`${Number(deal.commission_rate || 0)}%`} />
+        <Mini title="Data entrada" value={formatDate(deal.entry_date)} />
+        <Mini title="Data contratação" value={formatDate(deal.contract_date)} />
+        <Mini title="Recebimento comissão" value={formatDate(deal.commission_received_at)} />
+        <Mini title="Estado pagamento parceiro" value={deal.partner_payment_status} />
+        <Mini title="Data próxima ação" value={formatDate(deal.next_action_date)} />
+      </div>
+
+      <div style={infoGrid}>
+        <Info label="NIF" value={deal.client_nif || "-"} />
+        <Info label="Telefone" value={deal.client_phone || "-"} />
+        <Info label="Banco que paga" value={deal.bank_partner?.name || "-"} />
+        <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
+        <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
+      </div>
+
+      {deal.next_action_notes && (
+        <div style={notesBox}>
+          <strong>Notas da próxima ação</strong>
+          <p>{deal.next_action_notes}</p>
+        </div>
+      )}
+
+      {deal.notes && (
+        <div style={notesBox}>
+          <strong>Notas</strong>
+          <p>{deal.notes}</p>
+        </div>
+      )}
+
+      <DealTimeline
+        deal={deal}
+        historyItems={historyItems}
+        onStageClick={updateDealStage}
+      />
+
+      <div style={historyBox}>
+        <strong>📜 Histórico de alterações</strong>
+
+        {historyItems.length === 0 ? (
+          <p style={smallMuted}>Sem alterações registadas.</p>
+        ) : (
+          <div style={historyList}>
+            {historyItems.slice(0, 12).map((item) => (
+              <div key={item.id} style={historyRow}>
+                <span style={smallMuted}>{formatDate(item.changed_at)}</span>
+                <strong>{getHistoryFieldLabel(item.field_name)}</strong>
+                <span>{item.old_value || "-"} → {item.new_value || "-"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={actionRow}>
+        <button style={secondaryButton} onClick={() => markCommissionReceived(deal)}>
+          Comissão Real
+        </button>
+
+        {deal.client_phone && (
+          <a
+            href={buildWhatsappUrl(deal.client_phone, buildClientWhatsappMessage(deal))}
+            target="_blank"
+            rel="noreferrer"
+            style={whatsappButton}
+          >
+            WhatsApp Cliente
+          </a>
+        )}
+
+        {deal.partner_payment_status === "pago" ? (
+          <button style={grayButton} onClick={() => markPartnerPending(deal)}>
+            Reabrir pagamento
+          </button>
+        ) : (
+          <button style={paidButton} onClick={() => markPartnerPaid(deal)}>
+            Marcar parceiro pago
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 function DealTimeline({ deal, historyItems, onStageClick }) {
   const snapshot = getDealTimelineSnapshot(deal, historyItems);
   const { stages, activeIndex, currentStage, totalDays, currentStageDays, latestMovementDate, lastContactDays, statusInfo, rows } = snapshot;
@@ -4424,12 +4670,15 @@ function DealTimeline({ deal, historyItems, onStageClick }) {
           const done = Boolean(date);
           const isCurrent = index === activeIndex;
 
+          const phaseStyle = getPhaseStyle(stage.label);
+
           return (
             <button
               key={stage.key}
               type="button"
               style={{
                 ...timelineStageButton,
+                ...phaseStyle,
                 ...(done ? timelineStageDone : {}),
                 ...(isCurrent ? timelineStageCurrent : {}),
               }}
@@ -4575,6 +4824,56 @@ const processRowInfo = {
   color: "#334155",
   fontSize: 13,
   fontWeight: 800,
+  alignItems: "center",
+};
+
+const processPhaseBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  padding: "7px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const bankBadgeWrap = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 7,
+  marginRight: 8,
+  verticalAlign: "middle",
+};
+
+const bankLogoBadge = {
+  minWidth: 30,
+  height: 26,
+  borderRadius: 8,
+  border: "1px solid",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 900,
+  fontSize: 13,
+  letterSpacing: -0.5,
+};
+
+const processDetailCard = {
+  background: "white",
+  border: "1px solid #bfdbfe",
+  borderRadius: 18,
+  padding: 18,
+  boxShadow: "0 8px 30px rgba(15,23,42,0.08)",
+};
+
+const processDetailTopBar = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 16,
 };
 
 const compactPanel = { background: "#f0fdf4", padding: 18, borderRadius: 18, marginBottom: 24, boxShadow: "0 1px 4px rgba(22,101,52,0.16)" };
@@ -4680,4 +4979,3 @@ const funnelRate = { fontWeight: "bold", color: "#374151", textAlign: "right" };
 const historyBox = { background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: 12, padding: 12, marginTop: 12 };
 const historyList = { display: "grid", gap: 6, marginTop: 8 };
 const historyRow = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", display: "grid", gridTemplateColumns: "120px 170px 1fr", gap: 10, alignItems: "center", fontSize: 13 };
-                       
