@@ -2753,6 +2753,227 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           </div>
         </header>
 
+        {showDealForm && (
+          <section style={formCard}>
+            <h2 style={sectionTitle}>{editingDealId ? "Editar negócio financeiro" : "Novo negócio financeiro"}</h2>
+
+            <form style={formGrid} onSubmit={createDeal}>
+              <label style={fieldLabel}>Cliente existente
+                <select style={input} value={dealForm.client_id} onChange={(event) => selectClient(event.target.value)}>
+                  <option value="">Selecionar cliente existente ou preencher manualmente</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>{client.name} · {client.nif || "Sem NIF"}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={fieldLabel}>Nome cliente
+                <input style={input} value={dealForm.client_name} onChange={(event) => setDealForm({ ...dealForm, client_name: event.target.value })} required />
+              </label>
+
+              <label style={fieldLabel}>NIF
+                <input style={input} value={dealForm.client_nif} onChange={(event) => setDealForm({ ...dealForm, client_nif: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Telefone
+                <input style={input} value={dealForm.client_phone} onChange={(event) => setDealForm({ ...dealForm, client_phone: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Tipo de negócio
+                <select style={input} value={dealForm.deal_type} onChange={(event) => setDealForm({ ...dealForm, deal_type: event.target.value })}>
+                  {dealTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </label>
+
+              <label style={fieldLabel}>
+                Banco que paga a comissão
+                <select
+                  style={input}
+                  value={dealForm.bank_partner_id}
+                  onChange={(event) =>
+                    setDealForm({
+                      ...dealForm,
+                      bank_partner_id: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">-</option>
+                  {bancos.map((partner) => (
+                    <option key={partner.id} value={partner.id}>{partner.name}</option>
+                  ))}
+                  <option value="__novo_banco__">+ Adicionar novo banco</option>
+                </select>
+              </label>
+
+              {dealForm.bank_partner_id === "__novo_banco__" && (
+                <label style={fieldLabel}>
+                  Novo banco
+                  <input
+                    style={input}
+                    value={dealForm.new_bank_partner_name}
+                    onChange={(event) =>
+                      setDealForm({
+                        ...dealForm,
+                        new_bank_partner_name: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: NB Sintra, NB Pico, NB Carcavelos..."
+                  />
+                </label>
+              )}
+
+              <label style={fieldLabel}>
+                Parceiro que trouxe o negócio
+                <select
+                  style={input}
+                  value={dealForm.source_partner_id}
+                  onChange={(event) => selectSourcePartner(event.target.value)}
+                >
+                  <option value="">Sem parceiro de origem</option>
+                  {parceiros.map((partner) => (
+                    <option key={partner.id} value={partner.id}>{partner.name}</option>
+                  ))}
+                  <option value="__novo_parceiro__">+ Adicionar novo parceiro</option>
+                </select>
+              </label>
+
+              {dealForm.source_partner_id === "__novo_parceiro__" && (
+                <label style={fieldLabel}>
+                  Novo parceiro
+                  <input
+                    style={input}
+                    value={dealForm.new_source_partner_name}
+                    onChange={(event) =>
+                      setDealForm({
+                        ...dealForm,
+                        new_source_partner_name: event.target.value,
+                      })
+                    }
+                    placeholder="Ex: parceiro imobiliário, contabilista..."
+                  />
+                </label>
+              )}
+
+              <label style={fieldLabel}>Estado
+                <select style={input} value={dealForm.status} onChange={(event) => setDealForm({ ...dealForm, status: event.target.value })}>
+                  {dealStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </label>
+
+              <label style={fieldLabel}>Data entrada
+                <input type="date" style={input} value={dealForm.entry_date} onChange={(event) => setDealForm({ ...dealForm, entry_date: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Data contratação
+                <input type="date" style={input} value={dealForm.contract_date} onChange={(event) => setDealForm({ ...dealForm, contract_date: event.target.value })} />
+              </label>
+
+              <div style={calculationBox}>
+                <strong>Tempo de contratação</strong>
+                <span>{formatDays(daysBetween(dealForm.entry_date, dealForm.contract_date))}</span>
+              </div>
+
+              <label style={fieldLabel}>Próxima ação
+                <input style={input} value={dealForm.next_action} onChange={(event) => setDealForm({ ...dealForm, next_action: event.target.value })} placeholder="Ex: ligar ao cliente, pedir docs, confirmar banco..." />
+              </label>
+
+              <label style={fieldLabel}>Data próxima ação
+                <input type="date" style={input} value={dealForm.next_action_date} onChange={(event) => setDealForm({ ...dealForm, next_action_date: event.target.value })} />
+              </label>
+
+              <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas da próxima ação
+                <textarea style={textarea} value={dealForm.next_action_notes} onChange={(event) => setDealForm({ ...dealForm, next_action_notes: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Montante financiado
+                <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
+              </label>
+
+              <label style={fieldLabel}>% Comissão Banco
+                <input style={input} inputMode="decimal" value={dealForm.commission_rate} onChange={(event) => updateDealForm({ ...dealForm, commission_rate: event.target.value })} placeholder="Ex: 1,25" />
+              </label>
+
+              <label style={fieldLabel}>Comissão Teórica
+                <input style={readOnlyInput} inputMode="decimal" value={dealForm.expected_commission} readOnly />
+              </label>
+
+              <label style={fieldLabel}>Comissão Real
+                <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} placeholder="Preenche quando o banco pagar" />
+              </label>
+
+              <div style={calculationBox}>
+                <strong>Diferença</strong>
+                <span>
+                  {formatEuro(parseDecimal(dealForm.received_commission) - parseDecimal(dealForm.expected_commission))}
+                </span>
+              </div>
+
+              <label style={fieldLabel}>Data recebimento comissão
+                <input type="date" style={input} value={dealForm.commission_received_at} onChange={(event) => setDealForm({ ...dealForm, commission_received_at: event.target.value })} />
+              </label>
+
+              <label style={fieldLabel}>Pagamento parceiro
+                <select style={input} value={dealForm.partner_payment_type} onChange={(event) => setDealForm({ ...dealForm, partner_payment_type: event.target.value })}>
+                  <option value="percentagem">Percentagem sobre o valor financiado</option>
+                  <option value="valor fixo">Valor fixo</option>
+                </select>
+              </label>
+
+              <label style={fieldLabel}>% parceiro sobre valor financiado
+                <input style={input} inputMode="decimal" value={dealForm.partner_payment_rate} onChange={(event) => setDealForm({ ...dealForm, partner_payment_rate: event.target.value })} />
+              </label>
+
+              {dealForm.partner_payment_type === "valor fixo" ? (
+                <label style={fieldLabel}>Comissão fixa parceiro
+                  <input style={input} inputMode="decimal" value={dealForm.partner_payment_value} onChange={(event) => setDealForm({ ...dealForm, partner_payment_value: event.target.value })} />
+                </label>
+              ) : (
+                <div style={calculationBox}>
+                  <strong>Comissão parceiro</strong>
+                  <small>Calculada sobre o valor financiado, salvo comissão fixa.</small>
+                  <span>
+                    {formatEuro(
+                      calculatePartnerPayment(
+                        parseDecimal(dealForm.amount),
+                        dealForm.partner_payment_type,
+                        parseDecimal(dealForm.partner_payment_rate),
+                        parseDecimal(dealForm.partner_payment_value)
+                      )
+                    )}
+                  </span>
+                </div>
+              )}
+
+              <label style={fieldLabel}>Estado pagamento parceiro
+                <select style={input} value={dealForm.partner_payment_status} onChange={(event) => setDealForm({ ...dealForm, partner_payment_status: event.target.value })}>
+                  <option value="pendente">Pendente</option>
+                  <option value="pago">Pago</option>
+                </select>
+              </label>
+
+              <label style={fieldLabel}>Data pagamento parceiro
+                <input type="date" style={input} value={dealForm.partner_paid_at} onChange={(event) => setDealForm({ ...dealForm, partner_paid_at: event.target.value })} />
+              </label>
+
+              <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas
+                <textarea style={textarea} value={dealForm.notes} onChange={(event) => setDealForm({ ...dealForm, notes: event.target.value })} />
+              </label>
+
+              <div style={formActions}>
+                <button style={button} disabled={saving}>
+                  {saving ? "A guardar..." : editingDealId ? "Guardar alterações" : "Guardar negócio"}
+                </button>
+
+                {editingDealId && (
+                  <button type="button" style={grayButton} onClick={cancelDealEdit}>
+                    Cancelar edição
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+        )}
+
         {selectedProcessDeal ? (
           <section style={singleProcessOnlyPanel}>
             <ProcessDetailCard
@@ -4044,226 +4265,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
           )}
         </section>
 
-        {showDealForm && (
-          <section style={formCard}>
-            <h2 style={sectionTitle}>{editingDealId ? "Editar negócio financeiro" : "Novo negócio financeiro"}</h2>
 
-            <form style={formGrid} onSubmit={createDeal}>
-              <label style={fieldLabel}>Cliente existente
-                <select style={input} value={dealForm.client_id} onChange={(event) => selectClient(event.target.value)}>
-                  <option value="">Selecionar cliente existente ou preencher manualmente</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name} · {client.nif || "Sem NIF"}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={fieldLabel}>Nome cliente
-                <input style={input} value={dealForm.client_name} onChange={(event) => setDealForm({ ...dealForm, client_name: event.target.value })} required />
-              </label>
-
-              <label style={fieldLabel}>NIF
-                <input style={input} value={dealForm.client_nif} onChange={(event) => setDealForm({ ...dealForm, client_nif: event.target.value })} />
-              </label>
-
-              <label style={fieldLabel}>Telefone
-                <input style={input} value={dealForm.client_phone} onChange={(event) => setDealForm({ ...dealForm, client_phone: event.target.value })} />
-              </label>
-
-              <label style={fieldLabel}>Tipo de negócio
-                <select style={input} value={dealForm.deal_type} onChange={(event) => setDealForm({ ...dealForm, deal_type: event.target.value })}>
-                  {dealTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                </select>
-              </label>
-
-              <label style={fieldLabel}>
-                Banco que paga a comissão
-                <select
-                  style={input}
-                  value={dealForm.bank_partner_id}
-                  onChange={(event) =>
-                    setDealForm({
-                      ...dealForm,
-                      bank_partner_id: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">-</option>
-                  {bancos.map((partner) => (
-                    <option key={partner.id} value={partner.id}>{partner.name}</option>
-                  ))}
-                  <option value="__novo_banco__">+ Adicionar novo banco</option>
-                </select>
-              </label>
-
-              {dealForm.bank_partner_id === "__novo_banco__" && (
-                <label style={fieldLabel}>
-                  Novo banco
-                  <input
-                    style={input}
-                    value={dealForm.new_bank_partner_name}
-                    onChange={(event) =>
-                      setDealForm({
-                        ...dealForm,
-                        new_bank_partner_name: event.target.value,
-                      })
-                    }
-                    placeholder="Ex: NB Sintra, NB Pico, NB Carcavelos..."
-                  />
-                </label>
-              )}
-
-              <label style={fieldLabel}>
-                Parceiro que trouxe o negócio
-                <select
-                  style={input}
-                  value={dealForm.source_partner_id}
-                  onChange={(event) => selectSourcePartner(event.target.value)}
-                >
-                  <option value="">Sem parceiro de origem</option>
-                  {parceiros.map((partner) => (
-                    <option key={partner.id} value={partner.id}>{partner.name}</option>
-                  ))}
-                  <option value="__novo_parceiro__">+ Adicionar novo parceiro</option>
-                </select>
-              </label>
-
-              {dealForm.source_partner_id === "__novo_parceiro__" && (
-                <label style={fieldLabel}>
-                  Novo parceiro
-                  <input
-                    style={input}
-                    value={dealForm.new_source_partner_name}
-                    onChange={(event) =>
-                      setDealForm({
-                        ...dealForm,
-                        new_source_partner_name: event.target.value,
-                      })
-                    }
-                    placeholder="Ex: parceiro imobiliário, contabilista..."
-                  />
-                </label>
-              )}
-
-              <label style={fieldLabel}>Estado
-                <select style={input} value={dealForm.status} onChange={(event) => setDealForm({ ...dealForm, status: event.target.value })}>
-                  {dealStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                </select>
-              </label>
-
-              <label style={fieldLabel}>Data entrada
-                <input type="date" style={input} value={dealForm.entry_date} onChange={(event) => setDealForm({ ...dealForm, entry_date: event.target.value })} />
-              </label>
-
-              <label style={fieldLabel}>Data contratação
-                <input type="date" style={input} value={dealForm.contract_date} onChange={(event) => setDealForm({ ...dealForm, contract_date: event.target.value })} />
-              </label>
-
-              <div style={calculationBox}>
-                <strong>Tempo de contratação</strong>
-                <span>{formatDays(daysBetween(dealForm.entry_date, dealForm.contract_date))}</span>
-              </div>
-
-              <label style={fieldLabel}>Próxima ação
-                <input style={input} value={dealForm.next_action} onChange={(event) => setDealForm({ ...dealForm, next_action: event.target.value })} placeholder="Ex: ligar ao cliente, pedir docs, confirmar banco..." />
-              </label>
-
-              <label style={fieldLabel}>Data próxima ação
-                <input type="date" style={input} value={dealForm.next_action_date} onChange={(event) => setDealForm({ ...dealForm, next_action_date: event.target.value })} />
-              </label>
-
-              <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas da próxima ação
-                <textarea style={textarea} value={dealForm.next_action_notes} onChange={(event) => setDealForm({ ...dealForm, next_action_notes: event.target.value })} />
-              </label>
-
-              <label style={fieldLabel}>Montante financiado
-                <input style={input} inputMode="decimal" value={dealForm.amount} onChange={(event) => updateDealForm({ ...dealForm, amount: event.target.value })} placeholder="Ex: 150000" />
-              </label>
-
-              <label style={fieldLabel}>% Comissão Banco
-                <input style={input} inputMode="decimal" value={dealForm.commission_rate} onChange={(event) => updateDealForm({ ...dealForm, commission_rate: event.target.value })} placeholder="Ex: 1,25" />
-              </label>
-
-              <label style={fieldLabel}>Comissão Teórica
-                <input style={readOnlyInput} inputMode="decimal" value={dealForm.expected_commission} readOnly />
-              </label>
-
-              <label style={fieldLabel}>Comissão Real
-                <input style={input} inputMode="decimal" value={dealForm.received_commission} onChange={(event) => setDealForm({ ...dealForm, received_commission: event.target.value })} placeholder="Preenche quando o banco pagar" />
-              </label>
-
-              <div style={calculationBox}>
-                <strong>Diferença</strong>
-                <span>
-                  {formatEuro(parseDecimal(dealForm.received_commission) - parseDecimal(dealForm.expected_commission))}
-                </span>
-              </div>
-
-              <label style={fieldLabel}>Data recebimento comissão
-                <input type="date" style={input} value={dealForm.commission_received_at} onChange={(event) => setDealForm({ ...dealForm, commission_received_at: event.target.value })} />
-              </label>
-
-              <label style={fieldLabel}>Pagamento parceiro
-                <select style={input} value={dealForm.partner_payment_type} onChange={(event) => setDealForm({ ...dealForm, partner_payment_type: event.target.value })}>
-                  <option value="percentagem">Percentagem sobre o valor financiado</option>
-                  <option value="valor fixo">Valor fixo</option>
-                </select>
-              </label>
-
-              <label style={fieldLabel}>% parceiro sobre valor financiado
-                <input style={input} inputMode="decimal" value={dealForm.partner_payment_rate} onChange={(event) => setDealForm({ ...dealForm, partner_payment_rate: event.target.value })} />
-              </label>
-
-              {dealForm.partner_payment_type === "valor fixo" ? (
-                <label style={fieldLabel}>Comissão fixa parceiro
-                  <input style={input} inputMode="decimal" value={dealForm.partner_payment_value} onChange={(event) => setDealForm({ ...dealForm, partner_payment_value: event.target.value })} />
-                </label>
-              ) : (
-                <div style={calculationBox}>
-                  <strong>Comissão parceiro</strong>
-                  <small>Calculada sobre o valor financiado, salvo comissão fixa.</small>
-                  <span>
-                    {formatEuro(
-                      calculatePartnerPayment(
-                        parseDecimal(dealForm.amount),
-                        dealForm.partner_payment_type,
-                        parseDecimal(dealForm.partner_payment_rate),
-                        parseDecimal(dealForm.partner_payment_value)
-                      )
-                    )}
-                  </span>
-                </div>
-              )}
-
-              <label style={fieldLabel}>Estado pagamento parceiro
-                <select style={input} value={dealForm.partner_payment_status} onChange={(event) => setDealForm({ ...dealForm, partner_payment_status: event.target.value })}>
-                  <option value="pendente">Pendente</option>
-                  <option value="pago">Pago</option>
-                </select>
-              </label>
-
-              <label style={fieldLabel}>Data pagamento parceiro
-                <input type="date" style={input} value={dealForm.partner_paid_at} onChange={(event) => setDealForm({ ...dealForm, partner_paid_at: event.target.value })} />
-              </label>
-
-              <label style={{ ...fieldLabel, gridColumn: "1 / -1" }}>Notas
-                <textarea style={textarea} value={dealForm.notes} onChange={(event) => setDealForm({ ...dealForm, notes: event.target.value })} />
-              </label>
-
-              <div style={formActions}>
-                <button style={button} disabled={saving}>
-                  {saving ? "A guardar..." : editingDealId ? "Guardar alterações" : "Guardar negócio"}
-                </button>
-
-                {editingDealId && (
-                  <button type="button" style={grayButton} onClick={cancelDealEdit}>
-                    Cancelar edição
-                  </button>
-                )}
-              </div>
-            </form>
-          </section>
-        )}
 
         <section style={panel}>
           <h2 style={sectionTitle}>Pagamentos a parceiros</h2>
@@ -4997,3 +4999,5 @@ const historyBox = { background: "#f8fafc", border: "1px solid #cbd5e1", borderR
 const historyList = { display: "grid", gap: 6, marginTop: 8 };
 const historyRow = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 10px", display: "grid", gridTemplateColumns: "120px 170px 1fr", gap: 10, alignItems: "center", fontSize: 13 };
 const singleProcessOnlyPanel = { background: "#ffffff", border: "1px solid #bfdbfe", borderRadius: 18, padding: 18, boxShadow: "0 1px 4px rgba(37,99,235,0.10)", marginBottom: 24 };
+
+              
