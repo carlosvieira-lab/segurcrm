@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Sidebar from "../components/Sidebar";
@@ -12,6 +12,7 @@ const supabaseKey =
   "sb_publishable_AicIeg3TXV3cJaG3R8YBFQ_A3uJGQEI";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const financialDealFilesBucket = "financial-deal-files";
 
 const dealTypes = [
   "Crédito Habitação",
@@ -526,9 +527,7 @@ function getOperationalAlertLimit(status) {
     "AVALIAÇÃO": 15,
     "APROVADO": 10,
     "AGUARDA CONTR": 10,
-  };
-
-  return limits[status] || null;
+  }; return limits[status] || null;
 }
 
 function getHistoryFieldLabel(fieldName) {
@@ -1496,8 +1495,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
 
       const winners = [...map.values()].filter((item) => objective > 0 && item.totalAmount >= objective);
 
-      return {
-        id: campaign.id,
+      return {id: campaign.id,
         name: campaign.name,
         objective,
         costPerWinner: cost,
@@ -2234,9 +2232,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
       is_active: goalForm.is_active !== false,
     };
 
-    setSaving(true);
-
-    const { error } = editingGoalId
+    setSaving(true); const { error } = editingGoalId
       ? await supabase.from("financial_goals").update(payload).eq("id", editingGoalId)
       : await supabase.from("financial_goals").insert(payload);
 
@@ -3710,9 +3706,7 @@ export default function NegociosFinanceiros({ deals, partners, clients, contests
                   ))}
                 </div>
               )}
-            </section>
-
-            <section style={agendaBlock}>
+            </section> <section style={agendaBlock}>
               <h3>🎯 Campanhas por liquidar</h3>
               {campaignPaymentsToPay.length === 0 ? <p style={muted}>Sem prémios de campanhas por liquidar.</p> : (
                 <div style={agendaList}>
@@ -4467,6 +4461,189 @@ function BankBadge({ name }) {
   );
 }
 
+function InitialSimulationCard({ deal }) {
+  const [file, setFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const folder = `simulacoes-iniciais/${deal.id}`;
+
+  async function loadInitialSimulation() {
+    if (!deal?.id) return;
+
+    setLoading(true);
+
+    const { data, error } = await supabase.storage
+      .from(financialDealFilesBucket)
+      .list(folder, { limit: 10, sortBy: { column: "created_at", order: "desc" } });
+
+    setLoading(false);
+
+    if (error) {
+      setFile(null);
+      return;
+    }
+
+    const pdf = (data || []).find((item) => String(item.name || "").toLowerCase().endsWith(".pdf"));
+
+    if (!pdf) {
+      setFile(null);
+      return;
+    }
+
+    setFile({
+      name: pdf.name,
+      path: `${folder}/${pdf.name}`,
+      created_at: pdf.created_at || pdf.updated_at || "",
+    });
+  }
+
+  useEffect(() => {
+    loadInitialSimulation();
+  }, [deal?.id]);
+
+  async function openInitialSimulation() {
+    if (!file?.path) return;
+
+    const { data, error } = await supabase.storage
+      .from(financialDealFilesBucket)
+      .createSignedUrl(file.path, 60 * 10);
+
+    if (error || !data?.signedUrl) {
+      alert("Não foi possível abrir a simulação inicial.");
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank");
+  }
+
+  async function deleteCurrentFile() {
+    if (!file?.path) return true;
+
+    const { error } = await supabase.storage
+      .from(financialDealFilesBucket)
+      .remove([file.path]);
+
+    if (error) {
+      alert(error.message);
+      return false;
+    }
+
+    setFile(null);
+    return true;
+  }
+
+  async function uploadInitialSimulation(event) {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!selectedFile) return;
+
+    if (selectedFile.type !== "application/pdf" && !selectedFile.name.toLowerCase().endsWith(".pdf")) {
+      alert("A simulação inicial tem de ser um PDF.");
+      return;
+    }
+
+    const ok = file?.path
+      ? window.confirm("Substituir a simulação inicial atual?")
+      : true;
+
+    if (!ok) return;
+
+    setUploading(true);
+
+    if (file?.path) {
+      const deleted = await deleteCurrentFile();
+      if (!deleted) {
+        setUploading(false);
+        return;
+      }
+    }
+
+    const safeClient = normalizeText(deal.client_name || "cliente")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "cliente";
+    const fileName = `simulacao-inicial-${safeClient}-${Date.now()}.pdf`;
+    const filePath = `${folder}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from(financialDealFilesBucket)
+      .upload(filePath, selectedFile, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+    setUploading(false);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    await loadInitialSimulation();
+  }
+
+  async function removeInitialSimulation() {
+    if (!file?.path) return;
+
+    const ok = window.confirm("Eliminar a simulação inicial deste processo?");
+    if (!ok) return;
+
+    await deleteCurrentFile();
+  }
+
+  return (
+    <section style={initialSimulationCard}>
+      <div style={compactPanelHeader}>
+        <div>
+          <h3 style={initialSimulationTitle}>📄 Simulação Inicial</h3>
+          <p style={smallMuted}>
+            Guarda aqui apenas a primeira simulação entregue ao cliente. Aceita 1 PDF por processo.
+          </p>
+        </div>
+
+        <label style={uploadSimulationButton}>
+          {file ? "Substituir PDF" : "Upload PDF"}
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={uploadInitialSimulation}
+            style={{ display: "none" }}
+            disabled={uploading}
+          />
+        </label>
+      </div>
+
+      {loading ? (
+        <p style={muted}>A verificar simulação inicial...</p>
+      ) : file ? (
+        <div style={initialSimulationFileRow}>
+          <div>
+            <strong>{file.name}</strong>
+            <p style={smallMuted}>Associado ao processo financeiro de {deal.client_name || "cliente"}.</p>
+          </div>
+
+          <div style={actionRow}>
+            <button type="button" style={smallButton} onClick={openInitialSimulation}>
+              Abrir
+            </button>
+            <button type="button" style={smallGrayButton} onClick={removeInitialSimulation}>
+              Eliminar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={initialSimulationEmpty}>
+          <strong>Sem simulação inicial guardada.</strong>
+          <span>Faz upload do PDF entregue ao cliente.</span>
+        </div>
+      )}
+
+      {uploading && <p style={smallMuted}>A guardar PDF...</p>}
+    </section>
+  );
+}
+
 function ProcessDetailCard({
   deal,
   historiesByDeal,
@@ -4538,6 +4715,8 @@ function ProcessDetailCard({
         <Info label="Parceiro que trouxe o negócio" value={deal.source_partner?.name || "-"} />
         <Info label="Data pagamento parceiro" value={formatDate(deal.partner_paid_at)} />
       </div>
+
+      <InitialSimulationCard deal={deal} />
 
       {deal.next_action_notes && (
         <div style={notesBox}>
@@ -4984,6 +5163,12 @@ const goalsGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minm
 const goalCard = { background: "white", border: "1px solid #c7d2fe", borderRadius: 14, padding: 14 };
 const goalProgressOuter = { background: "#e5e7eb", borderRadius: 999, overflow: "hidden", height: 14, marginBottom: 12 };
 const goalProgressInner = { background: "#4f46e5", height: "100%", borderRadius: 999 };
+
+const initialSimulationCard = { background: "#eff6ff", border: "1px solid #93c5fd", borderRadius: 16, padding: 14, marginTop: 14, marginBottom: 14 };
+const initialSimulationTitle = { margin: 0, fontSize: 18, color: "#1d4ed8" };
+const uploadSimulationButton = { background: "#2563eb", color: "white", border: "none", padding: "10px 12px", borderRadius: 10, cursor: "pointer", fontWeight: "bold", fontSize: 13, display: "inline-flex", alignItems: "center" };
+const initialSimulationFileRow = { background: "white", border: "1px solid #bfdbfe", borderRadius: 12, padding: 12, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" };
+const initialSimulationEmpty = { background: "white", border: "1px dashed #93c5fd", color: "#1e40af", borderRadius: 12, padding: 14, display: "grid", gap: 4 };
 
 const bankRankingList = { display: "grid", gap: 10 };
 const bankRankingRow = { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, display: "grid", gridTemplateColumns: "60px minmax(200px, 1.5fr) repeat(5, minmax(120px, 1fr))", gap: 10, alignItems: "center", overflowX: "auto" };
